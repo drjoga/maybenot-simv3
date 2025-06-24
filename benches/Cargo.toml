@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 maybenot = { path = "../crates/maybenot/" }
 maybenot-simulator = { path = "../crates/maybenot-simulator" }
+maybenot-simulatorv3 = { path = "../crates/maybenot-simulatorv3" }
 enum-map = "2.7.3"
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
@@ -35,4 +36,8 @@ harness = false
 
 [[bench]]
 name = "lookup_bench"
+harness = false
+
+[[bench]]
+name = "v3_bench"
 harness = false

@@ -22,7 +22,9 @@ members = [
     # benchmarks
     "benches",
     # fuzzing
-    "fuzz",
+    "fuzz", 
+    # v3 configurable simulator 
+    "crates/maybenot-simulatorv3",
 ]
 
 # Keep all lints in sync with `test/Cargo.toml`
