@@ -38,6 +38,7 @@ use crate::{
 };
 
 
+
 // Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
 // RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
 // have to work around this by using an enum to support selecting rng source as
@@ -81,7 +82,53 @@ impl RngCore for RngSource {
 
 
 
-/// SimEvent represents an event in the simulator. It is used internally to
+/// SimulEvent represents an event in the v3 simulator. It is used internally to
+/// represent events that are to be processed by the simulator (in SimQueue) and
+/// events that are produced by the simulator (the resulting trace).
+#[derive(PartialEq, Hash, Eq, Clone, Debug)]
+pub struct SimulEvent {
+    /// the actual event
+    pub event: TriggerEvent,
+    /// the time of the event taking place
+    pub time: Instant,
+    /// Packet ID for triggering dependent tx events
+    pub packet_idx: usize,
+    /// Node index and link index for the event
+    pub node_idx: usize,
+    pub link_idx: usize,
+    /// flag to track padding or normal packet
+    pub contains_padding: bool,
+    /// internal flag to mark event as bypass
+    bypass: bool,
+    /// internal flag to mark event as replace
+    replace: bool,
+    // debug note
+    pub debug_note: Option<String>,
+}
+
+// for SimulEvent, implement Ord and PartialOrd to allow for sorting by time
+impl Ord for SimulEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // reverse order to get the smallest time first
+        self.time
+            .cmp(&other.time)
+            .then_with(|| event_to_usize(&self.event).cmp(&event_to_usize(&other.event)))
+            .reverse()
+    }
+}
+
+impl PartialOrd for SimulEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+
+
+
+
+
+/// SimEvent represents an event in the v1 simulator. It is used internally to
 /// represent events that are to be processed by the simulator (in SimQueue) and
 /// events that are produced by the simulator (the resulting trace).
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
