@@ -15,6 +15,265 @@ use crate::{
 };
 
 
+/////
+
+#[derive(Debug, Clone)]
+pub enum LinkType {
+    BottleneckTput,
+    FixedTput,
+    HiTraceTput,
+    StdTraceTput,
+}
+
+
+pub trait Link {
+    fn sample(&mut self, current_time: &Instant) -> Duration;
+    fn link_type(&self) -> LinkType;
+    fn link_id(&self) -> u32;
+    fn from_node(&self) -> u32;
+    fn to_node(&self) -> u32;
+}
+
+
+
+use crate::nodes::NodeType;
+
+#[derive(Debug, Clone)]
+pub struct BottleneckTputLink {
+    id: u32,
+    from: u32,
+    to: u32,
+    network_bottleneck: NetworkBottleneck,
+}
+
+impl BottleneckTputLink {
+    pub fn new(id: u32, from: u32, to: u32, window: Duration, queue_pps: Option<usize>) -> Self {
+        Self {
+            id,
+            from,
+            to,
+            network_bottleneck: NetworkBottleneck::new(window, queue_pps),
+        }
+    }
+}
+
+impl Link for BottleneckTputLink {
+    fn sample(&mut self, current_time: &Instant) -> Duration {
+        // Assume client for now - in real implementation, this should be determined from context
+        let (delay, _) = self.network_bottleneck.sample(current_time, true);
+        delay
+    }
+
+    fn link_type(&self) -> LinkType {
+        LinkType::BottleneckTput
+    }
+
+    fn link_id(&self) -> u32 {
+        self.id
+    }
+
+    fn from_node(&self) -> u32 {
+        self.from
+    }
+
+    fn to_node(&self) -> u32 {
+        self.to
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FixedTputLink {
+    id: u32,
+    from: u32,
+    to: u32,
+    network_linktrace: NetworkLinktrace,
+}
+
+impl FixedTputLink {
+    pub fn new(id: u32, from: u32, to: u32, client_tput: u64, server_tput: u64) -> Self {
+        Self {
+            id,
+            from,
+            to,
+            network_linktrace: NetworkLinktrace::new_fixed(client_tput, server_tput),
+        }
+    }
+}
+
+impl Link for FixedTputLink {
+    fn sample(&mut self, current_time: &Instant) -> Duration {
+        let (delay, _) = self.network_linktrace.sample_fixed(current_time, true);
+        delay
+    }
+
+    fn link_type(&self) -> LinkType {
+        LinkType::FixedTput
+    }
+
+    fn link_id(&self) -> u32 {
+        self.id
+    }
+
+    fn from_node(&self) -> u32 {
+        self.from
+    }
+
+    fn to_node(&self) -> u32 {
+        self.to
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HiTraceTputLink {
+    id: u32,
+    from: u32,
+    to: u32,
+    network_linktrace: NetworkLinktrace,
+}
+
+impl HiTraceTputLink {
+    pub fn new(id: u32, from: u32, to: u32, linktrace: Arc<LinkTrace>) -> Self {
+        Self {
+            id,
+            from,
+            to,
+            network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
+        }
+    }
+}
+
+impl Link for HiTraceTputLink {
+    fn sample(&mut self, current_time: &Instant) -> Duration {
+        let (delay, _) = self.network_linktrace.sample_hi(current_time, true);
+        delay
+    }
+
+    fn link_type(&self) -> LinkType {
+        LinkType::HiTraceTput
+    }
+
+    fn link_id(&self) -> u32 {
+        self.id
+    }
+
+    fn from_node(&self) -> u32 {
+        self.from
+    }
+
+    fn to_node(&self) -> u32 {
+        self.to
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StdTraceTputLink {
+    id: u32,
+    from: u32,
+    to: u32,
+    network_linktrace: NetworkLinktrace,
+}
+
+impl StdTraceTputLink {
+    pub fn new(id: u32, from: u32, to: u32, linktrace: Arc<LinkTrace>) -> Self {
+        Self {
+            id,
+            from,
+            to,
+            network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
+        }
+    }
+}
+
+impl Link for StdTraceTputLink {
+    fn sample(&mut self, current_time: &Instant) -> Duration {
+        let (delay, _) = self.network_linktrace.sample_std(current_time, true);
+        delay
+    }
+
+    fn link_type(&self) -> LinkType {
+        LinkType::StdTraceTput
+    }
+
+    fn link_id(&self) -> u32 {
+        self.id
+    }
+
+    fn from_node(&self) -> u32 {
+        self.from
+    }
+
+    fn to_node(&self) -> u32 {
+        self.to
+    }
+}
+
+// Factory function for creating links from TOML configuration
+pub fn create_link(
+    link_type: &str,
+    id: u32,
+    from: u32,
+    to: u32,
+    params: &std::collections::HashMap<String, String>,
+) -> Result<Box<dyn Link>, String> {
+    match link_type {
+        "BottleneckTput" => {
+            let window = params
+                .get("window_ms")
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(Duration::from_millis)
+                .unwrap_or(Duration::from_secs(1));
+            
+            let queue_pps = params
+                .get("queue_pps")
+                .and_then(|s| s.parse::<usize>().ok());
+            
+            Ok(Box::new(BottleneckTputLink::new(id, from, to, window, queue_pps)))
+        }
+        "FixedTput" => {
+            let client_tput = params
+                .get("client_tput_bps")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(1_000_000); // Default 1 Mbps
+            
+            let server_tput = params
+                .get("server_tput_bps")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(1_000_000); // Default 1 Mbps
+            
+            Ok(Box::new(FixedTputLink::new(id, from, to, client_tput, server_tput)))
+        }
+        "HiTraceTput" => {
+            let _trace_file = params
+                .get("trace_file")
+                .ok_or("HiTraceTput requires trace_file parameter")?;
+            
+            // For now, create a dummy trace - in real implementation, load from file
+            let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
+            let linktrace = Arc::new(dummy_trace);
+            
+            Ok(Box::new(HiTraceTputLink::new(id, from, to, linktrace)))
+        }
+        "StdTraceTput" => {
+            let _trace_file = params
+                .get("trace_file")
+                .ok_or("StdTraceTput requires trace_file parameter")?;
+            
+            // For now, create a dummy trace - in real implementation, load from file
+            let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
+            let linktrace = Arc::new(dummy_trace);
+            
+            Ok(Box::new(StdTraceTputLink::new(id, from, to, linktrace)))
+        }
+        _ => Err(format!("Unknown link type: {}", link_type)),
+    }
+}
+
+
+///// 
+
+
+
+
 
 // Labels for the different types of simulated networks there are,
 // in terms of how the bottleneck is modeled
@@ -488,24 +747,14 @@ impl NetworkLinktrace {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-pub struct Link {
+// Legacy Link struct for compatibility - consider removing
+pub struct SimpleLink {
     pub from: u32,
     pub to: u32,
     pub delay: Duration,
 }
 
-impl Link {
+impl SimpleLink {
     pub fn new(from: u32, to: u32, delay: Duration) -> Self {
         Self { from, to, delay }
     }
@@ -517,8 +766,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_link_creation() {
-        let link = Link::new(1, 2, Duration::from_millis(10));
+    fn test_simple_link_creation() {
+        let link = SimpleLink::new(1, 2, Duration::from_millis(10));
         assert_eq!(link.from, 1);
         assert_eq!(link.to, 2);
         assert_eq!(link.delay, Duration::from_millis(10));

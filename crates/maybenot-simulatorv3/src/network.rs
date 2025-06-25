@@ -1,9 +1,9 @@
-use crate::links::Link;
+use crate::links::{Link, SimpleLink};
 use crate::nodes::Node;
 
 pub struct Network {
     nodes: Vec<Box<dyn Node>>,
-    links: Vec<Link>,
+    links: Vec<Box<dyn Link>>,
 }
 
 impl Network {
@@ -20,7 +20,7 @@ impl Network {
         node_index
     }
 
-    pub fn add_link(&mut self, link: Link) -> usize {
+    pub fn add_link(&mut self, link: Box<dyn Link>) -> usize {
         let link_index = self.links.len();
         self.links.push(link);
         link_index
@@ -46,17 +46,18 @@ impl Network {
             .map(|(idx, _)| idx)
     }
 
-    pub fn get_link(&self, link_index: usize) -> Option<&Link> {
-        self.links.get(link_index)
+    pub fn get_link(&self, link_index: usize) -> Option<&dyn Link> {
+        self.links.get(link_index).map(|l| l.as_ref())
     }
 
-    pub fn get_link_mut(&mut self, link_index: usize) -> Option<&mut Link> {
+    pub fn get_link_mut(&mut self, link_index: usize) -> Option<&mut Box<dyn Link>> {
         self.links.get_mut(link_index)
     }
 
-    pub fn find_link(&self, from_node_id: u32, to_node_id: u32) -> Option<(usize, &Link)> {
+    pub fn find_link(&self, from_node_id: u32, to_node_id: u32) -> Option<(usize, &dyn Link)> {
         self.links.iter().enumerate()
-            .find(|(_, link)| link.from == from_node_id && link.to == to_node_id)
+            .find(|(_, link)| link.from_node() == from_node_id && link.to_node() == to_node_id)
+            .map(|(idx, link)| (idx, link.as_ref()))
     }
 
     pub fn node_count(&self) -> usize {
@@ -71,7 +72,7 @@ impl Network {
         &self.nodes
     }
 
-    pub fn links(&self) -> &[Link] {
+    pub fn links(&self) -> &[Box<dyn Link>] {
         &self.links
     }
 }
@@ -153,27 +154,42 @@ mod tests {
 
     #[test]
     fn test_add_link() {
+        use crate::links::{BottleneckTputLink, LinkType};
+        use std::time::Duration;
+        
         let mut network = Network::new();
         
-        let link = Link::new(1, 2, Duration::from_millis(10));
+        let link = Box::new(BottleneckTputLink::new(
+            0, 1, 2, 
+            Duration::from_millis(10), 
+            Some(1000)
+        ));
         let link_index = network.add_link(link);
 
         assert_eq!(link_index, 0);
         assert_eq!(network.link_count(), 1);
         
         let retrieved_link = network.get_link(0).unwrap();
-        assert_eq!(retrieved_link.from, 1);
-        assert_eq!(retrieved_link.to, 2);
-        assert_eq!(retrieved_link.delay, Duration::from_millis(10));
+        assert_eq!(retrieved_link.from_node(), 1);
+        assert_eq!(retrieved_link.to_node(), 2);
+        assert_eq!(retrieved_link.link_id(), 0);
+        assert!(matches!(retrieved_link.link_type(), LinkType::BottleneckTput));
     }
 
     #[test]
     fn test_find_link() {
+        use crate::links::{BottleneckTputLink, FixedTputLink};
+        use std::time::Duration;
+        
         let mut network = Network::new();
         
-        let link1 = Link::new(1, 2, Duration::from_millis(10));
-        let link2 = Link::new(2, 3, Duration::from_millis(20));
-        let link3 = Link::new(3, 1, Duration::from_millis(5));
+        let link1 = Box::new(BottleneckTputLink::new(
+            0, 1, 2, Duration::from_millis(10), Some(1000)
+        ));
+        let link2 = Box::new(FixedTputLink::new(1, 2, 3, 1_000_000, 1_000_000));
+        let link3 = Box::new(BottleneckTputLink::new(
+            2, 3, 1, Duration::from_millis(5), None
+        ));
 
         network.add_link(link1);
         network.add_link(link2);
@@ -181,14 +197,17 @@ mod tests {
 
         let (idx, link) = network.find_link(2, 3).unwrap();
         assert_eq!(idx, 1);
-        assert_eq!(link.from, 2);
-        assert_eq!(link.to, 3);
+        assert_eq!(link.from_node(), 2);
+        assert_eq!(link.to_node(), 3);
 
         assert!(network.find_link(99, 100).is_none());
     }
 
     #[test]
     fn test_network_iterators() {
+        use crate::links::BottleneckTputLink;
+        use std::time::Duration;
+        
         let mut network = Network::new();
         
         let client = Box::new(ClientBasic::new(1));
@@ -197,7 +216,9 @@ mod tests {
         network.add_node(client);
         network.add_node(relay);
 
-        let link = Link::new(1, 2, Duration::from_millis(10));
+        let link = Box::new(BottleneckTputLink::new(
+            0, 1, 2, Duration::from_millis(10), Some(1000)
+        ));
         network.add_link(link);
 
         assert_eq!(network.nodes().len(), 2);
@@ -207,6 +228,11 @@ mod tests {
         for (i, node) in network.nodes().iter().enumerate() {
             assert!(node.node_id() == 1 || node.node_id() == 2);
             assert_eq!(i < 2, true);
+        }
+        
+        // Test that we can access all links
+        for link in network.links().iter() {
+            assert!(link.from_node() == 1 && link.to_node() == 2);
         }
     }
 }
