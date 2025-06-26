@@ -253,17 +253,25 @@ pub fn create_link(
             Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, window, queue_pps)))
         }
         "FixedTput" => {
-            let client_tput = params
-                .get("client_tput_bps")
+            // Support both single tput_bps (simplex) and separate client/server (duplex)
+            let tput = params
+                .get("tput_bps")
                 .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(1_000_000); // Default 1 Mbps
+                .unwrap_or_else(|| {
+                    // Fall back to separate client/server throughput if tput_bps not found
+                    let client_tput = params
+                        .get("client_tput_bps")
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(1_000_000);
+                    client_tput
+                });
             
             let server_tput = params
                 .get("server_tput_bps")
                 .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(1_000_000); // Default 1 Mbps
+                .unwrap_or(tput); // Use same as client if not specified
             
-            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, client_tput, server_tput)))
+            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, tput, server_tput)))
         }
         "HiTraceTput" => {
             let _trace_file = params
