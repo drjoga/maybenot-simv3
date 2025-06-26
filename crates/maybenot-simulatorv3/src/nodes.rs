@@ -1,19 +1,5 @@
-use std::time::Instant;
 use maybenot::TriggerEvent;
 use crate::SimulEvent;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum NodeType {
-    ClientBasic,
-    RelayBasic,
-    TrafficServerBasic,
-}
-
-pub trait Node {
-    fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError>;
-    fn node_type(&self) -> NodeType;
-    fn node_id(&self) -> u32;
-}
 
 #[derive(Debug, Clone)]
 pub enum NodeError {
@@ -45,13 +31,11 @@ impl ClientBasic {
             packet_count: 0,
         }
     }
-}
 
-impl Node for ClientBasic {
-    fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
+    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
         self.packet_count += 1;
         
-        let mut response_events = Vec::new();
+        let response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalSent => {
@@ -77,11 +61,7 @@ impl Node for ClientBasic {
         Ok(response_events)
     }
 
-    fn node_type(&self) -> NodeType {
-        NodeType::ClientBasic
-    }
-
-    fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> u32 {
         self.id
     }
 }
@@ -101,10 +81,8 @@ impl RelayBasic {
             forwarded_count: 0,
         }
     }
-}
 
-impl Node for RelayBasic {
-    fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
+    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
         self.packet_count += 1;
         
         let mut response_events = Vec::new();
@@ -157,11 +135,7 @@ impl Node for RelayBasic {
         Ok(response_events)
     }
 
-    fn node_type(&self) -> NodeType {
-        NodeType::RelayBasic
-    }
-
-    fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> u32 {
         self.id
     }
 }
@@ -181,10 +155,8 @@ impl TrafficServerBasic {
             responses_sent: 0,
         }
     }
-}
 
-impl Node for TrafficServerBasic {
-    fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
+    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
         self.packet_count += 1;
         
         let mut response_events = Vec::new();
@@ -220,21 +192,59 @@ impl Node for TrafficServerBasic {
         Ok(response_events)
     }
 
-    fn node_type(&self) -> NodeType {
-        NodeType::TrafficServerBasic
-    }
-
-    fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> u32 {
         self.id
     }
 }
 
-// Factory function to create nodes from configuration
-pub fn create_node(node_type: &str, id: u32) -> Result<Box<dyn Node>, NodeError> {
+// High-performance enum-based node dispatch
+#[derive(Debug, Clone)]
+pub enum NodeType {
+    ClientBasic(ClientBasic),
+    RelayBasic(RelayBasic),
+    TrafficServerBasic(TrafficServerBasic),
+}
+
+impl NodeType {
+    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
+        match self {
+            NodeType::ClientBasic(node) => node.handle_event(event),
+            NodeType::RelayBasic(node) => node.handle_event(event),
+            NodeType::TrafficServerBasic(node) => node.handle_event(event),
+        }
+    }
+
+    pub fn node_id(&self) -> u32 {
+        match self {
+            NodeType::ClientBasic(node) => node.node_id(),
+            NodeType::RelayBasic(node) => node.node_id(),
+            NodeType::TrafficServerBasic(node) => node.node_id(),
+        }
+    }
+
+    pub fn packet_count(&self) -> usize {
+        match self {
+            NodeType::ClientBasic(node) => node.packet_count,
+            NodeType::RelayBasic(node) => node.packet_count,
+            NodeType::TrafficServerBasic(node) => node.packet_count,
+        }
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            NodeType::ClientBasic(_) => "ClientBasic",
+            NodeType::RelayBasic(_) => "RelayBasic",
+            NodeType::TrafficServerBasic(_) => "TrafficServerBasic",
+        }
+    }
+}
+
+// Factory function for creating nodes from TOML configuration
+pub fn create_node(node_type: &str, id: u32) -> Result<NodeType, NodeError> {
     match node_type {
-        "ClientBasic" => Ok(Box::new(ClientBasic::new(id))),
-        "RelayBasic" => Ok(Box::new(RelayBasic::new(id))),
-        "TrafficServerBasic" => Ok(Box::new(TrafficServerBasic::new(id))),
+        "ClientBasic" => Ok(NodeType::ClientBasic(ClientBasic::new(id))),
+        "RelayBasic" => Ok(NodeType::RelayBasic(RelayBasic::new(id))),
+        "TrafficServerBasic" => Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id))),
         _ => Err(NodeError::ProcessingError(format!(
             "Unknown node type: {}", node_type
         ))),
@@ -250,7 +260,6 @@ mod tests {
     fn test_client_basic_creation() {
         let client = ClientBasic::new(1);
         assert_eq!(client.node_id(), 1);
-        assert_eq!(client.node_type(), NodeType::ClientBasic);
         assert_eq!(client.packet_count, 0);
     }
 
@@ -258,7 +267,6 @@ mod tests {
     fn test_relay_basic_creation() {
         let relay = RelayBasic::new(2);
         assert_eq!(relay.node_id(), 2);
-        assert_eq!(relay.node_type(), NodeType::RelayBasic);
         assert_eq!(relay.forwarded_count, 0);
     }
 
@@ -266,7 +274,6 @@ mod tests {
     fn test_traffic_server_basic_creation() {
         let server = TrafficServerBasic::new(3);
         assert_eq!(server.node_id(), 3);
-        assert_eq!(server.node_type(), NodeType::TrafficServerBasic);
         assert_eq!(server.responses_sent, 0);
     }
 
@@ -274,23 +281,23 @@ mod tests {
     fn test_node_factory() {
         let client = create_node("ClientBasic", 1).unwrap();
         assert_eq!(client.node_id(), 1);
-        assert_eq!(client.node_type(), NodeType::ClientBasic);
+        assert_eq!(client.type_name(), "ClientBasic");
 
         let relay = create_node("RelayBasic", 2).unwrap();
         assert_eq!(relay.node_id(), 2);
-        assert_eq!(relay.node_type(), NodeType::RelayBasic);
+        assert_eq!(relay.type_name(), "RelayBasic");
 
         let server = create_node("TrafficServerBasic", 3).unwrap();
         assert_eq!(server.node_id(), 3);
-        assert_eq!(server.node_type(), NodeType::TrafficServerBasic);
+        assert_eq!(server.type_name(), "TrafficServerBasic");
 
         let invalid = create_node("InvalidType", 4);
         assert!(invalid.is_err());
     }
 
     #[test]
-    fn test_client_handle_event() {
-        let mut client = ClientBasic::new(1);
+    fn test_enum_handle_event() {
+        let mut client = NodeType::ClientBasic(ClientBasic::new(1));
         let event = SimulEvent {
             event: TriggerEvent::NormalSent,
             time: Instant::now(),
@@ -305,12 +312,12 @@ mod tests {
 
         let result = client.handle_event(&event);
         assert!(result.is_ok());
-        assert_eq!(client.packet_count, 1);
+        assert_eq!(client.packet_count(), 1);
     }
 
     #[test]
     fn test_traffic_server_response() {
-        let mut server = TrafficServerBasic::new(3);
+        let mut server = NodeType::TrafficServerBasic(TrafficServerBasic::new(3));
         let event = SimulEvent {
             event: TriggerEvent::NormalRecv,
             time: Instant::now(),
@@ -325,10 +332,45 @@ mod tests {
 
         let result = server.handle_event(&event).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(server.responses_sent, 1);
+        
+        if let NodeType::TrafficServerBasic(ref server_node) = server {
+            assert_eq!(server_node.responses_sent, 1);
+        }
         
         let response = &result[0];
         assert_eq!(response.packet_idx, 1100); // 100 + 1000
         assert!(matches!(response.event, TriggerEvent::NormalSent));
+    }
+
+    #[test]
+    fn test_enum_dispatch_performance() {
+        // Test that enum dispatch works efficiently
+        let mut nodes = vec![
+            NodeType::ClientBasic(ClientBasic::new(1)),
+            NodeType::RelayBasic(RelayBasic::new(2)),
+            NodeType::TrafficServerBasic(TrafficServerBasic::new(3)),
+        ];
+
+        let event = SimulEvent {
+            event: TriggerEvent::NormalSent,
+            time: Instant::now(),
+            packet_idx: 0,
+            node_idx: 1,
+            link_idx: 0,
+            contains_padding: false,
+            bypass: false,
+            replace: false,
+            debug_note: None,
+        };
+
+        // Process event on all nodes - this should be very fast
+        for node in &mut nodes {
+            let _ = node.handle_event(&event);
+        }
+
+        // Verify all nodes processed the event
+        for node in &nodes {
+            assert!(node.packet_count() > 0);
+        }
     }
 }

@@ -17,21 +17,60 @@ use crate::{
 
 /////
 
+// High-performance enum-based link dispatch
 #[derive(Debug, Clone)]
 pub enum LinkType {
-    BottleneckTput,
-    FixedTput,
-    HiTraceTput,
-    StdTraceTput,
+    BottleneckTput(BottleneckTputLink),
+    FixedTput(FixedTputLink),
+    HiTraceTput(HiTraceTputLink),
+    StdTraceTput(StdTraceTputLink),
 }
 
+impl LinkType {
+    pub fn sample(&mut self, current_time: &Instant) -> Duration {
+        match self {
+            LinkType::BottleneckTput(link) => link.sample(current_time),
+            LinkType::FixedTput(link) => link.sample(current_time),
+            LinkType::HiTraceTput(link) => link.sample(current_time),
+            LinkType::StdTraceTput(link) => link.sample(current_time),
+        }
+    }
 
-pub trait Link {
-    fn sample(&mut self, current_time: &Instant) -> Duration;
-    fn link_type(&self) -> LinkType;
-    fn link_id(&self) -> u32;
-    fn from_node(&self) -> u32;
-    fn to_node(&self) -> u32;
+    pub fn link_id(&self) -> u32 {
+        match self {
+            LinkType::BottleneckTput(link) => link.link_id(),
+            LinkType::FixedTput(link) => link.link_id(),
+            LinkType::HiTraceTput(link) => link.link_id(),
+            LinkType::StdTraceTput(link) => link.link_id(),
+        }
+    }
+
+    pub fn from_node(&self) -> u32 {
+        match self {
+            LinkType::BottleneckTput(link) => link.from_node(),
+            LinkType::FixedTput(link) => link.from_node(),
+            LinkType::HiTraceTput(link) => link.from_node(),
+            LinkType::StdTraceTput(link) => link.from_node(),
+        }
+    }
+
+    pub fn to_node(&self) -> u32 {
+        match self {
+            LinkType::BottleneckTput(link) => link.to_node(),
+            LinkType::FixedTput(link) => link.to_node(),
+            LinkType::HiTraceTput(link) => link.to_node(),
+            LinkType::StdTraceTput(link) => link.to_node(),
+        }
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            LinkType::BottleneckTput(_) => "BottleneckTput",
+            LinkType::FixedTput(_) => "FixedTput",
+            LinkType::HiTraceTput(_) => "HiTraceTput",
+            LinkType::StdTraceTput(_) => "StdTraceTput",
+        }
+    }
 }
 
 
@@ -57,26 +96,22 @@ impl BottleneckTputLink {
     }
 }
 
-impl Link for BottleneckTputLink {
-    fn sample(&mut self, current_time: &Instant) -> Duration {
+impl BottleneckTputLink {
+    pub fn sample(&mut self, current_time: &Instant) -> Duration {
         // Assume client for now - in real implementation, this should be determined from context
         let (delay, _) = self.network_bottleneck.sample(current_time, true);
         delay
     }
 
-    fn link_type(&self) -> LinkType {
-        LinkType::BottleneckTput
-    }
-
-    fn link_id(&self) -> u32 {
+    pub fn link_id(&self) -> u32 {
         self.id
     }
 
-    fn from_node(&self) -> u32 {
+    pub fn from_node(&self) -> u32 {
         self.from
     }
 
-    fn to_node(&self) -> u32 {
+    pub fn to_node(&self) -> u32 {
         self.to
     }
 }
@@ -100,25 +135,21 @@ impl FixedTputLink {
     }
 }
 
-impl Link for FixedTputLink {
-    fn sample(&mut self, current_time: &Instant) -> Duration {
+impl FixedTputLink {
+    pub fn sample(&mut self, current_time: &Instant) -> Duration {
         let (delay, _) = self.network_linktrace.sample_fixed(current_time, true);
         delay
     }
 
-    fn link_type(&self) -> LinkType {
-        LinkType::FixedTput
-    }
-
-    fn link_id(&self) -> u32 {
+    pub fn link_id(&self) -> u32 {
         self.id
     }
 
-    fn from_node(&self) -> u32 {
+    pub fn from_node(&self) -> u32 {
         self.from
     }
 
-    fn to_node(&self) -> u32 {
+    pub fn to_node(&self) -> u32 {
         self.to
     }
 }
@@ -142,25 +173,21 @@ impl HiTraceTputLink {
     }
 }
 
-impl Link for HiTraceTputLink {
-    fn sample(&mut self, current_time: &Instant) -> Duration {
+impl HiTraceTputLink {
+    pub fn sample(&mut self, current_time: &Instant) -> Duration {
         let (delay, _) = self.network_linktrace.sample_hi(current_time, true);
         delay
     }
 
-    fn link_type(&self) -> LinkType {
-        LinkType::HiTraceTput
-    }
-
-    fn link_id(&self) -> u32 {
+    pub fn link_id(&self) -> u32 {
         self.id
     }
 
-    fn from_node(&self) -> u32 {
+    pub fn from_node(&self) -> u32 {
         self.from
     }
 
-    fn to_node(&self) -> u32 {
+    pub fn to_node(&self) -> u32 {
         self.to
     }
 }
@@ -184,25 +211,21 @@ impl StdTraceTputLink {
     }
 }
 
-impl Link for StdTraceTputLink {
-    fn sample(&mut self, current_time: &Instant) -> Duration {
+impl StdTraceTputLink {
+    pub fn sample(&mut self, current_time: &Instant) -> Duration {
         let (delay, _) = self.network_linktrace.sample_std(current_time, true);
         delay
     }
 
-    fn link_type(&self) -> LinkType {
-        LinkType::StdTraceTput
-    }
-
-    fn link_id(&self) -> u32 {
+    pub fn link_id(&self) -> u32 {
         self.id
     }
 
-    fn from_node(&self) -> u32 {
+    pub fn from_node(&self) -> u32 {
         self.from
     }
 
-    fn to_node(&self) -> u32 {
+    pub fn to_node(&self) -> u32 {
         self.to
     }
 }
@@ -214,7 +237,7 @@ pub fn create_link(
     from: u32,
     to: u32,
     params: &std::collections::HashMap<String, String>,
-) -> Result<Box<dyn Link>, String> {
+) -> Result<LinkType, String> {
     match link_type {
         "BottleneckTput" => {
             let window = params
@@ -227,7 +250,7 @@ pub fn create_link(
                 .get("queue_pps")
                 .and_then(|s| s.parse::<usize>().ok());
             
-            Ok(Box::new(BottleneckTputLink::new(id, from, to, window, queue_pps)))
+            Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, window, queue_pps)))
         }
         "FixedTput" => {
             let client_tput = params
@@ -240,7 +263,7 @@ pub fn create_link(
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(1_000_000); // Default 1 Mbps
             
-            Ok(Box::new(FixedTputLink::new(id, from, to, client_tput, server_tput)))
+            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, client_tput, server_tput)))
         }
         "HiTraceTput" => {
             let _trace_file = params
@@ -251,7 +274,7 @@ pub fn create_link(
             let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
             let linktrace = Arc::new(dummy_trace);
             
-            Ok(Box::new(HiTraceTputLink::new(id, from, to, linktrace)))
+            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, linktrace)))
         }
         "StdTraceTput" => {
             let _trace_file = params
@@ -262,7 +285,7 @@ pub fn create_link(
             let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
             let linktrace = Arc::new(dummy_trace);
             
-            Ok(Box::new(StdTraceTputLink::new(id, from, to, linktrace)))
+            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, linktrace)))
         }
         _ => Err(format!("Unknown link type: {}", link_type)),
     }
