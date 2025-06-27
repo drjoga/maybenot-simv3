@@ -18,32 +18,34 @@ pub struct NetworkConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct NodeConfig {
-    pub id: u32,
+    pub id: usize,
     #[serde(rename = "type")]
     pub node_type: String,
+    pub coreside_link: Option<usize>,
+    pub edgeside_link: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LinkConfig {
-    pub id: u32,
-    pub from: u32,
-    pub to: u32,
+    pub id: usize,
+    pub from: usize,
+    pub to: usize,
     #[serde(rename = "type")]
     pub link_type: String,
     #[serde(flatten)]
     pub params: HashMap<String, toml::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RouteConfig {
-    pub node_id: u32,
+    pub node_id: usize,
     pub forwarding_rules: Vec<ForwardingRule>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ForwardingRule {
-    pub in_link: u32,
-    pub out_link: u32,
+    pub in_link: usize,
+    pub out_link: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -57,10 +59,17 @@ impl std::fmt::Display for NetworkError {
 
 impl std::error::Error for NetworkError {}
 
+// Check if, Clone can be removed from Network
+#[derive(Debug, Clone)]
 pub struct Network {
-    nodes: Vec<NodeType>,
-    links: Vec<LinkType>,
-    routes: Vec<RouteConfig>,
+    pub nodes: Vec<NodeType>,
+    pub links: Vec<LinkType>,
+    pub routes: Vec<RouteConfig>,
+    pub client: usize,
+    pub traffic_server: usize,
+    pub has_mb: bool,
+    pub mb_client: usize,
+    pub mb_server: usize,
 }
 
 impl Network {
@@ -69,6 +78,11 @@ impl Network {
             nodes: Vec::new(),
             links: Vec::new(),
             routes: Vec::new(),
+            client: 0,
+            traffic_server: 0,
+            has_mb: false,
+            mb_client: 0,
+            mb_server: 0,
         }
     }
 
@@ -92,9 +106,44 @@ impl Network {
     pub fn from_config(config: NetworkConfig) -> Result<Self, NetworkError> {
         let mut network = Self::new();
 
+        // Find and validate client and traffic server nodes
+        let mut client_id: Option<usize> = None;
+        let mut traffic_server_id: Option<usize> = None;
+
+        for node_config in &config.nodes {
+            match node_config.node_type.as_str() {
+                "ClientBasic" => {
+                    if client_id.is_some() {
+                        return Err(NetworkError("Multiple ClientBasic nodes found. Only one is allowed.".to_string()));
+                    }
+                    client_id = Some(node_config.id);
+                }
+                "TrafficServerBasic" => {
+                    if traffic_server_id.is_some() {
+                        return Err(NetworkError("Multiple TrafficServerBasic nodes found. Only one is allowed.".to_string()));
+                    }
+                    traffic_server_id = Some(node_config.id);
+                }
+                _ => {} // Other node types are fine
+            }
+        }
+
+        // Ensure we have exactly one client and one traffic server
+        let client = client_id.ok_or_else(|| NetworkError("No ClientBasic node found. Exactly one is required.".to_string()))?;
+        let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No TrafficServerBasic node found. Exactly one is required.".to_string()))?;
+
+        // Set the client and traffic server IDs
+        network.client = client;
+        network.traffic_server = traffic_server;
+        
+        // Set MB fields (for future use)
+        network.has_mb = false;
+        network.mb_client = 0;
+        network.mb_server = 0;
+
         // Create nodes
         for node_config in &config.nodes {
-            let node = create_node(&node_config.node_type, node_config.id)
+            let node = create_node(&node_config.node_type, node_config.id, node_config.coreside_link, node_config.edgeside_link)
                 .map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
             network.add_node(node, node_config.id);
         }
@@ -132,7 +181,7 @@ impl Network {
     }
 
     /// Get routing rules for a specific node
-    pub fn get_routing_rules(&self, node_id: u32) -> Option<&Vec<ForwardingRule>> {
+    pub fn get_routing_rules(&self, node_id: usize) -> Option<&Vec<ForwardingRule>> {
         self.routes.iter()
             .find(|route| route.node_id == node_id)
             .map(|route| &route.forwarding_rules)
@@ -143,14 +192,14 @@ impl Network {
         &self.routes
     }
 
-    pub fn add_node(&mut self, node: NodeType, id: u32) -> usize {
-        assert_eq!(id as usize, self.nodes.len(), "Node ID must match vector index");
+    pub fn add_node(&mut self, node: NodeType, id: usize) -> usize {
+        assert_eq!(id, self.nodes.len(), "Node ID must match vector index");
         self.nodes.push(node);
         self.nodes.len() - 1
     }
 
-    pub fn add_link(&mut self, link: LinkType, id: u32) -> usize {
-        assert_eq!(id as usize, self.links.len(), "Link ID must match vector index");
+    pub fn add_link(&mut self, link: LinkType, id: usize) -> usize {
+        assert_eq!(id, self.links.len(), "Link ID must match vector index");
         self.links.push(link);
         self.links.len() - 1
     }
@@ -171,7 +220,7 @@ impl Network {
         self.links.get_mut(link_index)
     }
 
-    pub fn find_link(&self, from_node_id: u32, to_node_id: u32) -> Option<(usize, &LinkType)> {
+    pub fn find_link(&self, from_node_id: usize, to_node_id: usize) -> Option<(usize, &LinkType)> {
         self.links.iter().enumerate()
             .find(|(_, link)| link.from_node() == from_node_id && link.to_node() == to_node_id)
     }

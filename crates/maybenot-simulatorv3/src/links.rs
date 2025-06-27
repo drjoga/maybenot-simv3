@@ -26,6 +26,7 @@ pub enum LinkType {
     StdTraceTput(StdTraceTputLink),
 }
 
+
 impl LinkType {
     pub fn sample(&mut self, current_time: &Instant) -> Duration {
         match self {
@@ -36,30 +37,30 @@ impl LinkType {
         }
     }
 
-    pub fn link_id(&self) -> u32 {
+    pub fn link_id(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.link_id(),
-            LinkType::FixedTput(link) => link.link_id(),
-            LinkType::HiTraceTput(link) => link.link_id(),
-            LinkType::StdTraceTput(link) => link.link_id(),
+            LinkType::BottleneckTput(link) => link.id,
+            LinkType::FixedTput(link) => link.id,
+            LinkType::HiTraceTput(link) => link.id,
+            LinkType::StdTraceTput(link) => link.id,
         }
     }
 
-    pub fn from_node(&self) -> u32 {
+    pub fn from_node(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.from_node(),
-            LinkType::FixedTput(link) => link.from_node(),
-            LinkType::HiTraceTput(link) => link.from_node(),
-            LinkType::StdTraceTput(link) => link.from_node(),
+            LinkType::BottleneckTput(link) => link.from,
+            LinkType::FixedTput(link) => link.from,
+            LinkType::HiTraceTput(link) => link.from,
+            LinkType::StdTraceTput(link) => link.from,
         }
     }
 
-    pub fn to_node(&self) -> u32 {
+    pub fn to_node(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.to_node(),
-            LinkType::FixedTput(link) => link.to_node(),
-            LinkType::HiTraceTput(link) => link.to_node(),
-            LinkType::StdTraceTput(link) => link.to_node(),
+            LinkType::BottleneckTput(link) => link.to,
+            LinkType::FixedTput(link) => link.to,
+            LinkType::HiTraceTput(link) => link.to,
+            LinkType::StdTraceTput(link) => link.to,
         }
     }
 
@@ -79,14 +80,14 @@ use crate::nodes::NodeType;
 
 #[derive(Debug, Clone)]
 pub struct BottleneckTputLink {
-    id: u32,
-    from: u32,
-    to: u32,
+    pub id: usize,
+    pub from: usize,
+    pub to: usize,
     network_bottleneck: NetworkBottleneck,
 }
 
 impl BottleneckTputLink {
-    pub fn new(id: u32, from: u32, to: u32, window: Duration, queue_pps: Option<usize>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, window: Duration, queue_pps: Option<usize>) -> Self {
         Self {
             id,
             from,
@@ -102,30 +103,18 @@ impl BottleneckTputLink {
         let (delay, _) = self.network_bottleneck.sample(current_time, true);
         delay
     }
-
-    pub fn link_id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn from_node(&self) -> u32 {
-        self.from
-    }
-
-    pub fn to_node(&self) -> u32 {
-        self.to
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct FixedTputLink {
-    id: u32,
-    from: u32,
-    to: u32,
+    pub id: usize,
+    pub from: usize,
+    pub to: usize,
     network_linktrace: NetworkLinktrace,
 }
 
 impl FixedTputLink {
-    pub fn new(id: u32, from: u32, to: u32, client_tput: u64, server_tput: u64) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, client_tput: u64, server_tput: u64) -> Self {
         Self {
             id,
             from,
@@ -140,30 +129,18 @@ impl FixedTputLink {
         let (delay, _) = self.network_linktrace.sample_fixed(current_time, true);
         delay
     }
-
-    pub fn link_id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn from_node(&self) -> u32 {
-        self.from
-    }
-
-    pub fn to_node(&self) -> u32 {
-        self.to
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct HiTraceTputLink {
-    id: u32,
-    from: u32,
-    to: u32,
+    pub id: usize,
+    pub from: usize,
+    pub to: usize,
     network_linktrace: NetworkLinktrace,
 }
 
 impl HiTraceTputLink {
-    pub fn new(id: u32, from: u32, to: u32, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, linktrace: Arc<LinkTrace>) -> Self {
         Self {
             id,
             from,
@@ -178,30 +155,18 @@ impl HiTraceTputLink {
         let (delay, _) = self.network_linktrace.sample_hi(current_time, true);
         delay
     }
-
-    pub fn link_id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn from_node(&self) -> u32 {
-        self.from
-    }
-
-    pub fn to_node(&self) -> u32 {
-        self.to
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct StdTraceTputLink {
-    id: u32,
-    from: u32,
-    to: u32,
+    pub id: usize,
+    pub from: usize,
+    pub to: usize,
     network_linktrace: NetworkLinktrace,
 }
 
 impl StdTraceTputLink {
-    pub fn new(id: u32, from: u32, to: u32, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, linktrace: Arc<LinkTrace>) -> Self {
         Self {
             id,
             from,
@@ -216,26 +181,14 @@ impl StdTraceTputLink {
         let (delay, _) = self.network_linktrace.sample_std(current_time, true);
         delay
     }
-
-    pub fn link_id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn from_node(&self) -> u32 {
-        self.from
-    }
-
-    pub fn to_node(&self) -> u32 {
-        self.to
-    }
 }
 
 // Factory function for creating links from TOML configuration
 pub fn create_link(
     link_type: &str,
-    id: u32,
-    from: u32,
-    to: u32,
+    id: usize,
+    from: usize,
+    to: usize,
     params: &std::collections::HashMap<String, String>,
 ) -> Result<LinkType, String> {
     match link_type {
@@ -780,13 +733,13 @@ impl NetworkLinktrace {
 
 // Legacy Link struct for compatibility - consider removing
 pub struct SimpleLink {
-    pub from: u32,
-    pub to: u32,
+    pub from: usize,
+    pub to: usize,
     pub delay: Duration,
 }
 
 impl SimpleLink {
-    pub fn new(from: u32, to: u32, delay: Duration) -> Self {
+    pub fn new(from: usize, to: usize, delay: Duration) -> Self {
         Self { from, to, delay }
     }
 }

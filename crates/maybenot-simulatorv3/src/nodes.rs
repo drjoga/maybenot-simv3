@@ -1,5 +1,8 @@
 use maybenot::TriggerEvent;
-use crate::SimulEvent;
+use crate::{SimulEvent, EventKind, SimulQueue};
+use crate::network::Network;
+use std::time::Duration;
+use log::debug;
 
 #[derive(Debug, Clone)]
 pub enum NodeError {
@@ -18,38 +21,72 @@ impl std::fmt::Display for NodeError {
 
 impl std::error::Error for NodeError {}
 
+
+
 #[derive(Debug, Clone)]
 pub struct ClientBasic {
-    pub id: u32,
-    pub packet_count: usize,
+    pub id: usize,
+    pub coreside_link: usize,
 }
 
 impl ClientBasic {
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: usize, coreside_link: usize) -> Self {
         Self {
             id,
-            packet_count: 0,
+            coreside_link,
         }
     }
 
-    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
-        self.packet_count += 1;
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
-        let response_events = Vec::new();
+        let mut response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalSent => {
-                // Client sending a normal packet - just log it
+                
+                let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
+                
+                debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
+                       self.id, outgoing_link.link_id());
+                
+                let recv_event = SimulEvent {
+                    event: TriggerEvent::NormalRecv,
+                    time: event.time,  // FIXME: current_time + time from link.sample() + propagation delay
+                    packet_idx: event.packet_idx,
+                    node_idx: outgoing_link.to_node(),
+                    link_idx: outgoing_link.link_id(),
+                    contains_padding: false,
+                    bypass: false,
+                    replace: false,
+                    debug_note: None, 
+                };
+                response_events.push(recv_event);
             }
             TriggerEvent::NormalRecv => {
-                // Client received a normal packet - might trigger a response
-                // For basic client, we'll just acknowledge receipt
-            }
-            TriggerEvent::TunnelSent => {
-                // Client sending through tunnel
-            }
-            TriggerEvent::TunnelRecv => {
-                // Client receiving through tunnel
+
+                debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
+                let dependent_events = sq.dependent_tx.get(&event.packet_idx);
+                if dependent_events.is_some() {
+                    let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
+
+                    // We have dependent packets, so we need to queue them up. Apply cloning for now, unoptimized
+                    for (new_pktidx, delta, event_kind) in dependent_events.unwrap().clone() {
+                        debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);
+                        // We are at client, and we send toward webserver
+                        sq.push(SimulEvent {
+                            event: TriggerEvent::NormalSent,
+                            time: event.time,  // FIXME: current_time + time from link.sample() + propagation delay
+                            //integration_delay: next.integration_delay,
+                            packet_idx: new_pktidx,
+                            node_idx: outgoing_link.to_node(),
+                            link_idx: outgoing_link.link_id(),
+                            contains_padding: false,
+                            bypass: false,
+                            replace: false,
+                            debug_note: None,
+                        });
+                    }
+                }
             }
             _ => {
                 return Err(NodeError::InvalidEvent(format!(
@@ -57,63 +94,67 @@ impl ClientBasic {
                 )));
             }
         }
-        
         Ok(response_events)
     }
 
-    pub fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> usize {
         self.id
+    }
+
+    pub fn get_coreside_linkid(&self) -> usize {
+        self.coreside_link
+    }
+
+    pub fn get_edgeside_linkid(&self) -> usize {
+        panic!("ClientBasic does not have an edgeside link")
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RelayBasic {
-    pub id: u32,
-    pub packet_count: usize,
-    pub forwarded_count: usize,
+    pub id: usize,
+    pub coreside_link: usize,
+    pub edgeside_link: usize,
 }
 
 impl RelayBasic {
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: usize, coreside_link: usize, edgeside_link: usize) -> Self {
         Self {
             id,
-            packet_count: 0,
-            forwarded_count: 0,
+            coreside_link,
+            edgeside_link,
         }
     }
 
-    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
-        self.packet_count += 1;
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
         let mut response_events = Vec::new();
         
         match &event.event {
-            TriggerEvent::TunnelRecv => {
+            TriggerEvent::NormalRecv => {
                 // Relay received from client tunnel - forward to server
-                self.forwarded_count += 1;
                 
                 let forward_event = SimulEvent {
                     event: TriggerEvent::NormalSent,
                     time: event.time + std::time::Duration::from_micros(100), // Small processing delay
                     packet_idx: event.packet_idx,
-                    node_idx: self.id as usize, // This relay
+                    node_idx: self.id, // This relay
                     link_idx: 0, // TODO: proper link management
                     contains_padding: event.contains_padding,
                     bypass: false,
                     replace: false,
-                    debug_note: Some("Relay forwarding to server".to_string()),
+                    debug_note: None,
                 };
                 response_events.push(forward_event);
             }
             TriggerEvent::NormalRecv => {
                 // Relay received from server - forward to client tunnel
-                self.forwarded_count += 1;
                 
                 let forward_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
                     time: event.time + std::time::Duration::from_micros(100),
                     packet_idx: event.packet_idx,
-                    node_idx: self.id as usize,
+                    node_idx: self.id,
                     link_idx: 0,
                     contains_padding: event.contains_padding,
                     bypass: false,
@@ -135,42 +176,46 @@ impl RelayBasic {
         Ok(response_events)
     }
 
-    pub fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> usize {
         self.id
+    }
+
+    pub fn get_coreside_linkid(&self) -> usize {
+        self.coreside_link
+    }
+
+    pub fn get_edgeside_linkid(&self) -> usize {
+        self.edgeside_link
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TrafficServerBasic {
-    pub id: u32,
-    pub packet_count: usize,
-    pub responses_sent: usize,
+    pub id: usize,
+    pub edgeside_link: usize,
 }
 
 impl TrafficServerBasic {
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: usize, edgeside_link: usize) -> Self {
         Self {
             id,
-            packet_count: 0,
-            responses_sent: 0,
+            edgeside_link,
         }
     }
 
-    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
-        self.packet_count += 1;
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
         let mut response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalRecv => {
                 // Traffic server received a request - send a response
-                self.responses_sent += 1;
                 
                 let response_event = SimulEvent {
                     event: TriggerEvent::NormalSent,
                     time: event.time + std::time::Duration::from_millis(1), // Server processing delay
                     packet_idx: event.packet_idx + 1000, // Different packet ID for response
-                    node_idx: self.id as usize,
+                    node_idx: self.id,
                     link_idx: 0,
                     contains_padding: false,
                     bypass: false,
@@ -192,8 +237,16 @@ impl TrafficServerBasic {
         Ok(response_events)
     }
 
-    pub fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> usize {
         self.id
+    }
+
+    pub fn get_coreside_linkid(&self) -> usize {
+        panic!("TrafficServerBasic does not have a coreside link")
+    }
+
+    pub fn get_edgeside_linkid(&self) -> usize {
+        self.edgeside_link
     }
 }
 
@@ -206,15 +259,15 @@ pub enum NodeType {
 }
 
 impl NodeType {
-    pub fn handle_event(&mut self, event: &SimulEvent) -> Result<Vec<SimulEvent>, NodeError> {
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         match self {
-            NodeType::ClientBasic(node) => node.handle_event(event),
-            NodeType::RelayBasic(node) => node.handle_event(event),
-            NodeType::TrafficServerBasic(node) => node.handle_event(event),
+            NodeType::ClientBasic(node) => node.handle_event(event, network, sq),
+            NodeType::RelayBasic(node) => node.handle_event(event, network, sq),
+            NodeType::TrafficServerBasic(node) => node.handle_event(event, network, sq),
         }
     }
 
-    pub fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> usize {
         match self {
             NodeType::ClientBasic(node) => node.node_id(),
             NodeType::RelayBasic(node) => node.node_id(),
@@ -222,11 +275,19 @@ impl NodeType {
         }
     }
 
-    pub fn packet_count(&self) -> usize {
+    pub fn get_coreside_linkid(&self) -> usize {
         match self {
-            NodeType::ClientBasic(node) => node.packet_count,
-            NodeType::RelayBasic(node) => node.packet_count,
-            NodeType::TrafficServerBasic(node) => node.packet_count,
+            NodeType::ClientBasic(node) => node.get_coreside_linkid(),
+            NodeType::RelayBasic(node) => node.get_coreside_linkid(),
+            NodeType::TrafficServerBasic(node) => node.get_coreside_linkid(),
+        }
+    }
+
+    pub fn get_edgeside_linkid(&self) -> usize {
+        match self {
+            NodeType::ClientBasic(node) => node.get_edgeside_linkid(),
+            NodeType::RelayBasic(node) => node.get_edgeside_linkid(),
+            NodeType::TrafficServerBasic(node) => node.get_edgeside_linkid(),
         }
     }
 
@@ -240,11 +301,21 @@ impl NodeType {
 }
 
 // Factory function for creating nodes from TOML configuration
-pub fn create_node(node_type: &str, id: u32) -> Result<NodeType, NodeError> {
+pub fn create_node(node_type: &str, id: usize, coreside_link: Option<usize>, edgeside_link: Option<usize>) -> Result<NodeType, NodeError> {
     match node_type {
-        "ClientBasic" => Ok(NodeType::ClientBasic(ClientBasic::new(id))),
-        "RelayBasic" => Ok(NodeType::RelayBasic(RelayBasic::new(id))),
-        "TrafficServerBasic" => Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id))),
+        "ClientBasic" => {
+            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("ClientBasic requires coreside_link".to_string()))?;
+            Ok(NodeType::ClientBasic(ClientBasic::new(id, coreside)))
+        },
+        "RelayBasic" => {
+            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires coreside_link".to_string()))?;
+            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires edgeside_link".to_string()))?;
+            Ok(NodeType::RelayBasic(RelayBasic::new(id, coreside, edgeside)))
+        },
+        "TrafficServerBasic" => {
+            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("TrafficServerBasic requires edgeside_link".to_string()))?;
+            Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id, edgeside)))
+        },
         _ => Err(NodeError::ProcessingError(format!(
             "Unknown node type: {}", node_type
         ))),
