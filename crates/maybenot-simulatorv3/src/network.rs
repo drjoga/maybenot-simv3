@@ -64,7 +64,7 @@ impl std::error::Error for NetworkError {}
 pub struct Network {
     pub nodes: Vec<NodeType>,
     pub links: Vec<LinkType>,
-    pub routes: Vec<RouteConfig>,
+    pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
     pub client: usize,
     pub traffic_server: usize,
     pub has_mb: bool,
@@ -174,22 +174,41 @@ impl Network {
             network.add_link(link, link_config.id);
         }
 
-        // Store routing configuration
-        network.routes = config.routes;
+        // Build routing matrix
+        let num_nodes = config.nodes.len();
+        let num_links = config.links.len();
+        
+        // Initialize routing matrix with None values
+        network.routes = vec![vec![None; num_links]; num_nodes];
+        
+        // Fill routing matrix from config
+        for route_config in &config.routes {
+            let node_id = route_config.node_id;
+            if node_id >= num_nodes {
+                return Err(NetworkError(format!("Invalid node_id {} in routes", node_id)));
+            }
+            
+            for rule in &route_config.forwarding_rules {
+                let in_link = rule.in_link;
+                let out_link = rule.out_link;
+                
+                if in_link >= num_links {
+                    return Err(NetworkError(format!("Invalid in_link {} for node {}", in_link, node_id)));
+                }
+                if out_link >= num_links {
+                    return Err(NetworkError(format!("Invalid out_link {} for node {}", out_link, node_id)));
+                }
+                
+                network.routes[node_id][in_link] = Some(out_link);
+            }
+        }
 
         Ok(network)
     }
 
-    /// Get routing rules for a specific node
-    pub fn get_routing_rules(&self, node_id: usize) -> Option<&Vec<ForwardingRule>> {
-        self.routes.iter()
-            .find(|route| route.node_id == node_id)
-            .map(|route| &route.forwarding_rules)
-    }
-
-    /// Get all routing configurations
-    pub fn get_routes(&self) -> &[RouteConfig] {
-        &self.routes
+    /// Get outgoing link for a node given an incoming link
+    pub fn get_outlink(&self, node_id: usize, in_link: usize) -> Option<usize> {
+        *self.routes.get(node_id)?.get(in_link)?
     }
 
     pub fn add_node(&mut self, node: NodeType, id: usize) -> usize {
