@@ -1,14 +1,10 @@
-use core::panic;
 use std::{
     cmp::max,
     collections::VecDeque,
-    fmt,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use log::debug;
-use maybenot::{Machine, TriggerEvent};
 
 use crate::{
     linktrace::{mk_start_instant, LinkTrace},
@@ -85,7 +81,6 @@ impl LinkType {
 
 
 
-use crate::nodes::NodeType;
 
 #[derive(Debug, Clone)]
 pub struct BottleneckTputLink {
@@ -109,7 +104,7 @@ impl BottleneckTputLink {
 }
 
 impl BottleneckTputLink {
-    pub fn sample(&self, current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -137,7 +132,7 @@ impl FixedTputLink {
 }
 
 impl FixedTputLink {
-    pub fn sample(&self, current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -165,7 +160,7 @@ impl HiTraceTputLink {
 }
 
 impl HiTraceTputLink {
-    pub fn sample(&self, current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -193,7 +188,7 @@ impl StdTraceTputLink {
 }
 
 impl StdTraceTputLink {
-    pub fn sample(&self, current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }

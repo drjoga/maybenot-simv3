@@ -1,5 +1,5 @@
 use maybenot::TriggerEvent;
-use crate::{SimulEvent, EventKind, SimulQueue};
+use crate::{SimulEvent, SimulQueue};
 use crate::network::Network;
 use crate::links::LinkType;
 use std::time::Duration;
@@ -31,7 +31,7 @@ pub struct ClientBasic {
 }
 
 
-pub fn check_dependent_packets (event: &SimulEvent, network: &Network, sq: &mut SimulQueue, outgoing_link: &LinkType) {
+pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
 
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
     let dependent_events = sq.dependent_tx.get(&event.packet_idx);
@@ -120,7 +120,7 @@ impl ClientBasic {
 
     pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
-        let mut response_events = Vec::new();
+        let response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalSent => {
@@ -129,7 +129,7 @@ impl ClientBasic {
             TriggerEvent::NormalRecv => {
                 let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
 
-                check_dependent_packets(event, network, sq, outgoing_link);
+                check_dependent_packets(event, sq, outgoing_link);
             }
             _ => {
                 return Err(NodeError::InvalidEvent(format!(
@@ -234,13 +234,13 @@ impl TrafficServerBasic {
 
     pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
-        let mut response_events = Vec::new();
+        let response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalRecv => {
                 let outgoing_link = &network.links[network.nodes[event.node_idx].get_edgeside_linkid()];
 
-                check_dependent_packets(event, network, sq, outgoing_link);
+                check_dependent_packets(event, sq, outgoing_link);
             }
             TriggerEvent::NormalSent => {
                 make_network_receive_from_sent(event, network, sq);

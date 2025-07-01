@@ -1,6 +1,6 @@
-use crate::links::{LinkType, SimpleLink, create_link};
+use crate::links::{LinkType, create_link};
 use crate::nodes::{NodeType, create_node};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;

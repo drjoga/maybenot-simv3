@@ -64,9 +64,6 @@ impl SimQueue {
     pub fn push(
         &mut self,
         event: TriggerEvent,
-        is_client: bool,
-        is_webserver: bool,
-        is_tofrom_webserver: bool,
         packet_idx: usize,
         contains_padding: bool,
         time: Instant,

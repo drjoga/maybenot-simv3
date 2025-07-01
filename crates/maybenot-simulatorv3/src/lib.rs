@@ -13,28 +13,24 @@ pub mod integration;
 use std::{
     collections::{HashMap,BinaryHeap},
     cmp::Ordering,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
-use events::{Event, EventQueue};
-use queue::SimQueue;
 use maybenot::TriggerEvent;
-use integration::Integration;
 
-use linktrace::{mk_start_instant, LinkTrace};
+use linktrace::mk_start_instant;
 use log::debug;
-use links::{ExtendedNetwork, ExtendedNetworkLabels, WindowCount};
 use network::Network;
 
-use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction};
+use maybenot::{Framework, Machine, TriggerAction};
 use rand::{rngs::ThreadRng, RngCore};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
+
 use crate::{
     queue_peek::{
-        peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer,
+        peek_scheduled_action, peek_scheduled_internal_timer,
     },
 };
 
@@ -469,7 +465,7 @@ pub fn simul_advanced(
 
     let mut network = args.network.clone();
     let mut sim_iterations = 0;
-    let start_time = current_time;
+    let _start_time = current_time;
     while let Some(next) = pick_next(sq, &mut client, &mut server, &mut network, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
@@ -490,7 +486,7 @@ pub fn simul_advanced(
 
         debug!("sim(): next event: {:#?}", next);
 
-        let response_events = network.nodes[next.node_idx]
+        let _response_events = network.nodes[next.node_idx]
             .handle_event(&next, &network, sq)
             .unwrap_or_else(|e| {
                 panic!(
@@ -586,7 +582,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimulQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
-    network: &mut Network,
+    _network: &mut Network,
     current_time: Instant,
 ) -> Option<SimulEvent> {
     // find the earliest scheduled action, internal timer, block expiry,
@@ -677,7 +673,7 @@ fn pick_next<M: AsRef<[Machine]>>(
 /// number of bytes sent or received. The delay is used to model the network
 /// delay between the client and server. Returns a SimQueue with the events in
 /// the trace for use with [`sim`].
-pub fn parse_trace(trace: &str, network: Network, trafserv_to_client_delay: Duration) -> SimulQueue {
+pub fn parse_trace(trace: &str, _network: Network, trafserv_to_client_delay: Duration) -> SimulQueue {
     
 
     // we just need a random starting time to make sure that we don't start from
