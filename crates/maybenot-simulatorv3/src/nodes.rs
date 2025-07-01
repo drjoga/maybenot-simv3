@@ -1,6 +1,7 @@
 use maybenot::TriggerEvent;
 use crate::{SimulEvent, EventKind, SimulQueue};
 use crate::network::Network;
+use crate::links::LinkType;
 use std::time::Duration;
 use log::debug;
 
@@ -29,6 +30,84 @@ pub struct ClientBasic {
     pub coreside_link: usize,
 }
 
+
+pub fn check_dependent_packets (event: &SimulEvent, network: &Network, sq: &mut SimulQueue, outgoing_link: &LinkType) {
+
+    debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
+    let dependent_events = sq.dependent_tx.get(&event.packet_idx);
+    if dependent_events.is_some() {
+
+        // We have dependent packets, so we need to queue them up. Apply cloning for now, unoptimized
+        for (new_pktidx, delta, event_kind) in dependent_events.unwrap().clone() {
+            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);
+            let link_id = outgoing_link.link_id();
+            sq.push(SimulEvent {
+                event: TriggerEvent::NormalSent,
+                time: event.time + Duration::from_micros(delta as u64),
+                //integration_delay: next.integration_delay,
+                packet_idx: new_pktidx,
+                node_idx: outgoing_link.to_node(),
+                link_idx: link_id,
+                contains_padding: false,
+                bypass: false,
+                replace: false,
+                debug_note: None,
+            });
+        }
+    }
+
+}
+
+
+pub fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
+    let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
+    
+    debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
+            event.node_idx, outgoing_link.link_id());
+    let link_id = outgoing_link.link_id();
+    let recv_event = SimulEvent {
+        event: TriggerEvent::NormalRecv,
+        time: event.time +  network.links[link_id].sample(&event.time) + network.links[link_id].prop_ms(),
+        packet_idx: event.packet_idx,
+        node_idx: outgoing_link.to_node(),
+        link_idx: link_id,
+        contains_padding: false,
+        bypass: false,
+        replace: false,
+        debug_note: None, 
+    };
+    sq.push(recv_event);
+}
+
+
+
+pub fn forward_network_receive_from_receive (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
+    
+    let outgoing_link_idx = &network.routes[event.node_idx][event.link_idx].unwrap_or_else(|| {
+        panic!("No outgoing link found for node {} with link index {}", event.node_idx, event.link_idx);
+    });
+    
+    let outgoing_link = &network.links[*outgoing_link_idx];
+
+    debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
+            event.node_idx, outgoing_link.link_id());
+    
+    let recv_event = SimulEvent {
+        event: TriggerEvent::NormalRecv,
+        time: event.time,  // FIXME: current_time + time from link.sample() + propagation delay
+        packet_idx: event.packet_idx,
+        node_idx: outgoing_link.to_node(),
+        link_idx: outgoing_link.link_id(),
+        contains_padding: false,
+        bypass: false,
+        replace: false,
+        debug_note: None, 
+    };
+    sq.push(recv_event);
+}
+
+
+
 impl ClientBasic {
     pub fn new(id: usize, coreside_link: usize) -> Self {
         Self {
@@ -37,56 +116,20 @@ impl ClientBasic {
         }
     }
 
+
+
     pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
         
         let mut response_events = Vec::new();
         
         match &event.event {
             TriggerEvent::NormalSent => {
-                
-                let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
-                
-                debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
-                       self.id, outgoing_link.link_id());
-                
-                let recv_event = SimulEvent {
-                    event: TriggerEvent::NormalRecv,
-                    time: event.time,  // FIXME: current_time + time from link.sample() + propagation delay
-                    packet_idx: event.packet_idx,
-                    node_idx: outgoing_link.to_node(),
-                    link_idx: outgoing_link.link_id(),
-                    contains_padding: false,
-                    bypass: false,
-                    replace: false,
-                    debug_note: None, 
-                };
-                response_events.push(recv_event);
+                make_network_receive_from_sent(event, network, sq);
             }
             TriggerEvent::NormalRecv => {
+                let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
 
-                debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
-                let dependent_events = sq.dependent_tx.get(&event.packet_idx);
-                if dependent_events.is_some() {
-                    let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
-
-                    // We have dependent packets, so we need to queue them up. Apply cloning for now, unoptimized
-                    for (new_pktidx, delta, event_kind) in dependent_events.unwrap().clone() {
-                        debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);
-                        // We are at client, and we send toward webserver
-                        sq.push(SimulEvent {
-                            event: TriggerEvent::NormalSent,
-                            time: event.time,  // FIXME: current_time + time from link.sample() + propagation delay
-                            //integration_delay: next.integration_delay,
-                            packet_idx: new_pktidx,
-                            node_idx: outgoing_link.to_node(),
-                            link_idx: outgoing_link.link_id(),
-                            contains_padding: false,
-                            bypass: false,
-                            replace: false,
-                            debug_note: None,
-                        });
-                    }
-                }
+                check_dependent_packets(event, network, sq, outgoing_link);
             }
             _ => {
                 return Err(NodeError::InvalidEvent(format!(
@@ -131,8 +174,7 @@ impl RelayBasic {
         let mut response_events = Vec::new();
         
         match &event.event {
-            TriggerEvent::NormalRecv => {
-                // Relay received from client tunnel - forward to server
+            TriggerEvent::TunnelRecv => {
                 
                 let forward_event = SimulEvent {
                     event: TriggerEvent::NormalSent,
@@ -148,20 +190,7 @@ impl RelayBasic {
                 response_events.push(forward_event);
             }
             TriggerEvent::NormalRecv => {
-                // Relay received from server - forward to client tunnel
-                
-                let forward_event = SimulEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: event.time + std::time::Duration::from_micros(100),
-                    packet_idx: event.packet_idx,
-                    node_idx: self.id,
-                    link_idx: 0,
-                    contains_padding: event.contains_padding,
-                    bypass: false,
-                    replace: false,
-                    debug_note: Some("Relay forwarding to client".to_string()),
-                };
-                response_events.push(forward_event);
+                forward_network_receive_from_receive(event, network, sq);
             }
             TriggerEvent::PaddingSent { .. } | TriggerEvent::PaddingRecv => {
                 // Relay handles padding traffic
@@ -209,23 +238,12 @@ impl TrafficServerBasic {
         
         match &event.event {
             TriggerEvent::NormalRecv => {
-                // Traffic server received a request - send a response
-                
-                let response_event = SimulEvent {
-                    event: TriggerEvent::NormalSent,
-                    time: event.time + std::time::Duration::from_millis(1), // Server processing delay
-                    packet_idx: event.packet_idx + 1000, // Different packet ID for response
-                    node_idx: self.id,
-                    link_idx: 0,
-                    contains_padding: false,
-                    bypass: false,
-                    replace: false,
-                    debug_note: Some("Traffic server response".to_string()),
-                };
-                response_events.push(response_event);
+                let outgoing_link = &network.links[network.nodes[event.node_idx].get_edgeside_linkid()];
+
+                check_dependent_packets(event, network, sq, outgoing_link);
             }
             TriggerEvent::NormalSent => {
-                // Traffic server sending (probably a response we generated)
+                make_network_receive_from_sent(event, network, sq);
             }
             _ => {
                 return Err(NodeError::InvalidEvent(format!(
@@ -233,7 +251,6 @@ impl TrafficServerBasic {
                 )));
             }
         }
-        
         Ok(response_events)
     }
 

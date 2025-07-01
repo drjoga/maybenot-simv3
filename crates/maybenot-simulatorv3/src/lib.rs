@@ -323,7 +323,39 @@ where
 
 
 
-//// Main simulator loop
+
+/// The main simulator function.
+///
+/// Zero or more machines can concurrently be run on the client and server. The
+/// machines can be different. The framework is designed to support many
+/// machines.
+///
+/// The queue MUST have been created by [`parse_trace`] with the same delay. The
+/// queue is modified by the simulator and should be re-created for each run of
+/// the simulator or cloned.
+///
+/// If max_trace_length is > 0, the simulator will stop after max_trace_length
+/// events have been *simulated* by the simulator and added to the simulating
+/// output trace. Note that some machines may schedule infinite actions (e.g.,
+/// schedule new padding after sending padding), so the simulator may never
+/// stop. Use [`sim_advanced`] to set the maximum number of iterations to run
+/// the simulator for and other advanced settings.
+///
+/// If only_network_activity is true, the simulator will only append events that
+/// are related to network activity (i.e., packets sent and received) to the
+/// output trace. This is recommended if you want to use the output trace for
+/// traffic analysis without further (recursive) simulation.
+pub fn sim(
+    machines_client: &[Machine],
+    machines_server: &[Machine],
+    sq: &mut SimulQueue,
+    network: Network,
+    max_trace_length: usize,
+    only_network_activity: bool,
+) -> Vec<SimulEvent> {
+    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
+    simul_advanced(machines_client, machines_server, sq, &args)
+}
 
 
 
@@ -468,9 +500,9 @@ pub fn simul_advanced(
             });
         
         // Add any response events to the simulation queue
-        for response_event in response_events {
-            sq.push(response_event);
-        } 
+        //for response_event in response_events {
+        //    sq.push(response_event);
+        //} 
 
         // Call the .handle function on the handler appropriate for the node type of the node having the event.
 
@@ -633,6 +665,71 @@ fn pick_next<M: AsRef<[Machine]>>(
 }
 
 
+
+
+
+
+/// Parse a trace into a [`SimQueue`] for use with [`sim`].
+///
+/// The trace should contain one or more lines of the form
+/// "time,direction,size\n", where time is in nanoseconds relative to the first
+/// line, direction is either "s" for sent or "r" for received, and size is the
+/// number of bytes sent or received. The delay is used to model the network
+/// delay between the client and server. Returns a SimQueue with the events in
+/// the trace for use with [`sim`].
+pub fn parse_trace(trace: &str, network: Network, trafserv_to_client_delay: Duration) -> SimulQueue {
+    
+
+    // we just need a random starting time to make sure that we don't start from
+    // absolute 0
+    //let starting_time = Instant::now();
+
+    // Introduce mitigation as mk_start_instant and network.delay() will fall
+    // on a ms or us boundary, and small initialization timing variations can cause
+    // initial current_time to be placed on either side. If unmitigated, this behavior
+    // can cause some randomness in output results, eg when ethernet burst_interval=2.
+    let boundary_jitter_mitigation = Duration::from_nanos(500500);
+    // Use a common starting time for simqueue and linktrace indexing.
+    // Adjust it to the subtraction of network delay made below to ensure
+    // no negative indexes
+    let starting_time = mk_start_instant() + trafserv_to_client_delay + boundary_jitter_mitigation;
+
+    let mut oneline = String::new();
+
+    for l in trace.lines() {
+        let parts: Vec<&str> = l.split(',').collect();
+        if parts.len() >= 2 {
+            // Time in traffic trace is in nanoseconds... 
+            let timestamp =
+                (parts[0].trim().parse::<u64>().unwrap()) / 1000;
+
+            match parts[1] {
+                "s" | "sn" => {
+                    oneline.push_str(&format!("{},s ", timestamp));
+                }
+                "r" | "rn" => {
+                    oneline.push_str(&format!("{},r ", timestamp));
+                }
+                "sp" | "rp" => {
+                    // TODO: figure out of ignoring is the right thing to do
+                }
+                _ => {
+                    panic!("invalid direction")
+                }
+            }
+        }
+    }
+
+    let traffic_events = traffic_trace_prepare(&oneline, trafserv_to_client_delay.as_micros() as i64, trafserv_to_client_delay.as_micros() as i64);
+    let mut sq = SimulQueue::new();
+    // print out events if there are not a lot. Current printinout function is slow for large traces.
+    if traffic_events.dependent_tx.len() < 200{
+        event_schedule_print(&traffic_events, trafserv_to_client_delay.as_micros() as i64, trafserv_to_client_delay.as_micros() as i64);
+    }
+    fill_simq(&traffic_events, &mut sq, starting_time, false);
+    println!("SimQ length: {:?} oneline length: {:?} tx_dpend length: {:?}", sq.len(), oneline.len(), traffic_events.dependent_tx.len());
+    sq
+}
 
 
 
