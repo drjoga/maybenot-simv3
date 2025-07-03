@@ -39,14 +39,14 @@ pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoin
 
         // We have dependent packets, so we need to queue them up. Apply cloning for now, unoptimized
         for (new_pktidx, delta, event_kind) in dependent_events.unwrap().clone() {
-            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);
+            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);            
             let link_id = outgoing_link.link_id();
             sq.push(SimulEvent {
                 event: TriggerEvent::NormalSent,
                 time: event.time + Duration::from_micros(delta as u64),
                 //integration_delay: next.integration_delay,
                 packet_idx: new_pktidx,
-                node_idx: outgoing_link.to_node(),
+                node_idx: event.node_idx,
                 link_idx: link_id,
                 contains_padding: false,
                 bypass: false,
@@ -60,8 +60,14 @@ pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoin
 
 
 pub fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
-    let outgoing_link = &network.links[network.nodes[event.node_idx].get_coreside_linkid()];
-    
+    let outgoing_link = if event.node_idx == network.client {
+        &network.links[network.nodes[event.node_idx].get_coreside_linkid()]
+    } else if event.node_idx == network.traffic_server {
+        &network.links[network.nodes[event.node_idx].get_edgeside_linkid()]
+    } else {
+        panic!("Node {} is neither client nor traffic server", event.node_idx);
+    };
+
     debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
             event.node_idx, outgoing_link.link_id());
     let link_id = outgoing_link.link_id();

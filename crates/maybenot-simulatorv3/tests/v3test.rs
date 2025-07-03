@@ -17,7 +17,7 @@ fn simulator_example_use() {
     // direction is either "s" (sent) or "r" (received). The time is in
     // nanoseconds since the start of the trace.
     let raw_trace = "0,s
-    19714282,r
+    49714282,r
     183976147,s
     243699564,r
     1696037773,s
@@ -50,12 +50,14 @@ fn simulator_example_use() {
     let trace = sim(&[m], &[], &mut input_trace, network, 100, true);
 
     // print packets from the client's perspective
+    println!("{:#?}",&trace.clone());
+
     let starting_time = trace[0].time;
     trace
         .into_iter()
         .filter(|p| p.node_idx==0)
         .for_each(|p| match p.event {
-            TriggerEvent::TunnelSent => {
+            TriggerEvent::NormalSent => {
                 if p.contains_padding {
                     println!(
                         "sent a padding packet at {} ms",
@@ -68,7 +70,7 @@ fn simulator_example_use() {
                     );
                 }
             }
-            TriggerEvent::TunnelRecv => {
+            TriggerEvent::NormalRecv => {
                 if p.contains_padding {
                     println!(
                         "received a padding packet at {} ms",
@@ -83,6 +85,8 @@ fn simulator_example_use() {
             }
             _ => {}
         });
+    //Force error
+    assert_eq!(10, 1000);
 
     // Output:
     // sent a normal packet at 0 ms

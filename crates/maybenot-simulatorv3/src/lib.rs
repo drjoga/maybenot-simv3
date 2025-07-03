@@ -541,9 +541,17 @@ pub fn simul_advanced(
             }
 
             trace.push(n);
+        } */
+
+
+        // conditional save to resulting trace: only on network activity if set
+        // in fn arg, and only on client activity if set in fn arg
+        if (!args.only_client_events || next.node_idx == network.client)
+        {
+            trace.push(next.clone());
         }
 
-        */
+
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
             debug!(
                 "sim(): we done, reached max trace length {}",
@@ -602,7 +610,10 @@ fn pick_next<M: AsRef<[Machine]>>(
     debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", i);
 
     let q = sq.peek();
-    let qt = q.unwrap().time - current_time;
+    let qt = match q {
+        Some(event) => event.time - current_time,
+        None => Duration::MAX,
+    };
     debug!("\tpick_next(): peek_queue = {:?}", q);
 
     // no next?
