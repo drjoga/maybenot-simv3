@@ -119,7 +119,7 @@ impl PartialOrd for SimulEvent {
     }
 }
 
-
+#[derive(Clone, Debug)]
 pub struct SimulQueue {
     heap: BinaryHeap<SimulEvent>,
     pub(crate) dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
@@ -160,12 +160,6 @@ impl SimulQueue {
     }
 
 }
-
-
-
-
-
-
 
 
 
@@ -345,12 +339,12 @@ pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimulQueue,
-    network: Network,
+    network: &mut Network,
     max_trace_length: usize,
     only_network_activity: bool,
 ) -> Vec<SimulEvent> {
-    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
-    simul_advanced(machines_client, machines_server, sq, &args)
+    let args = SimulatorArgs::new(max_trace_length, only_network_activity);
+    simul_advanced(machines_client, machines_server, network, sq, &args)
 }
 
 
@@ -360,9 +354,6 @@ pub fn sim(
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
 pub struct SimulatorArgs {
-    /// The network model for simulating the network between the client and the
-    /// server.
-    pub network: Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
     /// The maximum number of iterations to run the simulator for. If 0, the
@@ -395,15 +386,12 @@ pub struct SimulatorArgs {
     //pub client_integration: Option<Integration>,
     ///// Optional server integration delays.
     //pub server_integration: Option<Integration>,
-    ///// Optional simulated network type specification.
-    //pub simulated_network_type: Option<ExtendedNetworkLabels>,
 }
 
 
 impl SimulatorArgs {
-    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
+    pub fn new(max_trace_length: usize, only_network_activity: bool) -> Self {
         Self {
-            network,
             max_trace_length,
             max_sim_iterations: 0,
             continue_after_all_normal_packets_processed: false,
@@ -416,7 +404,6 @@ impl SimulatorArgs {
             insecure_rng_seed: None,
             //client_integration: None,
             //server_integration: None,
-            //simulated_network_type: None,
         }
     }
 }
@@ -427,6 +414,7 @@ impl SimulatorArgs {
 pub fn simul_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
+    network: &mut Network,
     sq: &mut SimulQueue,
     args: &SimulatorArgs,
 ) -> Vec<SimulEvent> {
@@ -463,10 +451,9 @@ pub fn simul_advanced(
     //debug!("sim(): client machines {}", machines_client.len());
     //debug!("sim(): server machines {}", machines_server.len());
 
-    let mut network = args.network.clone();
     let mut sim_iterations = 0;
     let _start_time = current_time;
-    while let Some(next) = pick_next(sq, &mut client, &mut server, &mut network, current_time) {
+    while let Some(next) = pick_next(sq, &mut client, &mut server, network, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -486,14 +473,8 @@ pub fn simul_advanced(
 
         debug!("sim(): next event: {:#?}", next);
 
-        let _response_events = network.nodes[next.node_idx]
-            .handle_event(&next, &network, sq)
-            .unwrap_or_else(|e| {
-                panic!(
-                    "BUG: node {} failed to handle event {:?}: {}",
-                    next.node_idx, next.event, e
-                )
-            });
+        network.nodes[next.node_idx]
+            .handle_event(&next, &network, sq);
         
         // Add any response events to the simulation queue
         //for response_event in response_events {
@@ -546,7 +527,7 @@ pub fn simul_advanced(
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if (!args.only_client_events || next.node_idx == network.client)
+        if !args.only_client_events || next.node_idx == network.client
         {
             trace.push(next.clone());
         }
@@ -744,7 +725,7 @@ pub fn parse_trace(trace: &str, _network: Network, ttrace_ts_to_c_delay: Duratio
 
 //// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PacketEvent {
     pub packet_idx: usize,
     pub time: i64,

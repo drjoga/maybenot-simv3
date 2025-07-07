@@ -29,7 +29,7 @@ fn simulator_example_use() {
 
     // The network model for simulating the network between the client and the
     // server. Currently just a delay.
-    let network = Network::from_toml_file("basic_test.toml").unwrap();
+    let mut network = Network::from_toml_file("basic_test.toml").unwrap();
 
     //let network = Network::new(Duration::from_millis(10), None);
 
@@ -47,7 +47,7 @@ fn simulator_example_use() {
 
     // Run the simulator with the machine at the client. Run the simulation up
     // until 100 packets have been recorded (total, client and server).
-    let trace = sim(&[m], &[], &mut input_trace, network, 100, true);
+    let trace = sim(&[m], &[], &mut input_trace, &mut network, 100, true);
 
     // print packets from the client's perspective
     println!("{:#?}",&trace.clone());
@@ -86,7 +86,7 @@ fn simulator_example_use() {
             _ => {}
         });
     //Force error
-    assert_eq!(10, 1000);
+    //assert_eq!(10, 1000);
 
     // Output:
     // sent a normal packet at 0 ms

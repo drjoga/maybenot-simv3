@@ -59,7 +59,7 @@ impl std::fmt::Display for NetworkError {
 
 impl std::error::Error for NetworkError {}
 
-// Check if, Clone can be removed from Network
+
 #[derive(Debug, Clone)]
 pub struct Network {
     pub nodes: Vec<NodeType>,
@@ -202,6 +202,8 @@ impl Network {
                 network.routes[node_id][in_link] = Some(out_link);
             }
         }
+        // Make immutable
+        //let network = network;
 
         Ok(network)
     }
@@ -227,16 +229,8 @@ impl Network {
         self.nodes.get(node_index)
     }
 
-    pub fn get_node_mut(&mut self, node_index: usize) -> Option<&mut NodeType> {
-        self.nodes.get_mut(node_index)
-    }
-
     pub fn get_link(&self, link_index: usize) -> Option<&LinkType> {
         self.links.get(link_index)
-    }
-
-    pub fn get_link_mut(&mut self, link_index: usize) -> Option<&mut LinkType> {
-        self.links.get_mut(link_index)
     }
 
     pub fn find_link(&self, from_node_id: usize, to_node_id: usize) -> Option<(usize, &LinkType)> {

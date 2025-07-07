@@ -23,14 +23,6 @@ impl std::fmt::Display for NodeError {
 impl std::error::Error for NodeError {}
 
 
-
-#[derive(Debug, Clone)]
-pub struct ClientBasic {
-    pub id: usize,
-    pub coreside_link: usize,
-}
-
-
 pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
 
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
@@ -114,6 +106,13 @@ pub fn forward_network_receive_from_receive (event: &SimulEvent, network: &Netwo
 
 
 
+#[derive(Debug, Copy, Clone)]
+pub struct ClientBasic {
+    pub id: usize,
+    pub coreside_link: usize,
+}
+
+
 impl ClientBasic {
     pub fn new(id: usize, coreside_link: usize) -> Self {
         Self {
@@ -124,10 +123,7 @@ impl ClientBasic {
 
 
 
-    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
-        
-        let response_events = Vec::new();
-        
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
         match &event.event {
             TriggerEvent::NormalSent => {
                 make_network_receive_from_sent(event, network, sq);
@@ -138,12 +134,9 @@ impl ClientBasic {
                 check_dependent_packets(event, sq, outgoing_link);
             }
             _ => {
-                return Err(NodeError::InvalidEvent(format!(
-                    "ClientBasic cannot handle event: {:?}", event.event
-                )));
+                panic!("ClientBasic cannot handle event: {:?}", event.event);
             }
         }
-        Ok(response_events)
     }
 
     pub fn node_id(&self) -> usize {
@@ -159,7 +152,7 @@ impl ClientBasic {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct RelayBasic {
     pub id: usize,
     pub coreside_link: usize,
@@ -175,13 +168,9 @@ impl RelayBasic {
         }
     }
 
-    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
-        
-        let mut response_events = Vec::new();
-        
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
         match &event.event {
             TriggerEvent::TunnelRecv => {
-                
                 let forward_event = SimulEvent {
                     event: TriggerEvent::NormalSent,
                     time: event.time + std::time::Duration::from_micros(100), // Small processing delay
@@ -193,7 +182,7 @@ impl RelayBasic {
                     replace: false,
                     debug_note: None,
                 };
-                response_events.push(forward_event);
+                sq.push(forward_event);
             }
             TriggerEvent::NormalRecv => {
                 forward_network_receive_from_receive(event, network, sq);
@@ -202,13 +191,9 @@ impl RelayBasic {
                 // Relay handles padding traffic
             }
             _ => {
-                return Err(NodeError::InvalidEvent(format!(
-                    "RelayBasic cannot handle event: {:?}", event.event
-                )));
+                panic!("RelayBasic cannot handle event: {:?}", event.event);
             }
         }
-        
-        Ok(response_events)
     }
 
     pub fn node_id(&self) -> usize {
@@ -224,7 +209,7 @@ impl RelayBasic {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct TrafficServerBasic {
     pub id: usize,
     pub edgeside_link: usize,
@@ -238,10 +223,7 @@ impl TrafficServerBasic {
         }
     }
 
-    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
-        
-        let response_events = Vec::new();
-        
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
         match &event.event {
             TriggerEvent::NormalRecv => {
                 let outgoing_link = &network.links[network.nodes[event.node_idx].get_edgeside_linkid()];
@@ -252,12 +234,9 @@ impl TrafficServerBasic {
                 make_network_receive_from_sent(event, network, sq);
             }
             _ => {
-                return Err(NodeError::InvalidEvent(format!(
-                    "TrafficServerBasic cannot handle event: {:?}", event.event
-                )));
+                panic!("TrafficServerBasic cannot handle event: {:?}", event.event);
             }
         }
-        Ok(response_events)
     }
 
     pub fn node_id(&self) -> usize {
@@ -282,7 +261,7 @@ pub enum NodeType {
 }
 
 impl NodeType {
-    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) -> Result<Vec<SimulEvent>, NodeError> {
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
         match self {
             NodeType::ClientBasic(node) => node.handle_event(event, network, sq),
             NodeType::RelayBasic(node) => node.handle_event(event, network, sq),
@@ -348,123 +327,40 @@ pub fn create_node(node_type: &str, id: usize, coreside_link: Option<usize>, edg
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
 
     #[test]
     fn test_client_basic_creation() {
-        let client = ClientBasic::new(1);
+        let client = ClientBasic::new(1, 0);
         assert_eq!(client.node_id(), 1);
-        assert_eq!(client.packet_count, 0);
     }
 
     #[test]
     fn test_relay_basic_creation() {
-        let relay = RelayBasic::new(2);
+        let relay = RelayBasic::new(2, 0, 1);
         assert_eq!(relay.node_id(), 2);
-        assert_eq!(relay.forwarded_count, 0);
     }
 
     #[test]
     fn test_traffic_server_basic_creation() {
-        let server = TrafficServerBasic::new(3);
+        let server = TrafficServerBasic::new(3, 0);
         assert_eq!(server.node_id(), 3);
-        assert_eq!(server.responses_sent, 0);
     }
 
     #[test]
     fn test_node_factory() {
-        let client = create_node("ClientBasic", 1).unwrap();
+        let client = create_node("ClientBasic", 1, Some(0), None).unwrap();
         assert_eq!(client.node_id(), 1);
         assert_eq!(client.type_name(), "ClientBasic");
 
-        let relay = create_node("RelayBasic", 2).unwrap();
+        let relay = create_node("RelayBasic", 2, Some(0), Some(1)).unwrap();
         assert_eq!(relay.node_id(), 2);
         assert_eq!(relay.type_name(), "RelayBasic");
 
-        let server = create_node("TrafficServerBasic", 3).unwrap();
+        let server = create_node("TrafficServerBasic", 3, None, Some(0)).unwrap();
         assert_eq!(server.node_id(), 3);
         assert_eq!(server.type_name(), "TrafficServerBasic");
 
-        let invalid = create_node("InvalidType", 4);
+        let invalid = create_node("InvalidType", 4, None, None);
         assert!(invalid.is_err());
-    }
-
-    #[test]
-    fn test_enum_handle_event() {
-        let mut client = NodeType::ClientBasic(ClientBasic::new(1));
-        let event = SimulEvent {
-            event: TriggerEvent::NormalSent,
-            time: Instant::now(),
-            packet_idx: 0,
-            node_idx: 1,
-            link_idx: 0,
-            contains_padding: false,
-            bypass: false,
-            replace: false,
-            debug_note: None,
-        };
-
-        let result = client.handle_event(&event);
-        assert!(result.is_ok());
-        assert_eq!(client.packet_count(), 1);
-    }
-
-    #[test]
-    fn test_traffic_server_response() {
-        let mut server = NodeType::TrafficServerBasic(TrafficServerBasic::new(3));
-        let event = SimulEvent {
-            event: TriggerEvent::NormalRecv,
-            time: Instant::now(),
-            packet_idx: 100,
-            node_idx: 3,
-            link_idx: 0,
-            contains_padding: false,
-            bypass: false,
-            replace: false,
-            debug_note: None,
-        };
-
-        let result = server.handle_event(&event).unwrap();
-        assert_eq!(result.len(), 1);
-        
-        if let NodeType::TrafficServerBasic(ref server_node) = server {
-            assert_eq!(server_node.responses_sent, 1);
-        }
-        
-        let response = &result[0];
-        assert_eq!(response.packet_idx, 1100); // 100 + 1000
-        assert!(matches!(response.event, TriggerEvent::NormalSent));
-    }
-
-    #[test]
-    fn test_enum_dispatch_performance() {
-        // Test that enum dispatch works efficiently
-        let mut nodes = vec![
-            NodeType::ClientBasic(ClientBasic::new(1)),
-            NodeType::RelayBasic(RelayBasic::new(2)),
-            NodeType::TrafficServerBasic(TrafficServerBasic::new(3)),
-        ];
-
-        let event = SimulEvent {
-            event: TriggerEvent::NormalSent,
-            time: Instant::now(),
-            packet_idx: 0,
-            node_idx: 1,
-            link_idx: 0,
-            contains_padding: false,
-            bypass: false,
-            replace: false,
-            debug_note: None,
-        };
-
-        // Process event on all nodes - this should be very fast
-        for node in &mut nodes {
-            let _ = node.handle_event(&event);
-        }
-
-        // Verify all nodes processed the event
-        for node in &nodes {
-            assert!(node.packet_count() > 0);
-        }
     }
 }
