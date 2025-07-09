@@ -101,9 +101,6 @@ impl BottleneckTputLink {
             network_bottleneck: NetworkBottleneck::new(window, queue_pps),
         }
     }
-}
-
-impl BottleneckTputLink {
     pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
@@ -129,9 +126,6 @@ impl FixedTputLink {
             network_linktrace: NetworkLinktrace::new_fixed(client_tput, server_tput),
         }
     }
-}
-
-impl FixedTputLink {
     pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
@@ -157,9 +151,6 @@ impl HiTraceTputLink {
             network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
         }
     }
-}
-
-impl HiTraceTputLink {
     pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
@@ -185,9 +176,6 @@ impl StdTraceTputLink {
             network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
         }
     }
-}
-
-impl StdTraceTputLink {
     pub fn sample(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)

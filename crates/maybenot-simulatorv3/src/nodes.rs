@@ -23,20 +23,19 @@ impl std::fmt::Display for NodeError {
 impl std::error::Error for NodeError {}
 
 
-pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
-
+pub fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
-    let dependent_events = sq.dependent_tx.get(&event.packet_idx);
-    if dependent_events.is_some() {
-
-        // We have dependent packets, so we need to queue them up. Apply cloning for now, unoptimized
-        for (new_pktidx, delta, event_kind) in dependent_events.unwrap().clone() {
-            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?} ", new_pktidx, delta, event_kind);            
-            let link_id = outgoing_link.link_id();
+    
+    if let Some(dependencies) = sq.dependent_tx.remove(&event.packet_idx) {
+        let link_id = outgoing_link.link_id();
+        
+        for (new_pktidx, delta, event_kind) in dependencies {
+            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?}", 
+                   new_pktidx, delta, event_kind);
+            
             sq.push(SimulEvent {
                 event: TriggerEvent::NormalSent,
                 time: event.time + Duration::from_micros(delta as u64),
-                //integration_delay: next.integration_delay,
                 packet_idx: new_pktidx,
                 node_idx: event.node_idx,
                 link_idx: link_id,
@@ -47,7 +46,6 @@ pub fn check_dependent_packets (event: &SimulEvent, sq: &mut SimulQueue, outgoin
             });
         }
     }
-
 }
 
 

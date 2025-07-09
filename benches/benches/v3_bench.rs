@@ -26,8 +26,7 @@ fn v3_simulator_run(c: &mut Criterion) {
 
     println!("Config path: {}", config_path);
     let trafserv_to_client_delay= Duration::from_millis(20);
-    let mut input_trace = parse_trace(EARLY_TRACE, network.clone(), trafserv_to_client_delay);
-    let mut current_time = input_trace.get_first_event_time().unwrap();
+    let input_trace = parse_trace(EARLY_TRACE, network.clone(), trafserv_to_client_delay);
     println!("Input trace length: {}", input_trace.len());
     let mut t2_network = network.clone();
     c.bench_function("v3 network simulation run", |b| {
@@ -35,7 +34,8 @@ fn v3_simulator_run(c: &mut Criterion) {
             //black_box(t2_network = network2.clone()); 
             let mut network2 = Network::from_toml_file(config_path).unwrap();
             let mut input_trace2 = input_trace.clone();
-            black_box(sim(&[], &[], &mut input_trace2, &mut network2, 10000, true));
+            let nr_sim_events = 30093;   // Gives 10000 client events, to be comparable
+            black_box(sim(&[], &[], &mut input_trace2, &mut network2, nr_sim_events, true));
         });
     });
 }

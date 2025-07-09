@@ -715,7 +715,8 @@ pub fn parse_trace(trace: &str, _network: Network, ttrace_ts_to_c_delay: Duratio
         event_schedule_print(&traffic_events, ttrace_ts_to_c_delay.as_micros() as i64);
     }
     fill_simq(&traffic_events, &mut sq, starting_time, false);
-    println!("SimQ length: {:?} oneline length: {:?} tx_dpend length: {:?}", sq.len(), oneline.len(), traffic_events.dependent_tx.len());
+    let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
+    println!("SimQ length: {:?}   oneline length: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), oneline.len(), traffic_events.dependent_tx.len(), total_dependent_events);
     sq
 }
 
@@ -786,26 +787,31 @@ pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_us: i64) -> Traffi
     // Check for client receive events that would be too early to be valid given the specified ttrace delay.
     // This can happen if the trace starts with a receive event at time 0, and the ttrace delay is larger
     // than what would be resonable according to the specific trace. This should be handled by setting the
-    // ttrace delay to a vlaue that reflects the actual trafserver to client delay when the traffictrace was collected. 
+    // ttrace delay to a value that reflects the actual trafserver to client delay when the traffictrace was collected. 
     // For now, to alllow backwards compatibility, shift the events so that all offsets from the starting point
     // will be positive, to ensure that the linktrace timeslot indexes are always positive. 
-    let adjust_time_us = 0;
-    for event in &mut events {
+    let mut adjust_time_us = 0;
+    for event in &events {
         //let mut adjusted_event = event.clone();
         if event.kind == EventKind::CliReceive  {
             if event.time < ttrace_ts_to_c_delay_us {
-                event.time -= adjust_time_us;
+                adjust_time_us = 2 * ttrace_ts_to_c_delay_us;
+            } else {
+                break; // No need to adjust events
             }
-        } else {
-            break; // No need to adjust events
         }
     }
     if adjust_time_us != 0 {
         for event in &mut events {
-            event.time -= adjust_time_us;
+            event.time += adjust_time_us ; 
         }
     }
 
+    // For debugging, print first few lines of each
+    println!("\nFirst 5 adjusted lines:");
+    for (i, event) in events.iter().take(5).enumerate() {
+        println!("  {}: {}", i + 1, event.time);
+    }
 
 
     // Process client send events: for each send event, if there is a preceding receive, record a dependency;
@@ -846,13 +852,14 @@ pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_us: i64) -> Traffi
                     let mut adjusted_event = event.clone();
                     adjusted_event.time -= ttrace_ts_to_c_delay_us;
                     webserver_simq_push.push(adjusted_event);
-                } /*else {
-                // Fix since some traces start with 0,r which is messy
-                adjusted_event.time -= s_c_delay_us;
-                server_simq_push.push(adjusted_event);
+                } 
+            } else {
+                // Fix since some traces start with 0,r or time < which is messy, 
+                let mut adjusted_event = event.clone();
+                adjusted_event.time -= ttrace_ts_to_c_delay_us;
+                webserver_simq_push.push(adjusted_event);
                 //panic!("Receive event {} is too early to be a server simQ push", event.packet_idx);
-            }   */
-            }
+            }   
         }
     }
     debug!("{:#?}\n{:#?}\n{:#?}\n", client_simq_push, webserver_simq_push, dependent_tx);

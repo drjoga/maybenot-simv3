@@ -1,14 +1,88 @@
-use enum_map::enum_map;
-use maybenot::{
-    action::Action,
-    dist::{Dist, DistType},
-    event::Event,
-    state::{State, Trans},
-    Machine, TriggerEvent,
-};
+use maybenot::{Machine, TriggerEvent};
 use maybenot_simulatorv3::{network::Network, parse_trace, sim};
 use std::{str::FromStr, time::Duration};
 
+
+#[test_log::test]
+fn full_trace_compare() {
+    // Load the EARLY_TEST_TRACE file
+    const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
+    
+    // Use the same network configuration as the bench
+    let network = Network::from_toml_file("basic_test.toml").unwrap();
+    
+    // Parse the trace with the same parameters as the bench
+    let trafserv_to_client_delay = Duration::from_millis(20);
+    let mut input_trace = parse_trace(EARLY_TRACE, network.clone(), trafserv_to_client_delay);
+    
+    // Run the simulator without machines to get baseline behavior
+    let mut sim_network = network.clone();
+    let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30093, true);
+    
+    // Print the first 5 events in output trace for debugging
+    println!("First 5 events in output trace:");
+    for event in output_trace.iter().take(5) {
+        println!("{:?}", event);
+    }
+
+    // Convert output trace to EARLY_TEST_TRACE format (time,direction,size)
+    let starting_time = output_trace.iter().find(|e| e.packet_idx == 0).unwrap().time;
+    let mut formatted_output = Vec::new();
+    
+    for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only
+        let relative_time = (event.time - starting_time).as_nanos();
+        let direction = match event.event {
+            TriggerEvent::NormalSent | TriggerEvent::PaddingSent { .. } | TriggerEvent::TunnelSent => "s",
+            TriggerEvent::NormalRecv | TriggerEvent::PaddingRecv | TriggerEvent::TunnelRecv => "r",
+            _ => continue, // Skip other event types
+        };
+        // Note: We don't have packet size in SimulEvent, so we'll use a default size
+        let size = if event.contains_padding { 52 } else { 73 }; // Reasonable defaults
+        formatted_output.push(format!("{},{},{}", relative_time, direction, size));
+    }
+    
+    // Parse the expected trace
+    let expected_lines: Vec<&str> = EARLY_TRACE.trim().lines().collect();
+    
+    // Compare line by line
+    println!("Comparing {} expected lines with {} output lines", expected_lines.len(), formatted_output.len());
+    
+    let max_lines = std::cmp::min(expected_lines.len(), formatted_output.len());
+    let mut differences = 0;
+    
+    for i in 0..max_lines {
+        let expected = expected_lines[i].trim();
+        let actual = &formatted_output[i];
+        
+        if expected != actual {
+            differences += 1;
+            if differences <= 10 { // Only show first 10 differences
+                println!("Line {}: Expected '{}', Got '{}'", i + 1, expected, actual);
+            }
+        }
+    }
+    
+    if expected_lines.len() != formatted_output.len() {
+        println!("Length mismatch: Expected {} lines, got {}", expected_lines.len(), formatted_output.len());
+    }
+    
+    if differences == 0 && expected_lines.len() == formatted_output.len() {
+        println!("✓ All lines match perfectly!");
+    } else {
+        println!("✗ Found {} differences out of {} lines", differences, max_lines);
+    }
+    
+    // For debugging, print first few lines of each
+    println!("\nFirst 5 expected lines:");
+    for (i, line) in expected_lines.iter().take(5).enumerate() {
+        println!("  {}: {}", i + 1, line);
+    }
+    
+    println!("\nFirst 5 output lines:");
+    for (i, line) in formatted_output.iter().take(5).enumerate() {
+        println!("  {}: {}", i + 1, line);
+    }
+}
 
 #[test_log::test]
 fn simulator_example_use() {
