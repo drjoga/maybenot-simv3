@@ -17,7 +17,11 @@ fn full_trace_compare() {
     
     // Run the simulator without machines to get baseline behavior
     let mut sim_network = network.clone();
-    let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30093, true);
+    // 30097 gives 10000 client events, to be used in benching to get comparable times
+    //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
+    let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 100000, true);
+    // print legnth of outyput trace
+    println!("Output trace length: {}", output_trace.len());
     
     // Print the first 5 events in output trace for debugging
     println!("First 5 events in output trace:");
@@ -25,8 +29,8 @@ fn full_trace_compare() {
         println!("{:?}", event);
     }
 
-    // Convert output trace to EARLY_TEST_TRACE format (time,direction,size)
-    let starting_time = output_trace.iter().find(|e| e.packet_idx == 0).unwrap().time;
+    // Convert output trace to EARLY_TEST_TRACE format (time,direction) - ignoring size
+    let starting_time = input_trace.zero_instant;
     let mut formatted_output = Vec::new();
     
     for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only
@@ -36,13 +40,21 @@ fn full_trace_compare() {
             TriggerEvent::NormalRecv | TriggerEvent::PaddingRecv | TriggerEvent::TunnelRecv => "r",
             _ => continue, // Skip other event types
         };
-        // Note: We don't have packet size in SimulEvent, so we'll use a default size
-        let size = if event.contains_padding { 52 } else { 73 }; // Reasonable defaults
-        formatted_output.push(format!("{},{},{}", relative_time, direction, size));
+        // Only compare time and direction, ignore packet size
+        formatted_output.push(format!("{},{}", relative_time, direction));
     }
     
-    // Parse the expected trace
-    let expected_lines: Vec<&str> = EARLY_TRACE.trim().lines().collect();
+    // Parse the expected trace and extract only time and direction
+    let expected_lines: Vec<String> = EARLY_TRACE.trim().lines()
+        .map(|line| {
+            let parts: Vec<&str> = line.trim().split(',').collect();
+            if parts.len() >= 2 {
+                format!("{},{}", parts[0], parts[1]) // Only time and direction
+            } else {
+                line.trim().to_string()
+            }
+        })
+        .collect();
     
     // Compare line by line
     println!("Comparing {} expected lines with {} output lines", expected_lines.len(), formatted_output.len());
@@ -51,7 +63,7 @@ fn full_trace_compare() {
     let mut differences = 0;
     
     for i in 0..max_lines {
-        let expected = expected_lines[i].trim();
+        let expected = &expected_lines[i];
         let actual = &formatted_output[i];
         
         if expected != actual {
@@ -73,12 +85,12 @@ fn full_trace_compare() {
     }
     
     // For debugging, print first few lines of each
-    println!("\nFirst 5 expected lines:");
+    println!("\nFirst 5 expected lines (time,direction only):");
     for (i, line) in expected_lines.iter().take(5).enumerate() {
         println!("  {}: {}", i + 1, line);
     }
     
-    println!("\nFirst 5 output lines:");
+    println!("\nFirst 5 output lines (time,direction only):");
     for (i, line) in formatted_output.iter().take(5).enumerate() {
         println!("  {}: {}", i + 1, line);
     }

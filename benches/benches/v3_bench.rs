@@ -34,7 +34,7 @@ fn v3_simulator_run(c: &mut Criterion) {
             //black_box(t2_network = network2.clone()); 
             let mut network2 = Network::from_toml_file(config_path).unwrap();
             let mut input_trace2 = input_trace.clone();
-            let nr_sim_events = 30093;   // Gives 10000 client events, to be comparable
+            let nr_sim_events = 30097;   // Gives 10000 client events, to be comparable
             black_box(sim(&[], &[], &mut input_trace2, &mut network2, nr_sim_events, true));
         });
     });

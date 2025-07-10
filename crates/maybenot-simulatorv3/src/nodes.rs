@@ -35,7 +35,7 @@ pub fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing
             
             sq.push(SimulEvent {
                 event: TriggerEvent::NormalSent,
-                time: event.time + Duration::from_micros(delta as u64),
+                time: event.time + Duration::from_nanos(delta as u64),
                 packet_idx: new_pktidx,
                 node_idx: event.node_idx,
                 link_idx: link_id,
@@ -107,7 +107,7 @@ pub fn forward_network_receive_from_receive (event: &SimulEvent, network: &Netwo
 #[derive(Debug, Copy, Clone)]
 pub struct ClientBasic {
     pub id: usize,
-    pub coreside_link: usize,
+    coreside_link: usize,
 }
 
 
