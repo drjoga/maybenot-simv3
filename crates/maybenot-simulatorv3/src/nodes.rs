@@ -22,8 +22,81 @@ impl std::fmt::Display for NodeError {
 
 impl std::error::Error for NodeError {}
 
+// High-performance enum-based node dispatch
+#[derive(Debug, Clone)]
+pub enum NodeType {
+    ClientBasic(ClientBasic),
+    RelayBasic(RelayBasic),
+    TrafficServerBasic(TrafficServerBasic),
+}
 
-pub fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
+impl NodeType {
+    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
+        match self {
+            NodeType::ClientBasic(node) => node.handle_event(event, network, sq),
+            NodeType::RelayBasic(node) => node.handle_event(event, network, sq),
+            NodeType::TrafficServerBasic(node) => node.handle_event(event, network, sq),
+        }
+    }
+
+    pub fn node_id(&self) -> usize {
+        match self {
+            NodeType::ClientBasic(node) => node.node_id(),
+            NodeType::RelayBasic(node) => node.node_id(),
+            NodeType::TrafficServerBasic(node) => node.node_id(),
+        }
+    }
+
+    pub fn get_coreside_linkid(&self) -> usize {
+        match self {
+            NodeType::ClientBasic(node) => node.get_coreside_linkid(),
+            NodeType::RelayBasic(node) => node.get_coreside_linkid(),
+            NodeType::TrafficServerBasic(node) => node.get_coreside_linkid(),
+        }
+    }
+
+    pub fn get_edgeside_linkid(&self) -> usize {
+        match self {
+            NodeType::ClientBasic(node) => node.get_edgeside_linkid(),
+            NodeType::RelayBasic(node) => node.get_edgeside_linkid(),
+            NodeType::TrafficServerBasic(node) => node.get_edgeside_linkid(),
+        }
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            NodeType::ClientBasic(_) => "ClientBasic",
+            NodeType::RelayBasic(_) => "RelayBasic",
+            NodeType::TrafficServerBasic(_) => "TrafficServerBasic",
+        }
+    }
+}
+
+// Factory function for creating nodes from TOML configuration
+pub fn create_node(node_type: &str, id: usize, coreside_link: Option<usize>, edgeside_link: Option<usize>) -> Result<NodeType, NodeError> {
+    match node_type {
+        "ClientBasic" => {
+            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("ClientBasic requires coreside_link".to_string()))?;
+            Ok(NodeType::ClientBasic(ClientBasic::new(id, coreside)))
+        },
+        "RelayBasic" => {
+            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires coreside_link".to_string()))?;
+            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires edgeside_link".to_string()))?;
+            Ok(NodeType::RelayBasic(RelayBasic::new(id, coreside, edgeside)))
+        },
+        "TrafficServerBasic" => {
+            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("TrafficServerBasic requires edgeside_link".to_string()))?;
+            Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id, edgeside)))
+        },
+        _ => Err(NodeError::ProcessingError(format!(
+            "Unknown node type: {}", node_type
+        ))),
+    }
+}
+
+
+
+fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
     
     if let Some(dependencies) = sq.dependent_tx.remove(&event.packet_idx) {
@@ -49,7 +122,7 @@ pub fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing
 }
 
 
-pub fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
+fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
     let outgoing_link = if event.node_idx == network.client {
         &network.links[network.nodes[event.node_idx].get_coreside_linkid()]
     } else if event.node_idx == network.traffic_server {
@@ -61,9 +134,12 @@ pub fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq
     debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
             event.node_idx, outgoing_link.link_id());
     let link_id = outgoing_link.link_id();
+    let current_duration = event.time.checked_duration_since(sq.earliest_event_instant)
+        .expect("event.time must not be earlier than sq.earliest_event_instant");
     let recv_event = SimulEvent {
         event: TriggerEvent::NormalRecv,
-        time: event.time +  network.links[link_id].sample(&event.time) + network.links[link_id].prop_ms(),
+        //time: event.time +  network.links[link_id].sample(&event.time) + network.links[link_id].prop_ms(),
+        time: event.time +  network.links[link_id].sample(current_duration) + network.links[link_id].prop_ms(),
         packet_idx: event.packet_idx,
         node_idx: outgoing_link.to_node(),
         link_idx: link_id,
@@ -77,7 +153,7 @@ pub fn make_network_receive_from_sent (event: &SimulEvent, network: &Network, sq
 
 
 
-pub fn forward_network_receive_from_receive (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
+fn forward_network_receive_from_receive (event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
     
     let outgoing_link_idx = &network.routes[event.node_idx][event.link_idx].unwrap_or_else(|| {
         panic!("No outgoing link found for node {} with link index {}", event.node_idx, event.link_idx);
@@ -250,77 +326,6 @@ impl TrafficServerBasic {
     }
 }
 
-// High-performance enum-based node dispatch
-#[derive(Debug, Clone)]
-pub enum NodeType {
-    ClientBasic(ClientBasic),
-    RelayBasic(RelayBasic),
-    TrafficServerBasic(TrafficServerBasic),
-}
-
-impl NodeType {
-    pub fn handle_event(&self, event: &SimulEvent, network: &Network, sq: &mut SimulQueue) {
-        match self {
-            NodeType::ClientBasic(node) => node.handle_event(event, network, sq),
-            NodeType::RelayBasic(node) => node.handle_event(event, network, sq),
-            NodeType::TrafficServerBasic(node) => node.handle_event(event, network, sq),
-        }
-    }
-
-    pub fn node_id(&self) -> usize {
-        match self {
-            NodeType::ClientBasic(node) => node.node_id(),
-            NodeType::RelayBasic(node) => node.node_id(),
-            NodeType::TrafficServerBasic(node) => node.node_id(),
-        }
-    }
-
-    pub fn get_coreside_linkid(&self) -> usize {
-        match self {
-            NodeType::ClientBasic(node) => node.get_coreside_linkid(),
-            NodeType::RelayBasic(node) => node.get_coreside_linkid(),
-            NodeType::TrafficServerBasic(node) => node.get_coreside_linkid(),
-        }
-    }
-
-    pub fn get_edgeside_linkid(&self) -> usize {
-        match self {
-            NodeType::ClientBasic(node) => node.get_edgeside_linkid(),
-            NodeType::RelayBasic(node) => node.get_edgeside_linkid(),
-            NodeType::TrafficServerBasic(node) => node.get_edgeside_linkid(),
-        }
-    }
-
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            NodeType::ClientBasic(_) => "ClientBasic",
-            NodeType::RelayBasic(_) => "RelayBasic",
-            NodeType::TrafficServerBasic(_) => "TrafficServerBasic",
-        }
-    }
-}
-
-// Factory function for creating nodes from TOML configuration
-pub fn create_node(node_type: &str, id: usize, coreside_link: Option<usize>, edgeside_link: Option<usize>) -> Result<NodeType, NodeError> {
-    match node_type {
-        "ClientBasic" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("ClientBasic requires coreside_link".to_string()))?;
-            Ok(NodeType::ClientBasic(ClientBasic::new(id, coreside)))
-        },
-        "RelayBasic" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires coreside_link".to_string()))?;
-            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("RelayBasic requires edgeside_link".to_string()))?;
-            Ok(NodeType::RelayBasic(RelayBasic::new(id, coreside, edgeside)))
-        },
-        "TrafficServerBasic" => {
-            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("TrafficServerBasic requires edgeside_link".to_string()))?;
-            Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id, edgeside)))
-        },
-        _ => Err(NodeError::ProcessingError(format!(
-            "Unknown node type: {}", node_type
-        ))),
-    }
-}
 
 #[cfg(test)]
 mod tests {

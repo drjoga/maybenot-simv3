@@ -24,12 +24,12 @@ pub enum LinkType {
 
 
 impl LinkType {
-    pub fn sample(&self, current_time: &Instant) -> Duration {
+    pub fn sample(&mut self, current_duration: Duration) -> Duration {
         match self {
-            LinkType::BottleneckTput(link) => link.sample(current_time),
-            LinkType::FixedTput(link) => link.sample(current_time),
-            LinkType::HiTraceTput(link) => link.sample(current_time),
-            LinkType::StdTraceTput(link) => link.sample(current_time),
+            LinkType::BottleneckTput(link) => link.sample(current_duration),
+            LinkType::FixedTput(link) => link.sample(current_duration),
+            LinkType::HiTraceTput(link) => link.sample(current_duration),
+            LinkType::StdTraceTput(link) => link.sample(current_duration),
         }
     }
 
@@ -101,7 +101,7 @@ impl BottleneckTputLink {
             network_bottleneck: NetworkBottleneck::new(window, queue_pps),
         }
     }
-    pub fn sample(&self, _current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_duration: Duration,) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -113,6 +113,9 @@ pub struct FixedTputLink {
     pub from: usize,
     pub to: usize,
     pub prop_ms: Duration,
+    pub tput_bps: u64,
+    pub next_busy_to_duration: Duration,
+
     network_linktrace: NetworkLinktrace,
 }
 
@@ -124,9 +127,47 @@ impl FixedTputLink {
             to,
             prop_ms,
             network_linktrace: NetworkLinktrace::new_fixed(client_tput, server_tput),
+            tput_bps: 1_000_000_000,
+            next_busy_to_duration: Duration::default(),
+
         }
     }
-    pub fn sample(&self, _current_time: &Instant) -> Duration {
+
+    pub fn sample(
+        &mut self,
+        current_duration: Duration,
+    ) -> Duration {
+        // pkt_size should come as call parameter, is hardwired for now
+        let pkt_size = 1500;
+
+        let (next_busy_duration, throughput) = 
+            (&mut self.next_busy_to_duration, self.tput_bps);
+
+        // Calculate the transmission delay for a packet with a given size:
+        // this_packet_duration (ns) = (pkt_size * 8 * 1e9) / throughput (bits/s)
+        let packet_size_bits = pkt_size * 8;
+        let this_packet_duration =
+            Duration::from_nanos((packet_size_bits as u64 * 1_000_000_000) / self.tput_bps);
+
+        // Compute the new busy time and any queueing delay.
+        let (new_busy_to_dur, queueing_delay_duration) = if self.next_busy_to_duration <= current_duration
+        {
+            // No waiting required.
+            (current_duration + this_packet_duration, Duration::default())
+        } else {
+            // Packet must wait: the queueing delay is the gap between current time and the stored busy time.
+            let q_delay = self.next_busy_to_duration - current_duration;
+            (self.next_busy_to_duration + this_packet_duration, q_delay)
+        };
+
+        // Update the stored busy time (in ns) from the computed Duration.
+        self.next_busy_to_duration = new_busy_to_dur;
+
+        (queueing_delay_duration + this_packet_duration)
+    }
+
+
+    pub fn sample2(&self, _current_time: &Instant) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -151,7 +192,7 @@ impl HiTraceTputLink {
             network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
         }
     }
-    pub fn sample(&self, _current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_duration: Duration) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
@@ -176,7 +217,7 @@ impl StdTraceTputLink {
             network_linktrace: NetworkLinktrace::new_linktrace(linktrace),
         }
     }
-    pub fn sample(&self, _current_time: &Instant) -> Duration {
+    pub fn sample(&self, _current_duration: Duration) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
         Duration::from_millis(10)
     }
