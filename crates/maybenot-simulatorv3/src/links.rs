@@ -302,7 +302,6 @@ pub fn create_link(
 pub enum ExtendedNetworkLabels {
     Bottleneck,
     Linktrace,
-    FixedTput,
 }
 
 #[derive(Debug, Clone)]
@@ -319,14 +318,7 @@ impl ExtendedNetwork {
     pub fn new_linktrace(linktrace: Arc<LinkTrace>) -> Self {
         ExtendedNetwork::Linktrace(NetworkLinktrace::new_linktrace(linktrace))
     }
-
-    pub fn new_fixedtput(client_tput: u64, server_tput: u64) -> Self {
-        assert!(client_tput > 0, "Client throughput need to be > 0 bps.");
-        ExtendedNetwork::Linktrace(NetworkLinktrace::new_fixed(
-            client_tput,
-            server_tput,
-        ))
-    }
+    
 
     pub fn sample(
         &mut self,
@@ -461,11 +453,6 @@ pub struct NetworkLinktrace {
     // Remaining ns in current slot, used for std resolution traces
     client_busy_ns_in_slot: u64,
     server_busy_ns_in_slot: u64,
-    // Bottleneck throughput for client(ul) and server(dl) in bps. Used for fixedTput
-    client_tput: u64,
-    server_tput: u64,
-    client_next_busy_to_duration: Duration,
-    server_next_busy_to_duration: Duration,
 }
 
 impl NetworkLinktrace {
@@ -481,42 +468,16 @@ impl NetworkLinktrace {
             server_next_busy_to: 0,
             client_busy_ns_in_slot: 0,
             server_busy_ns_in_slot: 0,
-            client_tput: 0,
-            server_tput: 0,
-            client_next_busy_to_duration: Duration::default(),
-            server_next_busy_to_duration: Duration::default(),
         }
     }
 
-    pub fn new_fixed(client_tput: u64, server_tput: u64) -> Self {
-        //Make new dummy linktrace
-        let linktrace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
-        Self {
-            client_aggregate_base_delay: Duration::default(),
-            server_aggregate_base_delay: Duration::default(),
-            //aggregate_delay_queue: BinaryHeap::new(),
-            //pps_limit: usize::MAX,
-            linktrace: Arc::new(linktrace),
-            sim_trace_startinstant: mk_start_instant(),
-            client_next_busy_to: 0,
-            server_next_busy_to: 0,
-            client_busy_ns_in_slot: 0,
-            server_busy_ns_in_slot: 0,
-            client_tput,
-            server_tput,
-            client_next_busy_to_duration: Duration::default(),
-            server_next_busy_to_duration: Duration::default(),
-        }
-    }
 
     pub fn sample(
         &mut self,
         current_time: &Instant,
         _is_client: bool,
     ) -> (Duration, Option<Duration>) {
-        if self.client_tput > 0 {
-            self.sample_fixed(current_time, _is_client)
-        } else if self.linktrace.is_tput_trace_high_res {
+        if  self.linktrace.is_tput_trace_high_res {
             self.sample_hi(current_time, _is_client)
         } else {
             self.sample_std(current_time, _is_client)
@@ -698,53 +659,6 @@ impl NetworkLinktrace {
         }
     }
 
-    pub fn sample_fixed(
-        &mut self,
-        current_time: &Instant,
-        _is_client: bool,
-    ) -> (Duration, Option<Duration>) {
-        // pkt_size should come as call parameter, is hardwired for now
-        let pkt_size = 1500;
-
-        let current_duration = current_time.duration_since(self.sim_trace_startinstant);
-
-        // Select the appropriate busy-to field and throughput.
-        let (next_busy_duration, throughput) = if _is_client {
-            (&mut self.client_next_busy_to_duration, self.client_tput)
-        } else {
-            (&mut self.server_next_busy_to_duration, self.server_tput)
-        };
-
-        // Calculate the transmission delay for a packet with a given size:
-        // this_packet_duration (ns) = (pkt_size * 8 * 1e9) / throughput (bits/s)
-        let packet_size_bits = pkt_size * 8;
-        let this_packet_duration =
-            Duration::from_nanos((packet_size_bits as u64 * 1_000_000_000) / throughput);
-
-        // Compute the new busy time and any queueing delay.
-        let (new_busy_to_dur, queueing_delay_duration) = if *next_busy_duration <= current_duration
-        {
-            // No waiting required.
-            (current_duration + this_packet_duration, Duration::default())
-        } else {
-            // Packet must wait: the queueing delay is the gap between current time and the stored busy time.
-            let q_delay = *next_busy_duration - current_duration;
-            (*next_busy_duration + this_packet_duration, q_delay)
-        };
-
-        // Update the stored busy time (in ns) from the computed Duration.
-        *next_busy_duration = new_busy_to_dur;
-
-        // Previosuly the propagation delay was added here, was in network.delay
-        if queueing_delay_duration > Duration::default() {
-            (
-                queueing_delay_duration + this_packet_duration,
-                Some(queueing_delay_duration),
-            )
-        } else {
-            (this_packet_duration, None)
-        }
-    }
 
     pub fn reset_linktrace(&mut self) {
         self.client_aggregate_base_delay = Duration::default();
@@ -760,37 +674,3 @@ impl NetworkLinktrace {
 }
 
 
-
-
-
-
-
-
-
-
-// Legacy Link struct for compatibility - consider removing
-pub struct SimpleLink {
-    pub from: usize,
-    pub to: usize,
-    pub delay: Duration,
-}
-
-impl SimpleLink {
-    pub fn new(from: usize, to: usize, delay: Duration) -> Self {
-        Self { from, to, delay }
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_simple_link_creation() {
-        let link = SimpleLink::new(1, 2, Duration::from_millis(10));
-        assert_eq!(link.from, 1);
-        assert_eq!(link.to, 2);
-        assert_eq!(link.delay, Duration::from_millis(10));
-    }
-}
