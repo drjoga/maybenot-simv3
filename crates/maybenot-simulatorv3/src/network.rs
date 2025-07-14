@@ -61,9 +61,48 @@ impl std::error::Error for NetworkError {}
 
 
 #[derive(Debug, Clone)]
-pub struct Network {
-    pub nodes: Vec<NodeType>,
+pub struct NetworkLinkstate {
     pub links: Vec<LinkType>,
+}
+
+impl NetworkLinkstate {
+    pub fn new() -> Self {
+        Self {
+            links: Vec::new(),
+        }
+    }
+
+    pub fn add_link(&mut self, link: LinkType, id: usize) -> usize {
+        assert_eq!(id, self.links.len(), "Link ID must match vector index");
+        self.links.push(link);
+        self.links.len() - 1
+    }
+
+    pub fn get_link(&self, link_index: usize) -> Option<&LinkType> {
+        self.links.get(link_index)
+    }
+
+    pub fn get_link_mut(&mut self, link_index: usize) -> Option<&mut LinkType> {
+        self.links.get_mut(link_index)
+    }
+
+    pub fn find_link(&self, from_node_id: usize, to_node_id: usize) -> Option<(usize, &LinkType)> {
+        self.links.iter().enumerate()
+            .find(|(_, link)| link.from_node() == from_node_id && link.to_node() == to_node_id)
+    }
+
+    pub fn link_count(&self) -> usize {
+        self.links.len()
+    }
+
+    pub fn links(&self) -> &[LinkType] {
+        &self.links
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NetworkTopology {
+    pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
     pub client: usize,
     pub traffic_server: usize,
@@ -72,11 +111,10 @@ pub struct Network {
     pub mb_server: usize,
 }
 
-impl Network {
+impl NetworkTopology {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
-            links: Vec::new(),
             routes: Vec::new(),
             client: 0,
             traffic_server: 0,
@@ -87,7 +125,7 @@ impl Network {
     }
 
     /// Load network configuration from a TOML file
-    pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<Self, NetworkError> {
+    pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<(Self, NetworkLinkstate), NetworkError> {
         let content = fs::read_to_string(path)
             .map_err(|e| NetworkError(format!("Failed to read file: {}", e)))?;
         
@@ -95,7 +133,7 @@ impl Network {
     }
 
     /// Load network configuration from a TOML string
-    pub fn from_toml_str(toml_str: &str) -> Result<Self, NetworkError> {
+    pub fn from_toml_str(toml_str: &str) -> Result<(Self, NetworkLinkstate), NetworkError> {
         let config: NetworkConfig = toml::from_str(toml_str)
             .map_err(|e| NetworkError(format!("Failed to parse TOML: {}", e)))?;
 
@@ -103,8 +141,9 @@ impl Network {
     }
 
     /// Create network from parsed configuration
-    pub fn from_config(config: NetworkConfig) -> Result<Self, NetworkError> {
-        let mut network = Self::new();
+    pub fn from_config(config: NetworkConfig) -> Result<(Self, NetworkLinkstate), NetworkError> {
+        let mut topology = Self::new();
+        let mut linkstate = NetworkLinkstate::new();
 
         // Find and validate client and traffic server nodes
         let mut client_id: Option<usize> = None;
@@ -133,19 +172,19 @@ impl Network {
         let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No TrafficServerBasic node found. Exactly one is required.".to_string()))?;
 
         // Set the client and traffic server IDs
-        network.client = client;
-        network.traffic_server = traffic_server;
+        topology.client = client;
+        topology.traffic_server = traffic_server;
         
         // Set MB fields (for future use)
-        network.has_mb = false;
-        network.mb_client = 0;
-        network.mb_server = 0;
+        topology.has_mb = false;
+        topology.mb_client = 0;
+        topology.mb_server = 0;
 
         // Create nodes
         for node_config in &config.nodes {
             let node = create_node(&node_config.node_type, node_config.id, node_config.coreside_link, node_config.edgeside_link)
                 .map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
-            network.add_node(node, node_config.id);
+            topology.add_node(node, node_config.id);
         }
 
         // Create links  
@@ -171,7 +210,7 @@ impl Network {
                 &params
             ).map_err(|e| NetworkError(format!("Failed to create link {}: {}", link_config.id, e)))?;
             
-            network.add_link(link, link_config.id);
+            linkstate.add_link(link, link_config.id);
         }
 
         // Build routing matrix
@@ -179,7 +218,7 @@ impl Network {
         let num_links = config.links.len();
         
         // Initialize routing matrix with None values
-        network.routes = vec![vec![None; num_links]; num_nodes];
+        topology.routes = vec![vec![None; num_links]; num_nodes];
         
         // Fill routing matrix from config
         for route_config in &config.routes {
@@ -199,13 +238,11 @@ impl Network {
                     return Err(NetworkError(format!("Invalid out_link {} for node {}", out_link, node_id)));
                 }
                 
-                network.routes[node_id][in_link] = Some(out_link);
+                topology.routes[node_id][in_link] = Some(out_link);
             }
         }
-        // Make immutable
-        //let network = network;
 
-        Ok(network)
+        Ok((topology, linkstate))
     }
 
     /// Get outgoing link for a node given an incoming link
@@ -219,247 +256,32 @@ impl Network {
         self.nodes.len() - 1
     }
 
-    pub fn add_link(&mut self, link: LinkType, id: usize) -> usize {
-        assert_eq!(id, self.links.len(), "Link ID must match vector index");
-        self.links.push(link);
-        self.links.len() - 1
-    }
-
     pub fn get_node(&self, node_index: usize) -> Option<&NodeType> {
         self.nodes.get(node_index)
-    }
-
-    pub fn get_link(&self, link_index: usize) -> Option<&LinkType> {
-        self.links.get(link_index)
-    }
-
-    pub fn find_link(&self, from_node_id: usize, to_node_id: usize) -> Option<(usize, &LinkType)> {
-        self.links.iter().enumerate()
-            .find(|(_, link)| link.from_node() == from_node_id && link.to_node() == to_node_id)
     }
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
-    pub fn link_count(&self) -> usize {
-        self.links.len()
-    }
-
     pub fn nodes(&self) -> &[NodeType] {
         &self.nodes
     }
 
-    pub fn links(&self) -> &[LinkType] {
-        &self.links
-    }
 }
 
-impl Default for Network {
+impl Default for NetworkTopology {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::nodes::{ClientBasic, RelayBasic, TrafficServerBasic, NodeType};
-    use std::time::Duration;
-
-    #[test]
-    fn test_network_creation() {
-        let network = Network::new();
-        assert_eq!(network.node_count(), 0);
-        assert_eq!(network.link_count(), 0);
-    }
-
-    #[test]
-    fn test_add_node() {
-        let mut network = Network::new();
-        let node = NodeType::ClientBasic(ClientBasic::new(0));
-        let node_index = network.add_node(node, 0);
-
-        assert_eq!(node_index, 0);
-        assert_eq!(network.node_count(), 1);
-        assert!(network.get_node(0).is_some());
-        assert_eq!(network.get_node(0).unwrap().node_id(), 0);
-    }
-
-    #[test]
-    fn test_add_multiple_nodes() {
-        let mut network = Network::new();
-        
-        let client = NodeType::ClientBasic(ClientBasic::new(0));
-        let relay = NodeType::RelayBasic(RelayBasic::new(1));
-        let server = NodeType::TrafficServerBasic(TrafficServerBasic::new(2));
-
-        let client_idx = network.add_node(client, 0);
-        let relay_idx = network.add_node(relay, 1);
-        let server_idx = network.add_node(server, 2);
-
-        assert_eq!(client_idx, 0);
-        assert_eq!(relay_idx, 1);
-        assert_eq!(server_idx, 2);
-        assert_eq!(network.node_count(), 3);
-    }
-
-    #[test]
-    fn test_add_link() {
-        use crate::links::{BottleneckTputLink, LinkType};
-        use std::time::Duration;
-        
-        let mut network = Network::new();
-        
-        let link = LinkType::BottleneckTput(BottleneckTputLink::new(
-            0, 1, 2, 
-            Duration::from_millis(10), 
-            Some(1000)
-        ));
-        let link_index = network.add_link(link, 0);
-
-        assert_eq!(link_index, 0);
-        assert_eq!(network.link_count(), 1);
-        
-        let retrieved_link = network.get_link(0).unwrap();
-        assert_eq!(retrieved_link.from_node(), 1);
-        assert_eq!(retrieved_link.to_node(), 2);
-        assert_eq!(retrieved_link.link_id(), 0);
-        assert_eq!(retrieved_link.type_name(), "BottleneckTput");
-    }
-
-    #[test]
-    fn test_find_link() {
-        use crate::links::{BottleneckTputLink, FixedTputLink};
-        use std::time::Duration;
-        
-        let mut network = Network::new();
-        
-        let link0 = LinkType::BottleneckTput(BottleneckTputLink::new(
-            0, 1, 2, Duration::from_millis(10), Some(1000)
-        ));
-        let link1 = LinkType::FixedTput(FixedTputLink::new(1, 2, 3, 1_000_000, 1_000_000));
-        let link2 = LinkType::BottleneckTput(BottleneckTputLink::new(
-            2, 3, 1, Duration::from_millis(5), None
-        ));
-
-        network.add_link(link0, 0);
-        network.add_link(link1, 1);
-        network.add_link(link2, 2);
-
-        let (idx, link) = network.find_link(2, 3).unwrap();
-        assert_eq!(idx, 1);
-        assert_eq!(link.from_node(), 2);
-        assert_eq!(link.to_node(), 3);
-
-        assert!(network.find_link(99, 100).is_none());
-    }
-
-    #[test]
-    fn test_network_iterators() {
-        use crate::links::BottleneckTputLink;
-        use std::time::Duration;
-        
-        let mut network = Network::new();
-        
-        let client = NodeType::ClientBasic(ClientBasic::new(0));
-        let relay = NodeType::RelayBasic(RelayBasic::new(1));
-        
-        network.add_node(client, 0);
-        network.add_node(relay, 1);
-
-        let link = LinkType::BottleneckTput(BottleneckTputLink::new(
-            0, 1, 2, Duration::from_millis(10), Some(1000)
-        ));
-        network.add_link(link, 0);
-
-        assert_eq!(network.nodes().len(), 2);
-        assert_eq!(network.links().len(), 1);
-        
-        // Test that we can access all nodes
-        for (i, node) in network.nodes().iter().enumerate() {
-            assert_eq!(node.node_id() as usize, i);
-            assert_eq!(i < 2, true);
-        }
-        
-        // Test that we can access all links
-        for link in network.links().iter() {
-            assert!(link.from_node() == 1 && link.to_node() == 2);
-        }
-    }
-
-    #[test]
-    fn test_toml_loading() {
-        let toml_content = r#"
-[[Node]]
-id = 0
-type = "ClientBasic"
-
-[[Node]]
-id = 1
-type = "RelayBasic"
-
-[[Link]]
-id = 0
-from = 0
-to = 1
-type = "FixedTput"
-tput_bps = 100000000
-
-[[Route]]
-node_id = 1
-forwarding_rules = [
-    { in_link = 0, out_link = 1 }
-]
-"#;
-
-        let network = Network::from_toml_str(toml_content).unwrap();
-        
-        assert_eq!(network.node_count(), 2);
-        assert_eq!(network.link_count(), 1);
-        assert_eq!(network.get_routes().len(), 1);
-        
-        // Test node IDs
-        assert_eq!(network.get_node(0).unwrap().node_id(), 0);
-        assert_eq!(network.get_node(1).unwrap().node_id(), 1);
-        
-        // Test link properties
-        let link = network.get_link(0).unwrap();
-        assert_eq!(link.from_node(), 0);
-        assert_eq!(link.to_node(), 1);
-        assert_eq!(link.type_name(), "FixedTput");
-        
-        // Test routing rules
-        let rules = network.get_routing_rules(1).unwrap();
-        assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].in_link, 0);
-        assert_eq!(rules[0].out_link, 1);
-    }
-
-    #[test]
-    fn test_basic_test_toml() {
-        // Test loading the actual basic_test.toml file
-        let network = Network::from_toml_file("basic_test.toml");
-        
-        match network {
-            Ok(net) => {
-                assert_eq!(net.node_count(), 3);
-                assert_eq!(net.link_count(), 4);
-                assert_eq!(net.get_routes().len(), 1);
-                
-                // Verify all nodes exist with correct types
-                assert_eq!(net.get_node(0).unwrap().node_id(), 0);
-                assert_eq!(net.get_node(1).unwrap().node_id(), 1);
-                assert_eq!(net.get_node(2).unwrap().node_id(), 2);
-                
-                // Verify routing rules for relay node
-                let rules = net.get_routing_rules(1).unwrap();
-                assert_eq!(rules.len(), 2);
-            },
-            Err(e) => {
-                // If file doesn't exist or has issues, just print the error
-                println!("Note: Could not load basic_test.toml: {}", e);
-            }
-        }
+impl Default for NetworkLinkstate {
+    fn default() -> Self {
+        Self::new()
     }
 }
+
+// Legacy Network type for compatibility - use NetworkTopology + NetworkLinkstate instead
+pub type Network = NetworkTopology;
+

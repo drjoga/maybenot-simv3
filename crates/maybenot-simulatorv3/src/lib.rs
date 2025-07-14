@@ -19,7 +19,7 @@ use std::{
 use maybenot::TriggerEvent;
 
 use log::{debug, warn};
-use network::Network;
+use network::{NetworkTopology, NetworkLinkstate};
 
 use maybenot::{Framework, Machine, TriggerAction};
 use rand::{rngs::ThreadRng, RngCore};
@@ -343,12 +343,13 @@ pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimulQueue,
-    network: &mut Network,
+    topology: &NetworkTopology,
+    linkstate: &mut NetworkLinkstate,
     max_trace_length: usize,
     only_network_activity: bool,
 ) -> Vec<SimulEvent> {
     let args = SimulatorArgs::new(max_trace_length, only_network_activity);
-    simul_advanced(machines_client, machines_server, network, sq, &args)
+    simul_advanced(machines_client, machines_server, topology, linkstate, sq, &args)
 }
 
 
@@ -419,7 +420,8 @@ impl SimulatorArgs {
 pub fn simul_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
-    network: &mut Network,
+    topology: &NetworkTopology,
+    linkstate: &mut NetworkLinkstate,
     sq: &mut SimulQueue,
     args: &SimulatorArgs,
 ) -> Vec<SimulEvent> {
@@ -458,7 +460,7 @@ pub fn simul_advanced(
 
     let mut sim_iterations = 0;
     let _start_time = current_time;
-    while let Some(next) = pick_next(sq, &mut client, &mut server, network, current_time) {
+    while let Some(next) = pick_next(sq, &mut client, &mut server, topology, linkstate, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -478,8 +480,8 @@ pub fn simul_advanced(
 
         debug!("sim(): next event: {:#?}", next);
 
-        network.nodes[next.node_idx]
-            .handle_event(&next, &network, sq);
+        topology.nodes[next.node_idx]
+            .handle_event(&next, &topology, linkstate, sq);
         
         // Add any response events to the simulation queue
         //for response_event in response_events {
@@ -532,7 +534,7 @@ pub fn simul_advanced(
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if !args.only_client_events || next.node_idx == network.client
+        if !args.only_client_events || next.node_idx == topology.client
         {
             trace.push(next.clone());
         }
@@ -577,7 +579,8 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimulQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
-    _network: &mut Network,
+    _topology: &NetworkTopology,
+    _linkstate: &mut NetworkLinkstate,
     current_time: Instant,
 ) -> Option<SimulEvent> {
     // find the earliest scheduled action, internal timer, block expiry,
@@ -668,7 +671,7 @@ fn pick_next<M: AsRef<[Machine]>>(
 /// number of bytes sent or received. The delay is used to model the network
 /// delay between the client and server. Returns a SimQueue with the events in
 /// the trace for use with [`sim`].
-pub fn parse_trace(trace: &str, _network: Network, ttrace_ts_to_c_delay: Duration) -> SimulQueue {
+pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay: Duration) -> SimulQueue {
     let mut sq = SimulQueue::new();    
 
     // sq.zero_instamt holds the time instant which is used to represent relative 
@@ -682,7 +685,7 @@ pub fn parse_trace(trace: &str, _network: Network, ttrace_ts_to_c_delay: Duratio
         if parts.len() >= 2 {
             // Time in traffic trace is in nanoseconds... 
             let timestamp =
-                (parts[0].trim().parse::<u64>().unwrap());
+                parts[0].trim().parse::<u64>().unwrap();
 
             match parts[1] {
                 "s" | "sn" => {
@@ -708,7 +711,7 @@ pub fn parse_trace(trace: &str, _network: Network, ttrace_ts_to_c_delay: Duratio
         event_schedule_print(&traffic_events, ttrace_ts_to_c_delay.as_nanos() as i64);
     }
     let zero_instant = sq.zero_instant;
-    fill_simq(&traffic_events, &mut sq, zero_instant, false);
+    fill_simq(&traffic_events, &topology, &mut sq, zero_instant, false);
     let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
     println!("SimQ length: {:?}   oneline length: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), oneline.len(), traffic_events.dependent_tx.len(), total_dependent_events);
     sq
@@ -1000,7 +1003,7 @@ fn get_event_instant(sq: &mut SimulQueue, event: &PacketEvent, zero_instant: Ins
 
 
 
-pub fn fill_simq(traffic_events: &TrafficTraceData, sq: &mut SimulQueue, zero_instant: Instant, as_ms: bool) {
+pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, sq: &mut SimulQueue, zero_instant: Instant, as_ms: bool) {
 
     for event in &traffic_events.client_simq_push {
         let event_instant = get_event_instant(sq, event, zero_instant, as_ms);
@@ -1008,8 +1011,8 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, sq: &mut SimulQueue, zero_in
             event: TriggerEvent::NormalSent,
             time: event_instant,
             packet_idx: event.packet_idx,
-            node_idx: 0, // Client node index
-            link_idx: 2, // Client->Relay link
+            node_idx: topology.client, // Client node index
+            link_idx: topology.nodes[topology.client].get_coreside_linkid(), // Client->Relay link
             contains_padding: false,
             bypass: false,
             replace: false,
@@ -1024,8 +1027,8 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, sq: &mut SimulQueue, zero_in
             event: TriggerEvent::NormalSent,
             time: event_instant,
             packet_idx: event.packet_idx,
-            node_idx: 2, // TrafficServer node index
-            link_idx: 0, // TrafficServer->Relay link
+            node_idx: topology.traffic_server, // TrafficServer node index
+            link_idx: topology.nodes[topology.traffic_server].get_edgeside_linkid(), // TrafficServer->Relay link
             contains_padding: false,
             bypass: false,
             replace: false,

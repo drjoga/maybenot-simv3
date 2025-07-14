@@ -115,19 +115,16 @@ pub struct FixedTputLink {
     pub prop_ms: Duration,
     pub tput_bps: u64,
     pub next_busy_to_duration: Duration,
-
-    network_linktrace: NetworkLinktrace,
 }
 
 impl FixedTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, client_tput: u64, server_tput: u64) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, tput_bps: u64) -> Self {
         Self {
             id,
             from,
             to,
             prop_ms,
-            network_linktrace: NetworkLinktrace::new_fixed(client_tput, server_tput),
-            tput_bps: 1_000_000_000,
+            tput_bps,
             next_busy_to_duration: Duration::default(),
 
         }
@@ -140,8 +137,6 @@ impl FixedTputLink {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
 
-        let (next_busy_duration, throughput) = 
-            (&mut self.next_busy_to_duration, self.tput_bps);
 
         // Calculate the transmission delay for a packet with a given size:
         // this_packet_duration (ns) = (pkt_size * 8 * 1e9) / throughput (bits/s)
@@ -163,13 +158,13 @@ impl FixedTputLink {
         // Update the stored busy time (in ns) from the computed Duration.
         self.next_busy_to_duration = new_busy_to_dur;
 
-        (queueing_delay_duration + this_packet_duration)
+        queueing_delay_duration + this_packet_duration
     }
 
 
-    pub fn sample2(&self, _current_time: &Instant) -> Duration {
+    pub fn sample2(&self, _current_duration: Duration) -> Duration {
         // Simplified for immutable access - returns a basic transmission delay
-        Duration::from_millis(10)
+        Duration::from_millis(0)
     }
 }
 
@@ -266,12 +261,7 @@ pub fn create_link(
                     client_tput
                 });
             
-            let server_tput = params
-                .get("server_tput_bps")
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(tput); // Use same as client if not specified
-            
-            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_ms, tput, server_tput)))
+            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_ms, tput)))
         }
         "HiTraceTput" => {
             let _trace_file = params

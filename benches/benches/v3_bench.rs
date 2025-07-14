@@ -17,40 +17,22 @@ fn v3_simulator_run(c: &mut Criterion) {
         //include_str!("../../.../tests/EARLY_TEST_TRACE.log");
         include_str!("../../crates/maybenot-simulatorv3/tests/EARLY_TEST_TRACE.log");
 
-    //let config_path = concat!(env!("CARGO_MANIFEST_DIR"), "/basic_test.toml");
-
     let config_path = "../crates/maybenot-simulatorv3/basic_test.toml";
-
-    //let network = Network::from_toml_file("../../basic_test.toml").unwrap();
-    let network = Network::from_toml_file(config_path).unwrap();
+    let (topology, linkstate) = Network::from_toml_file(config_path).unwrap();
 
     println!("Config path: {}", config_path);
     let trafserv_to_client_delay= Duration::from_millis(20);
-    let input_trace = parse_trace(EARLY_TRACE, network.clone(), trafserv_to_client_delay);
+    let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     println!("Input trace length: {}", input_trace.len());
-    let mut t2_network = network.clone();
     c.bench_function("v3 network simulation run", |b| {
         b.iter(|| {
-            //black_box(t2_network = network2.clone()); 
-            let mut network2 = Network::from_toml_file(config_path).unwrap();
+            let mut linkstate2 = linkstate.clone(); 
             let mut input_trace2 = input_trace.clone();
             let nr_sim_events = 30097;   // Gives 10000 client events, to be comparable
-            black_box(sim(&[], &[], &mut input_trace2, &mut network2, nr_sim_events, true));
+            black_box(sim(&[], &[], &mut input_trace2, &topology, &mut linkstate2, nr_sim_events, true));
         });
     });
 }
-
-
-
-/*
-    c.bench_function("v3 network simulation run", |b| {
-        b.iter(|| {
-            let t_network = network.clone(); 
-            black_box(sim(&[], &[], &mut input_trace, t_network, 40000, true));
-        });
-    });
-
-*/
 
 
 
