@@ -12,18 +12,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 /// Link trace
-/// that represent the troughput evolution between client and server.
+/// that represent the throughput evolution for a simplex link.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LinkTrace {
-    // Filenames used for linktraces, if trace is read from file.
-    // Otherwise, holds the string used to create the traces (Useful for debugging).
-    // For maybenot dl=server and ul=client, wrt to direction of sending.
-    dl_traceinput: String,
-    ul_traceinput: String,
+    // Filename used for linktrace, if trace is read from file.
+    // Otherwise, holds the string used to create the trace (Useful for debugging).
+    traceinput: String,
 
-    // Uplink and downlink throughput traces, used for std_res traces
-    pub dl_bw_trace: Vec<i32>,
-    pub ul_bw_trace: Vec<i32>,
+    // Throughput trace, used for std_res traces
+    pub bw_trace: Vec<i32>,
 
     pub is_tput_trace_high_res: bool,
 
@@ -32,95 +29,75 @@ pub struct LinkTrace {
     sizebin_lookuptable: SizebinLookupTable,
 
     // The busy_to lookupmatrix precomputed from the link traces
-    dl_busy_to_mtx: Array2<i32>,
-    ul_busy_to_mtx: Array2<i32>,
+    busy_to_mtx: Array2<i32>,
 }
 
 impl LinkTrace {
     pub fn new_hi_res(
-        dl_traceinput: &str,
-        ul_traceinput: &str,
+        traceinput: &str,
         sizebin_lookuptable: SizebinLookupTable,
     ) -> Self {
-        Self::new(dl_traceinput, ul_traceinput, sizebin_lookuptable, true)
+        Self::new(traceinput, sizebin_lookuptable, true)
     }
 
-    pub fn new_std_res(dl_traceinput: &str, ul_traceinput: &str) -> Self {
+    pub fn new_std_res(traceinput: &str) -> Self {
         let dummy_sizebin = SizebinLookupTable::new(&[0, 1501], &[1500]);
-        Self::new(dl_traceinput, ul_traceinput, dummy_sizebin, false)
+        Self::new(traceinput, dummy_sizebin, false)
     }
 
-    /// Creates a new `LinkTrace` instance, filling in the traces based on the input strings.
+    /// Creates a new `LinkTrace` instance, filling in the trace based on the input string.
     /// If High Resolution traces, precompute busy_to lookup tables according to packet sizes set as per-bin representative pkt_size values.
     fn new(
-        dl_traceinput: &str,
-        ul_traceinput: &str,
+        traceinput: &str,
         sizebin_lookuptable: SizebinLookupTable,
         is_tput_trace_high_res: bool,
     ) -> Self {
-        let (dl_bw_trace, ul_bw_trace) =
-            if dl_traceinput.contains('\n') && ul_traceinput.contains('\n') {
-                // If inputs contain newlines, assume they are raw trace strings and parse them
-                (
-                    Self::parse_linktrace(dl_traceinput),
-                    Self::parse_linktrace(ul_traceinput),
-                )
-            } else if dl_traceinput.contains(r".gz") && ul_traceinput.contains(r".gz") {
-                // Otherwise, assume they are filenames and read the traces from files
-                (
-                    Self::parse_linktrace(&Self::read_gzipped_linktrace(dl_traceinput)),
-                    Self::parse_linktrace(&Self::read_gzipped_linktrace(ul_traceinput)),
-                )
-            } else {
-                // Otherwise, assume they are filenames and read the traces from files
-                (
-                    Self::parse_linktrace(&Self::read_linktrace(dl_traceinput)),
-                    Self::parse_linktrace(&Self::read_linktrace(ul_traceinput)),
-                )
-            };
+        let bw_trace = if traceinput.contains('\n') {
+            // If input contains newlines, assume it's a raw trace string and parse it
+            Self::parse_linktrace(traceinput)
+        } else if traceinput.contains(r".gz") {
+            // Otherwise, assume it's a filename and read the trace from gzipped file
+            Self::parse_linktrace(&Self::read_gzipped_linktrace(traceinput))
+        } else {
+            // Otherwise, assume it's a filename and read the trace from file
+            Self::parse_linktrace(&Self::read_linktrace(traceinput))
+        };
 
-        let (dl_busy_to_mtx, ul_busy_to_mtx) = if is_tput_trace_high_res {
-            // Create a temporary instance and precompute the busy_to matrices
+        let busy_to_mtx = if is_tput_trace_high_res {
+            // Create a temporary instance and precompute the busy_to matrix
             Self {
-                dl_traceinput: dl_traceinput.to_string(),
-                ul_traceinput: ul_traceinput.to_string(),
-                dl_bw_trace: dl_bw_trace.clone(),
-                ul_bw_trace: ul_bw_trace.clone(),
+                traceinput: traceinput.to_string(),
+                bw_trace: bw_trace.clone(),
                 is_tput_trace_high_res: true,
                 sizebin_lookuptable: sizebin_lookuptable.clone(),
-                dl_busy_to_mtx: Array2::<i32>::zeros((0, 0)), // placeholder
-                ul_busy_to_mtx: Array2::<i32>::zeros((0, 0)), // placeholder
+                busy_to_mtx: Array2::<i32>::zeros((0, 0)), // placeholder
             }
             .precompute_busy_to_mtx()
         } else {
-            // Default matrices if high-resolution is not needed
-            (Array2::<i32>::zeros((0, 0)), Array2::<i32>::zeros((0, 0)))
+            // Default matrix if high-resolution is not needed
+            Array2::<i32>::zeros((0, 0))
         };
 
         Self {
-            dl_traceinput: dl_traceinput.to_string(),
-            ul_traceinput: ul_traceinput.to_string(),
-            dl_bw_trace,
-            ul_bw_trace,
+            traceinput: traceinput.to_string(),
+            bw_trace,
             is_tput_trace_high_res,
             sizebin_lookuptable,
-            dl_busy_to_mtx,
-            ul_busy_to_mtx,
+            busy_to_mtx,
         }
     }
 
     /// A function that creates a 2D ndarray where dim1 has the size of the number of items in `sizebin_lookuptable.bin_pktsize_values`
-    /// and where dim2 has the size of the number of items in `dl_bw_trace`.
-    /// The function loops through each `bin_pktsize_value` in an outer loop, and each `dl_bw_trace` value in an inner loop.
-    /// The corresponding `busy_to_mtx` cell is populated with the index of the upcoming `dl_bw_trace` index for which the sum
-    /// of values from current to upcoming `dl_bw_trace` is the same or larger than the `bin_pktsize_value`.
-    fn precompute_busy_to_mtx(&self) -> (Array2<i32>, Array2<i32>) {
+    /// and where dim2 has the size of the number of items in `bw_trace`.
+    /// The function loops through each `bin_pktsize_value` in an outer loop, and each `bw_trace` value in an inner loop.
+    /// The corresponding `busy_to_mtx` cell is populated with the index of the upcoming `bw_trace` index for which the sum
+    /// of values from current to upcoming `bw_trace` is the same or larger than the `bin_pktsize_value`.
+    fn precompute_busy_to_mtx(&self) -> Array2<i32> {
         let num_bins = self.sizebin_lookuptable.bin_pktsize_values.len();
-        let num_traces = self.dl_bw_trace.len();
+        let num_traces = self.bw_trace.len();
 
-        // Initialize matrices with zeros (stored as i32 for space efficiency)
-        let mut dl_busy_to_mtx = Array2::<i32>::zeros((num_bins, num_traces));
-        let mut ul_busy_to_mtx = Array2::<i32>::zeros((num_bins, num_traces));
+        // Initialize matrix with zeros (stored as i32 for space efficiency)
+        let mut busy_to_mtx = Array2::<i32>::zeros((num_bins, num_traces));
 
         for (bin_idx, &pkt_size) in self
             .sizebin_lookuptable
@@ -128,32 +105,20 @@ impl LinkTrace {
             .iter()
             .enumerate()
         {
-            // Precompute busy_to for downlink trace
+            // Precompute busy_to for the trace
             for start_idx in 0..num_traces {
                 let mut sum = 0;
                 for end_idx in start_idx..num_traces {
-                    sum += self.dl_bw_trace[end_idx];
+                    sum += self.bw_trace[end_idx];
                     if sum >= pkt_size {
-                        dl_busy_to_mtx[(bin_idx, start_idx)] = (end_idx + 1) as i32;
-                        break;
-                    }
-                }
-            }
-
-            // Precompute busy_to for uplink trace
-            for start_idx in 0..num_traces {
-                let mut sum = 0;
-                for end_idx in start_idx..num_traces {
-                    sum += self.ul_bw_trace[end_idx];
-                    if sum >= pkt_size {
-                        ul_busy_to_mtx[(bin_idx, start_idx)] = (end_idx + 1) as i32;
+                        busy_to_mtx[(bin_idx, start_idx)] = (end_idx + 1) as i32;
                         break;
                     }
                 }
             }
         }
 
-        (dl_busy_to_mtx, ul_busy_to_mtx)
+        busy_to_mtx
     }
 
     /// Reads the entire content of a link trace file into a String.
@@ -213,17 +178,12 @@ impl LinkTrace {
     }
 
     pub fn get_nr_timeslots(&self) -> i32 {
-        self.dl_bw_trace.len() as i32
+        self.bw_trace.len() as i32
     }
 
-    pub fn get_dl_busy_to(&self, time_slot: usize, pkt_size: i32) -> usize {
+    pub fn get_busy_to(&self, time_slot: usize, pkt_size: i32) -> usize {
         let bin_idx = self.sizebin_lookuptable.get_bin_idx(pkt_size) as usize;
-        self.dl_busy_to_mtx[(bin_idx, time_slot)] as usize
-    }
-
-    pub fn get_ul_busy_to(&self, time_slot: usize, pkt_size: i32) -> usize {
-        let bin_idx = self.sizebin_lookuptable.get_bin_idx(pkt_size) as usize;
-        self.ul_busy_to_mtx[(bin_idx, time_slot)] as usize
+        self.busy_to_mtx[(bin_idx, time_slot)] as usize
     }
 }
 
@@ -235,33 +195,26 @@ impl fmt::Display for LinkTrace {
         } else {
             1e3_f64
         };
-        let duration_sec = self.dl_bw_trace.len() as f64 / slots_per_sec;
-        // Calculate average throughputs in Mbps for downlink and uplink
-        let dl_avg_throughput_mbps =
-            self.dl_bw_trace.iter().sum::<i32>() as f64 * 8.0 / duration_sec / 1e6_f64;
-        let ul_avg_throughput_mbps =
-            self.ul_bw_trace.iter().sum::<i32>() as f64 * 8.0 / duration_sec / 1e6_f64;
+        let duration_sec = self.bw_trace.len() as f64 / slots_per_sec;
+        // Calculate average throughput in Mbps
+        let avg_throughput_mbps =
+            self.bw_trace.iter().sum::<i32>() as f64 * 8.0 / duration_sec / 1e6_f64;
 
         // Print out the duration and average throughput
         writeln!(f, "\nLink trace details:")?;
         writeln!(f, "  Duration (seconds): {:.3}", duration_sec)?;
         writeln!(
             f,
-            "  Average downlink throughput (Mbps): {:.3}",
-            dl_avg_throughput_mbps
-        )?;
-        writeln!(
-            f,
-            "  Average uplink throughput (Mbps): {:.3}",
-            ul_avg_throughput_mbps
+            "  Average throughput (Mbps): {:.3}",
+            avg_throughput_mbps
         )?;
 
-        // Print the trace input files (or lack thereof)
-        if !self.dl_traceinput.is_empty() && !self.ul_traceinput.is_empty() {
+        // Print the trace input file (or lack thereof)
+        if !self.traceinput.is_empty() {
             writeln!(
                 f,
-                "\nTracefiles:  \ndl: {:?}, \nul: {:?} ",
-                self.dl_traceinput, self.ul_traceinput
+                "\nTracefile: {:?}",
+                self.traceinput
             )?;
         } else {
             writeln!(f, "No trace-file found")?;
@@ -281,11 +234,11 @@ impl fmt::Display for LinkTrace {
                 self.sizebin_lookuptable.bin_pktsize_values
             )?;
 
-            // Print the shape of the downlink lookup matrix
+            // Print the shape of the lookup matrix
             writeln!(
                 f,
-                "Shape of downlink lookup matrix: {:?}",
-                self.dl_busy_to_mtx.shape()
+                "Shape of lookup matrix: {:?}",
+                self.busy_to_mtx.shape()
             )
         } else {
             writeln!(f, "\nStandard resolution trace (1 ms)")

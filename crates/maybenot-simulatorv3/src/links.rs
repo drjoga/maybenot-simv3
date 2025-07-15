@@ -211,12 +211,12 @@ impl HiTraceTputLink {
         // Depending on whether the current time slot is after the previous packet finished,
         // choose the lookup parameters and compute durations.
         if self.next_busy_to <= current_time_slot {
-            // For simplex operation, use uplink (client) direction
-            busy_to = self.linktrace.get_ul_busy_to(current_time_slot, pkt_size);
+            // For simplex operation, use the single trace
+            busy_to = self.linktrace.get_busy_to(current_time_slot, pkt_size);
             this_packet_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
         } else {
-            // For simplex operation, use uplink (client) direction
-            busy_to = self.linktrace.get_ul_busy_to(self.next_busy_to, pkt_size);
+            // For simplex operation, use the single trace
+            busy_to = self.linktrace.get_busy_to(self.next_busy_to, pkt_size);
             queueing_delay_duration =
                 Duration::from_micros((self.next_busy_to - current_time_slot) as u64);
             this_packet_duration = Duration::from_micros((busy_to - self.next_busy_to) as u64);
@@ -259,8 +259,8 @@ pub struct StdTraceTputLink {
 
 impl StdTraceTputLink {
     pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, linktrace: Arc<LinkTrace>) -> Self {
-        // For simplex operation, use uplink trace (client direction)
-        let bw_trace = linktrace.ul_bw_trace.clone();
+        // For simplex operation, use the single trace
+        let bw_trace = linktrace.bw_trace.clone();
         
         Self {
             id,
@@ -423,7 +423,7 @@ pub fn create_link(
                 .ok_or("HiTraceTput requires trace_file parameter")?;
             
             // For now, create a dummy trace - in real implementation, load from file
-            let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
+            let dummy_trace = LinkTrace::new_std_res("10\n10\n");
             let linktrace = Arc::new(dummy_trace);
             
             Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_ms, linktrace)))
@@ -434,7 +434,7 @@ pub fn create_link(
                 .ok_or("StdTraceTput requires trace_file parameter")?;
             
             // For now, create a dummy trace - in real implementation, load from file
-            let dummy_trace = LinkTrace::new_std_res("10\n10\n", "10\n10\n");
+            let dummy_trace = LinkTrace::new_std_res("10\n10\n");
             let linktrace = Arc::new(dummy_trace);
             
             Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_ms, linktrace)))
