@@ -399,7 +399,8 @@ impl SimulatorArgs {
         Self {
             max_trace_length,
             max_sim_iterations: 0,
-            continue_after_all_normal_packets_processed: false,
+            //This bool has different impact in v3 , should be removed
+            continue_after_all_normal_packets_processed: true,
             // TIME-TEST: 4.7 -> 7.5 ms when sonly tracing client events !! StarNGE 64k - 21K events is slower...
             only_client_events: false,
             only_network_activity,
@@ -537,8 +538,8 @@ pub fn simul_advanced(
         if !args.only_client_events || next.node_idx == topology.client
         {
             trace.push(next.clone());
+            
         }
-
 
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
             debug!(
