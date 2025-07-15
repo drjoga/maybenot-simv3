@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 
-use maybenot_simulatorv3::{network::Network, parse_trace, sim};
+use maybenot_simulatorv3::{network::Network, parse_trace, sim, simul_advanced, SimulatorArgs};
 
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -24,14 +24,25 @@ fn v3_simulator_run(c: &mut Criterion) {
     let trafserv_to_client_delay= Duration::from_millis(20);
     let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     println!("Input trace length: {}", input_trace.len());
+    let mut output_len = 0;
     c.bench_function("v3 network simulation run", |b| {
         b.iter(|| {
             let mut linkstate2 = linkstate.clone(); 
             let mut input_trace2 = input_trace.clone();
             let nr_sim_events = 30097;   // Gives 10000 client events, to be comparable
-            black_box(sim(&[], &[], &mut input_trace2, &topology, &mut linkstate2, nr_sim_events, true));
+
+            let mut args = SimulatorArgs::new(0, true);
+            args.max_sim_iterations = nr_sim_events;
+            args.only_client_events = true;
+            let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
+
+            //black_box(sim(&[], &[], &mut input_trace2, &topology, &mut linkstate2, nr_sim_events, true));
+            //let trace = sim(&[], &[], &mut input_trace2, &topology, &mut linkstate2, nr_sim_events, true);
+            output_len = trace.len();
         });
+        
     });
+    print!("Length of output trace: {}\n", output_len )
 }
 
 
