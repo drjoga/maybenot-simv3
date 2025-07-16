@@ -67,12 +67,12 @@ impl LinkType {
         }
     }
 
-    pub fn prop_ms(&self) -> Duration {
+    pub fn prop_us(&self) -> Duration {
         match self {
-            LinkType::BottleneckTput(link) => link.prop_ms,
-            LinkType::FixedTput(link) => link.prop_ms,
-            LinkType::HiTraceTput(link) => link.prop_ms,
-            LinkType::StdTraceTput(link) => link.prop_ms,
+            LinkType::BottleneckTput(link) => link.prop_us,
+            LinkType::FixedTput(link) => link.prop_us,
+            LinkType::HiTraceTput(link) => link.prop_us,
+            LinkType::StdTraceTput(link) => link.prop_us,
         }
     }
 }
@@ -85,17 +85,17 @@ pub struct BottleneckTputLink {
     pub id: usize,
     pub from: usize,
     pub to: usize,
-    pub prop_ms: Duration,
+    pub prop_us: Duration,
     network_bottleneck: NetworkBottleneck,
 }
 
 impl BottleneckTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, window: Duration, queue_pps: Option<usize>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, window: Duration, queue_pps: Option<usize>) -> Self {
         Self {
             id,
             from,
             to,
-            prop_ms,
+            prop_us,
             network_bottleneck: NetworkBottleneck::new(window, queue_pps),
         }
     }
@@ -110,18 +110,18 @@ pub struct FixedTputLink {
     pub id: usize,
     pub from: usize,
     pub to: usize,
-    pub prop_ms: Duration,
+    pub prop_us: Duration,
     pub tput_bps: u64,
     pub next_busy_to_duration: Duration,
 }
 
 impl FixedTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, tput_bps: u64) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, tput_bps: u64) -> Self {
         Self {
             id,
             from,
             to,
-            prop_ms,
+            prop_us,
             tput_bps,
             next_busy_to_duration: Duration::default(),
 
@@ -171,7 +171,7 @@ pub struct HiTraceTputLink {
     pub id: usize,
     pub from: usize,
     pub to: usize,
-    pub prop_ms: Duration,
+    pub prop_us: Duration,
     // High resolution sampling state (simplex only)
     next_busy_to: usize,
     sim_trace_startinstant: Instant,
@@ -179,12 +179,12 @@ pub struct HiTraceTputLink {
 }
 
 impl HiTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>) -> Self {
         Self {
             id,
             from,
             to,
-            prop_ms,
+            prop_us,
             next_busy_to: 0,
             sim_trace_startinstant: mk_start_instant(),
             linktrace,
@@ -247,7 +247,7 @@ pub struct StdTraceTputLink {
     pub id: usize,
     pub from: usize,
     pub to: usize,
-    pub prop_ms: Duration,
+    pub prop_us: Duration,
     // Standard resolution sampling state (simplex only)
     next_busy_to: usize,
     busy_ns_in_slot: u64,
@@ -256,7 +256,7 @@ pub struct StdTraceTputLink {
 }
 
 impl StdTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_ms: Duration, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>) -> Self {
         // For simplex operation, use the single trace
         let bw_trace = linktrace.bw_trace.clone();
         
@@ -264,7 +264,7 @@ impl StdTraceTputLink {
             id,
             from,
             to,
-            prop_ms,
+            prop_us,
             next_busy_to: 0,
             busy_ns_in_slot: 0,
             sim_trace_startinstant: mk_start_instant(),
@@ -378,12 +378,12 @@ pub fn create_link(
     to: usize,
     params: &std::collections::HashMap<String, String>,
 ) -> Result<LinkType, String> {
-    // Parse prop_ms parameter (required for all link types)
-    let prop_ms = params
-        .get("prop_ms")
+    // Parse prop_us parameter (required for all link types)
+    let prop_us = params
+        .get("prop_us")
         .and_then(|s| s.parse::<u64>().ok())
-        .map(Duration::from_millis)
-        .unwrap_or(Duration::from_millis(0)); // Default to 0ms if not specified
+        .map(Duration::from_micros)
+        .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
 
     match link_type {
         "BottleneckTput" => {
@@ -397,7 +397,7 @@ pub fn create_link(
                 .get("queue_pps")
                 .and_then(|s| s.parse::<usize>().ok());
             
-            Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, prop_ms, window, queue_pps)))
+            Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, prop_us, window, queue_pps)))
         }
         "FixedTput" => {
             // Simplex link - requires tput_bps parameter
@@ -407,7 +407,7 @@ pub fn create_link(
                 .parse::<u64>()
                 .map_err(|_| "Invalid tput_bps value - must be a valid u64")?;
             
-            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_ms, tput)))
+            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_us, tput)))
         }
         "HiTraceTput" => {
             let trace_file = params
@@ -417,7 +417,7 @@ pub fn create_link(
             let linktrace = load_linktrace_from_file(trace_file)
                 .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
-            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_ms, linktrace)))
+            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_us, linktrace)))
         }
         "StdTraceTput" => {
             let trace_file = params
@@ -427,7 +427,7 @@ pub fn create_link(
             let linktrace = load_linktrace_from_file(trace_file)
                 .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
-            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_ms, linktrace)))
+            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_us, linktrace)))
         }
         _ => Err(format!("Unknown link type: {}", link_type)),
     }

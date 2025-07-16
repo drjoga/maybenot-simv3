@@ -26,7 +26,7 @@ from = 2
 to = 1
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_ms = 10
+prop_us = 10_000
 
 # Link 1: from node 1 to node 0 (Relay -> Client)
 [[Link]]
@@ -35,7 +35,7 @@ from = 1
 to = 0
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_ms = 10
+prop_us = 10_000
 
 # Link 2: from node 0 to node 1 (Client -> Relay)
 [[Link]]
@@ -44,7 +44,7 @@ from = 0
 to = 1
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_ms = 10
+prop_us = 10_000
 
 # Link 3: from node 1 to node 2 (Relay -> TrafficServer)
 [[Link]]
@@ -53,7 +53,7 @@ from = 1
 to = 2
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_ms = 10
+prop_us = 10_000
 
 # Routing rules for the Relay node (id = 1)
 [[Route]]

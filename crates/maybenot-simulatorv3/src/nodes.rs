@@ -134,19 +134,21 @@ fn make_network_receive_from_sent (event: &SimulEvent, topology: &NetworkTopolog
     
     // Get values we need before mutable borrow
     let to_node = linkstate.links[link_id].to_node();
-    let prop_ms = linkstate.links[link_id].prop_ms();
+    let prop_us = linkstate.links[link_id].prop_us();
     
-    debug!("\tClient {} sending NormalSent -> creating NormalRecv at node via link {}", 
+    debug!("\tNode {} sending NormalSent -> creating NormalRecv at node via link {}", 
             event.node_idx, link_id);
+    //print event time and sq.earliest_event_instant
+    debug!("\tEvent time: {:?}   Earliest event instant: {:?}", event.time, sq.earliest_event_instant);
     let current_duration = event.time.checked_duration_since(sq.earliest_event_instant)
-        .expect("event.time must not be earlier than sq.earliest_event_instant");
+        .expect(&format!("event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", event.packet_idx));
     
     // Now we can safely do the mutable borrow for sampling
     let transmission_delay = linkstate.links[link_id].sample(current_duration);
     
     let recv_event = SimulEvent {
         event: TriggerEvent::NormalRecv,
-        time: event.time + transmission_delay + prop_ms,
+        time: event.time + transmission_delay + prop_us,
         packet_idx: event.packet_idx,
         node_idx: to_node,
         link_idx: link_id,
@@ -170,7 +172,7 @@ fn forward_network_receive_from_receive (event: &SimulEvent, topology: &NetworkT
     // Get immutable data first
     let to_node = linkstate.links[outgoing_link_idx].to_node();
     let link_id = linkstate.links[outgoing_link_idx].link_id();
-    let prop_ms = linkstate.links[outgoing_link_idx].prop_ms();
+    let prop_us = linkstate.links[outgoing_link_idx].prop_us();
     
     // Calculate timing
     let current_duration = event.time.checked_duration_since(sq.earliest_event_instant)
@@ -184,7 +186,7 @@ fn forward_network_receive_from_receive (event: &SimulEvent, topology: &NetworkT
     
     let recv_event = SimulEvent {
         event: TriggerEvent::NormalRecv,
-        time: event.time + transmission_delay + prop_ms,
+        time: event.time + transmission_delay + prop_us,
         packet_idx: event.packet_idx,
         node_idx: to_node,
         link_idx: outgoing_link_idx,
