@@ -98,6 +98,7 @@ pub struct SimulEvent {
     /// internal flag to mark event as replace
     replace: bool,
     // debug note
+    #[cfg(debug_assertions)]
     pub debug_note: Option<String>,
 }
 
@@ -185,6 +186,7 @@ pub struct SimEvent {
     /// internal flag to mark event as replace
     replace: bool,
     // debug note
+    #[cfg(debug_assertions)]
     pub debug_note: Option<String>,
 }
 
@@ -1017,6 +1019,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             contains_padding: false,
             bypass: false,
             replace: false,
+            #[cfg(debug_assertions)]
             debug_note: Some("Client initial send".to_string()),
         };
         sq.push(simul_event);
@@ -1033,6 +1036,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             contains_padding: false,
             bypass: false,
             replace: false,
+            #[cfg(debug_assertions)]
             debug_note: Some("WebServer initial send".to_string()),
         };
         sq.push(simul_event);

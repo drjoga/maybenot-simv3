@@ -115,6 +115,7 @@ fn check_dependent_packets(event: &SimulEvent, sq: &mut SimulQueue, outgoing_lin
                 contains_padding: false,
                 bypass: false,
                 replace: false,
+                #[cfg(debug_assertions)]
                 debug_note: None,
             });
         }
@@ -152,6 +153,7 @@ fn make_network_receive_from_sent (event: &SimulEvent, topology: &NetworkTopolog
         contains_padding: false,
         bypass: false,
         replace: false,
+        #[cfg(debug_assertions)]
         debug_note: None, 
     };
     sq.push(recv_event);
@@ -189,6 +191,7 @@ fn forward_network_receive_from_receive (event: &SimulEvent, topology: &NetworkT
         contains_padding: event.contains_padding,
         bypass: false,
         replace: false,
+        #[cfg(debug_assertions)]
         debug_note: None, 
     };
     sq.push(recv_event);
@@ -271,7 +274,8 @@ impl RelayBasic {
                     contains_padding: event.contains_padding,
                     bypass: false,
                     replace: false,
-                    debug_note: None,
+                    #[cfg(debug_assertions)]
+                debug_note: None,
                 };
                 sq.push(forward_event);
             }

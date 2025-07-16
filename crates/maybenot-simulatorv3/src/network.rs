@@ -120,7 +120,7 @@ impl NetworkTopology {
             traffic_server: 0,
             has_mb: false,
             mb_client: 0,
-            mb_server: 0,
+            mb_server: 1,
         }
     }
 
@@ -178,7 +178,7 @@ impl NetworkTopology {
         // Set MB fields (for future use)
         topology.has_mb = false;
         topology.mb_client = 0;
-        topology.mb_server = 0;
+        topology.mb_server = 1;
 
         // Create nodes
         for node_config in &config.nodes {

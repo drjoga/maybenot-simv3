@@ -76,6 +76,7 @@ impl SimQueue {
             contains_padding,
             bypass: false,
             replace: false,
+            #[cfg(debug_assertions)]
             debug_note: None,
         });
     }

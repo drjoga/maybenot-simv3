@@ -7,13 +7,11 @@ use std::{
 
 
 use crate::{
-    linktrace::{mk_start_instant, LinkTrace},
+    linktrace::{mk_start_instant, LinkTrace, load_linktrace_from_file},
 };
 
 
-/////
-
-// High-performance enum-based link dispatch
+/////// High-performance enum-based link dispatch
 #[derive(Debug, Clone)]
 pub enum LinkType {
     BottleneckTput(BottleneckTputLink),
@@ -402,40 +400,32 @@ pub fn create_link(
             Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, prop_ms, window, queue_pps)))
         }
         "FixedTput" => {
-            // Support both single tput_bps (simplex) and separate client/server (duplex)
+            // Simplex link - requires tput_bps parameter
             let tput = params
                 .get("tput_bps")
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or_else(|| {
-                    // Fall back to separate client/server throughput if tput_bps not found
-                    let client_tput = params
-                        .get("client_tput_bps")
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(1_000_000);
-                    client_tput
-                });
+                .ok_or("FixedTput requires tput_bps parameter")?
+                .parse::<u64>()
+                .map_err(|_| "Invalid tput_bps value - must be a valid u64")?;
             
             Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_ms, tput)))
         }
         "HiTraceTput" => {
-            let _trace_file = params
+            let trace_file = params
                 .get("trace_file")
                 .ok_or("HiTraceTput requires trace_file parameter")?;
             
-            // For now, create a dummy trace - in real implementation, load from file
-            let dummy_trace = LinkTrace::new_std_res("10\n10\n");
-            let linktrace = Arc::new(dummy_trace);
+            let linktrace = load_linktrace_from_file(trace_file)
+                .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
             Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_ms, linktrace)))
         }
         "StdTraceTput" => {
-            let _trace_file = params
+            let trace_file = params
                 .get("trace_file")
                 .ok_or("StdTraceTput requires trace_file parameter")?;
             
-            // For now, create a dummy trace - in real implementation, load from file
-            let dummy_trace = LinkTrace::new_std_res("10\n10\n");
-            let linktrace = Arc::new(dummy_trace);
+            let linktrace = load_linktrace_from_file(trace_file)
+                .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
             Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_ms, linktrace)))
         }
