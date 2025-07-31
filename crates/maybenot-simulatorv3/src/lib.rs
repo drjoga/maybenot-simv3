@@ -107,7 +107,11 @@ pub struct SimulEvent {
 impl SimulEvent {
     /// Display SimulEvent with time as microseconds since sq.zero_instant
     pub fn display_relative(&self, sq: &SimulQueue) -> String {
-        let time_since_zero = self.time.duration_since(sq.zero_instant).as_micros();
+        let time_since_zero = if self.time >= sq.zero_instant {
+            self.time.duration_since(sq.zero_instant).as_micros() as i64
+        } else {
+            -(sq.zero_instant.duration_since(self.time).as_micros() as i64)
+        };
         format!(
             "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
             self.event, time_since_zero, self.packet_idx, self.node_idx, self.link_idx,
@@ -119,7 +123,11 @@ impl SimulEvent {
     /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
     /// from - to nodeid for each link
     pub fn display_full(&self, sq: &SimulQueue, topology: &NetworkTopology, linkstate: &NetworkLinkstate) -> String {
-        let time_since_zero = self.time.duration_since(sq.zero_instant).as_micros();
+        let time_since_zero = if self.time >= sq.zero_instant {
+            self.time.duration_since(sq.zero_instant).as_micros() as i64
+        } else {
+            -(sq.zero_instant.duration_since(self.time).as_micros() as i64)
+        };
         let link = linkstate.get_link(self.link_idx).unwrap();
         // Adjust formatting so field lengths are appropriate for example line below
         // NormalSent at 25 μs (pkt 5, node 2 TrafficServerBasic, link 0 n2->n1) P:F B:F R:F
@@ -216,12 +224,6 @@ impl SimulQueue {
 
     pub fn is_empty(&self) -> bool {
         self.heap.is_empty()
-    }
-
-    /// get the first time of the queue: should only be used for the
-    /// simulator's current time at startup
-    pub fn get_first_event_time(&self) -> Option<Instant> {
-        self.peek().map(|e| e.time)
     }
 
 }
@@ -463,7 +465,6 @@ impl SimulatorArgs {
             max_sim_iterations: 0,
             //This bool has different impact in v3 , should be removed
             continue_after_all_normal_packets_processed: true,
-            // TIME-TEST: 4.7 -> 7.5 ms when sonly tracing client events !! StarNGE 64k - 21K events is slower...
             only_client_events: false,
             only_network_activity,
             max_padding_frac_client: 0.0,
@@ -498,7 +499,7 @@ pub fn simul_advanced(
     let mut trace: Vec<SimulEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
-    let mut current_time = sq.get_first_event_time().unwrap();
+    let mut current_time = sq.earliest_event_instant;
 
     let mut client = SimState::new(
         machines_client,
@@ -518,8 +519,8 @@ pub fn simul_advanced(
         // to avoid the same seed for both client and server
         args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
-    //debug!("sim(): client machines {}", machines_client.len());
-    //debug!("sim(): server machines {}", machines_server.len());
+    debug!("sim(): client machines {}", machines_client.len());
+    debug!("sim(): server machines {}", machines_server.len());
 
     let mut sim_iterations = 0;
     let _start_time = current_time;
@@ -541,7 +542,7 @@ pub fn simul_advanced(
             _ => {}
         }
 
-        debug!("sim(): next s_event: {}", next.display_relative(sq));
+        debug!("sim(): next event: {}", next.display_relative(sq));
 
         topology.nodes[next.node_idx]
             .handle_event(&next, &topology, linkstate, sq);
