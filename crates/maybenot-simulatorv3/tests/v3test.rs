@@ -9,22 +9,26 @@ fn full_trace_compare() {
     const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
     
     // Use the same network configuration as the bench
-    let (topology, mut linkstate) = Network::from_toml_file("basic_test.toml").unwrap();
+    //let (topology, mut linkstate) = Network::from_toml_file("basic_test.toml").unwrap();
+    let (topology, mut linkstate) = Network::from_toml_file("mbn_test.toml").unwrap();
     
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
     let mut input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     
-    // 30097 gives 10000 client events, to be used in benching to get comparable times
+    // 30097 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
-    let output_trace = sim(&[], &[], &mut input_trace, &topology, &mut linkstate, 100000, true);
-    // print legnth of outyput trace
+    // 56829 gives 10000 client events, with basic toml to be used in benching to get comparable times
+    //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 56829, true);
+    
+    let output_trace = sim(&[], &[], &mut input_trace, &topology, &mut linkstate, 56829, true);
+    // print length of output trace
     println!("Output trace length: {}", output_trace.len());
     
     // Print the first 5 events in output trace for debugging
     println!("First 5 events in output trace:");
     for event in output_trace.iter().take(5) {
-        println!("{:?}", event);
+        println!("{}", event);
     }
 
     // Convert output trace to EARLY_TEST_TRACE format (time,direction) - ignoring size
@@ -34,8 +38,10 @@ fn full_trace_compare() {
     for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only
         let relative_time = (event.time - starting_time).as_nanos();
         let direction = match event.event {
-            TriggerEvent::NormalSent | TriggerEvent::PaddingSent { .. } | TriggerEvent::TunnelSent => "s",
-            TriggerEvent::NormalRecv | TriggerEvent::PaddingRecv | TriggerEvent::TunnelRecv => "r",
+            //TriggerEvent::NormalSent | TriggerEvent::PaddingSent { .. } | TriggerEvent::TunnelSent => "s",
+            //TriggerEvent::NormalRecv | TriggerEvent::PaddingRecv | TriggerEvent::TunnelRecv => "r",
+            TriggerEvent::TunnelSent => "s",
+            TriggerEvent::TunnelRecv => "r",
             _ => continue, // Skip other event types
         };
         // Only compare time and direction, ignore packet size

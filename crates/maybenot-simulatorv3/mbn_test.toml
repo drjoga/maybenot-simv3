@@ -4,12 +4,12 @@
 # Node definitions
 [[Node]]
 id = 0
-type = "ClientBasic"
+type = "ClientMBN"
 coreside_link = 2
 
 [[Node]]
 id = 1
-type = "RouterBasic"
+type = "RelayMBN"
 coreside_link = 3
 edgeside_link = 1
 

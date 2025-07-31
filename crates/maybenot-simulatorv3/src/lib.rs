@@ -97,10 +97,41 @@ pub struct SimulEvent {
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
+    /// sequence number for deterministic insertion ordering
+    pub q_sequence_nr: u64,
     // debug note
     #[cfg(debug_assertions)]
     pub debug_note: Option<String>,
 }
+
+impl SimulEvent {
+    /// Display SimulEvent with time as microseconds since sq.zero_instant
+    pub fn display_relative(&self, sq: &SimulQueue) -> String {
+        let time_since_zero = self.time.duration_since(sq.zero_instant).as_micros();
+        format!(
+            "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
+            self.event, time_since_zero, self.packet_idx, self.node_idx, self.link_idx,
+            if self.contains_padding { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+    /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
+    /// from - to nodeid for each link
+    pub fn display_full(&self, sq: &SimulQueue, topology: &NetworkTopology) -> String {
+        let time_since_zero = self.time.duration_since(sq.zero_instant).as_micros();
+        format!(
+            "{:?} at {} μs (pkt {}, node {} {}, link {} n{}-n{}) P:{} B:{} R:{}",
+            self.event, time_since_zero, self.packet_idx, self.node_idx,
+            topology.nodes[self.node_idx].type_name(),            
+            self.link_idx, "x", "x", //Placeholders for from_node and to_node
+            if self.contains_padding { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+}
+
 
 // for SimulEvent, implement Ord and PartialOrd to allow for sorting by time
 impl Ord for SimulEvent {
@@ -109,6 +140,7 @@ impl Ord for SimulEvent {
         self.time
             .cmp(&other.time)
             .then_with(|| event_to_usize(&self.event).cmp(&event_to_usize(&other.event)))
+            .then_with(|| self.q_sequence_nr.cmp(&other.q_sequence_nr))
             .reverse()
     }
 }
@@ -142,6 +174,7 @@ pub struct SimulQueue {
     pub earliest_event_instant: Instant,
     heap: BinaryHeap<SimulEvent>,
     pub(crate) dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
+    next_q_sequence_nr: u64,
 }
 
 impl SimulQueue {
@@ -152,11 +185,14 @@ impl SimulQueue {
             earliest_event_instant: now_time,
             heap: BinaryHeap::new(),
             dependent_tx: HashMap::new(),
+            next_q_sequence_nr: 0,
         }
     }
 
-    pub fn push(&mut self, event: SimulEvent) {
-        self.heap.push(event);
+    pub fn push(&mut self, mut s_event: SimulEvent) {
+        s_event.q_sequence_nr = self.next_q_sequence_nr;
+        self.next_q_sequence_nr += 1;
+        self.heap.push(s_event);
     }
 
     pub fn pop(&mut self) -> Option<SimulEvent> {
@@ -498,7 +534,7 @@ pub fn simul_advanced(
             _ => {}
         }
 
-        debug!("sim(): next event: {:#?}", next);
+        debug!("sim(): next s_event: {}", next.display_relative(sq));
 
         topology.nodes[next.node_idx]
             .handle_event(&next, &topology, linkstate, sq);
@@ -554,10 +590,11 @@ pub fn simul_advanced(
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if !args.only_client_events || next.node_idx == topology.client
+        if (!args.only_client_events || next.node_idx == topology.client) &&
+            (!args.only_network_activity || next.event == TriggerEvent::TunnelRecv ||
+             next.event == TriggerEvent::TunnelSent) 
         {
-            trace.push(next.clone());
-            
+            trace.push(next.clone());            
         }
 
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
@@ -1030,6 +1067,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             contains_padding: false,
             bypass: false,
             replace: false,
+            q_sequence_nr: 0, // Will be overwritten by push()
             #[cfg(debug_assertions)]
             debug_note: Some("Client initial send".to_string()),
         };
@@ -1047,6 +1085,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             contains_padding: false,
             bypass: false,
             replace: false,
+            q_sequence_nr: 0, // Will be overwritten by push()
             #[cfg(debug_assertions)]
             debug_note: Some("WebServer initial send".to_string()),
         };

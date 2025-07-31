@@ -151,9 +151,9 @@ impl NetworkTopology {
 
         for node_config in &config.nodes {
             match node_config.node_type.as_str() {
-                "ClientBasic" => {
+                "ClientBasic" | "ClientMBN" => {
                     if client_id.is_some() {
-                        return Err(NetworkError("Multiple ClientBasic nodes found. Only one is allowed.".to_string()));
+                        return Err(NetworkError("Multiple Client nodes found. Only one is allowed.".to_string()));
                     }
                     client_id = Some(node_config.id);
                 }
@@ -168,7 +168,7 @@ impl NetworkTopology {
         }
 
         // Ensure we have exactly one client and one traffic server
-        let client = client_id.ok_or_else(|| NetworkError("No ClientBasic node found. Exactly one is required.".to_string()))?;
+        let client = client_id.ok_or_else(|| NetworkError("No Client node found. Exactly one is required.".to_string()))?;
         let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No TrafficServerBasic node found. Exactly one is required.".to_string()))?;
 
         // Set the client and traffic server IDs

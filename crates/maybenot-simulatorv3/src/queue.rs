@@ -63,14 +63,14 @@ impl SimQueue {
     #[allow(clippy::too_many_arguments)]
     pub fn push(
         &mut self,
-        event: TriggerEvent,
+        t_event: TriggerEvent,
         packet_idx: usize,
         contains_padding: bool,
         time: Instant,
         delay: Duration,
     ) {
         self.push_sim(SimEvent {
-            event,
+            event: t_event,
             time,
             packet_idx,
             contains_padding,
