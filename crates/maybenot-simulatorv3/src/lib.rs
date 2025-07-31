@@ -119,6 +119,23 @@ impl PartialOrd for SimulEvent {
     }
 }
 
+
+// A display fmt for SimulEvent that shows the event type, time, and packet index as one line
+// and has P:T B:F R:T according to the booleans 
+impl std::fmt::Display for SimulEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?} at {:?} (pkt {}, node {}, link {}) P:{} B:{} R:{}",
+            self.event, self.time, self.packet_idx, self.node_idx, self.link_idx,
+            if self.contains_padding { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+}
+
+
 #[derive(Clone, Debug)]
 pub struct SimulQueue {
     pub zero_instant: Instant,
