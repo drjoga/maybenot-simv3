@@ -120,7 +120,7 @@ impl NetworkTopology {
             traffic_server: 0,
             has_mb: false,
             mb_client: 0,
-            mb_server: 1,
+            mb_server: 0,
         }
     }
 
@@ -147,22 +147,39 @@ impl NetworkTopology {
 
         // Find and validate client and traffic server nodes
         let mut client_id: Option<usize> = None;
+        let mut mb_server: Option<usize> = None;
         let mut traffic_server_id: Option<usize> = None;
 
         for node_config in &config.nodes {
             match node_config.node_type.as_str() {
-                "ClientBasic" | "ClientMBN" => {
+                "ClientBasic" => {
                     if client_id.is_some() {
                         return Err(NetworkError("Multiple Client nodes found. Only one is allowed.".to_string()));
                     }
                     client_id = Some(node_config.id);
                 }
+                "ClientMBN" => {
+                    if client_id.is_some() {
+                        return Err(NetworkError("Multiple Client nodes found. Only one is allowed.".to_string()));
+                    }
+                    client_id = Some(node_config.id);
+                    topology.mb_client = node_config.id;
+                }
+                "RelayMBN" => {
+                    if mb_server.is_some() {
+                        return Err(NetworkError("Multiple RelayMBN nodes found. Only one is allowed.".to_string()));
+                    }
+                    mb_server = Some(node_config.id);
+                }
+
                 "TrafficServerBasic" => {
                     if traffic_server_id.is_some() {
                         return Err(NetworkError("Multiple TrafficServerBasic nodes found. Only one is allowed.".to_string()));
                     }
                     traffic_server_id = Some(node_config.id);
                 }
+
+
                 _ => {} // Other node types are fine
             }
         }
@@ -176,9 +193,10 @@ impl NetworkTopology {
         topology.traffic_server = traffic_server;
         
         // Set MB fields (for future use)
-        topology.has_mb = false;
-        topology.mb_client = 0;
-        topology.mb_server = 1;
+        if let Some(mb_server_id) = mb_server {
+            topology.has_mb = true;
+            topology.mb_server = mb_server_id;
+        }
 
         // Create nodes
         for node_config in &config.nodes {

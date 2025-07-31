@@ -118,18 +118,25 @@ impl SimulEvent {
     }
     /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
     /// from - to nodeid for each link
-    pub fn display_full(&self, sq: &SimulQueue, topology: &NetworkTopology) -> String {
+    pub fn display_full(&self, sq: &SimulQueue, topology: &NetworkTopology, linkstate: &NetworkLinkstate) -> String {
         let time_since_zero = self.time.duration_since(sq.zero_instant).as_micros();
+        let link = linkstate.get_link(self.link_idx).unwrap();
+        // Adjust formatting so field lengths are appropriate for example line below
+        // NormalSent at 25 μs (pkt 5, node 2 TrafficServerBasic, link 0 n2->n1) P:F B:F R:F
         format!(
-            "{:?} at {} μs (pkt {}, node {} {}, link {} n{}-n{}) P:{} B:{} R:{}",
-            self.event, time_since_zero, self.packet_idx, self.node_idx,
-            topology.nodes[self.node_idx].type_name(),            
-            self.link_idx, "x", "x", //Placeholders for from_node and to_node
+            "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
+            format!("{:?}", self.event),
+            time_since_zero,
+            self.packet_idx,
+            self.node_idx,
+            topology.nodes[self.node_idx].type_name(),
+            self.link_idx,
+            link.from_node(),
+            link.to_node(),
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
-        )
-    }
+        ) }
 }
 
 

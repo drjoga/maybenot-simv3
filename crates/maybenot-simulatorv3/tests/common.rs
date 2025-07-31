@@ -53,7 +53,7 @@ pub fn run_test_sim(
     //print!("{:?}\n\n", trace);
     // Loop over all events in trace and print them
     for event in &trace {
-        println!("{}", event.display_relative(&sq));
+        println!("{}", event.display_full(&sq,&topology,&linkstate));
     }
     let mut fmt = fmt_trace(trace.as_slice(), client, as_ms, topology);
     if fmt.len() > output.len() {
@@ -243,12 +243,19 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, ms: bool, topology: NetworkTopo
 
     let base = trace[0].time;
     let mut s: String = "".to_string();
-    let link_towards_client = topology.nodes[topology.mb_server].get_edgeside_linkid();
-    for event in trace {
-        if event.node_idx == topology.client ||  
+    for s_event in trace {
+        if s_event.event != TriggerEvent::TunnelSent && s_event.event != TriggerEvent::TunnelRecv {
+            continue; // Skip non-tunnel events
+        }
+        if client {
+            if s_event.node_idx == topology.client {
+                s = format!("{} {}", s, fmt_event(s_event, base, ms));
+            }
+        } else {
             // Only show events on the servers "interface" towards client
-            (client == false && (event.link_idx == link_towards_client))  {
-                s = format!("{} {}", s, fmt_event(event, base, ms));
+            if s_event.node_idx == topology.mb_server {
+                s = format!("{} {}", s, fmt_event(s_event, base, ms));
+            }
         }
     }
     s.trim().to_string()
