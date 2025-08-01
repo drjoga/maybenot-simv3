@@ -100,7 +100,7 @@ impl NetworkLinkstate {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NetworkTopology {
     pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
@@ -200,8 +200,15 @@ impl NetworkTopology {
 
         // Create nodes
         for node_config in &config.nodes {
-            let node = create_node(&node_config.node_type, node_config.id, node_config.coreside_link, node_config.edgeside_link)
-                .map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
+            // For now, pass empty params - MBN parameters will be set during simulation
+            let params = std::collections::HashMap::new();
+            let node = create_node(
+                &node_config.node_type,
+                node_config.id,
+                node_config.coreside_link,
+                node_config.edgeside_link,
+                &params
+            ).map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
             topology.add_node(node, node_config.id);
         }
 

@@ -2,7 +2,8 @@ use maybenot::TriggerEvent;
 use crate::{SimulEvent, SimulQueue};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use crate::links::LinkType;
-use std::time::Duration;
+use crate::nodesMBN::{ClientMBN, RelayMBN};
+use std::time::{Duration, Instant};
 use log::debug;
 
 #[derive(Debug, Clone)]
@@ -23,7 +24,7 @@ impl std::fmt::Display for NodeError {
 impl std::error::Error for NodeError {}
 
 // High-performance enum-based node dispatch
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NodeType {
     ClientBasic(ClientBasic),
     RouterBasic(RouterBasic),
@@ -85,39 +86,98 @@ impl NodeType {
 }
 
 // Factory function for creating nodes from TOML configuration
-pub fn create_node(node_type: &str, id: usize, coreside_link: Option<usize>, edgeside_link: Option<usize>) -> Result<NodeType, NodeError> {
+pub fn create_node(
+    node_type: &str,
+    id: usize,
+    coreside_link: Option<usize>,
+    edgeside_link: Option<usize>,
+    params: &std::collections::HashMap<String, String>,
+) -> Result<NodeType, String> {
     match node_type {
         "ClientBasic" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("ClientBasic requires coreside_link".to_string()))?;
+            let coreside = coreside_link
+                .ok_or("ClientBasic requires coreside_link")?;
             Ok(NodeType::ClientBasic(ClientBasic::new(id, coreside)))
         },
         "RouterBasic" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("RouterBasic requires coreside_link".to_string()))?;
-            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("RouterBasic requires edgeside_link".to_string()))?;
+            let coreside = coreside_link
+                .ok_or("RouterBasic requires coreside_link")?;
+            let edgeside = edgeside_link
+                .ok_or("RouterBasic requires edgeside_link")?;
             Ok(NodeType::RouterBasic(RouterBasic::new(id, coreside, edgeside)))
         },
         "TrafficServerBasic" => {
-            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("TrafficServerBasic requires edgeside_link".to_string()))?;
+            let edgeside = edgeside_link
+                .ok_or("TrafficServerBasic requires edgeside_link")?;
             Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id, edgeside)))
         },
         "ClientMBN" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("ClientMBN requires coreside_link".to_string()))?;
-            Ok(NodeType::ClientMBN(ClientMBN::new(id, coreside)))
+            let coreside = coreside_link
+                .ok_or("ClientMBN requires coreside_link")?;
+            
+            // Parse MBN-specific parameters from params HashMap
+            let machines = params
+                .get("machines")
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(Vec::new);
+                       
+            let max_padding_frac = params
+                .get("max_padding_frac")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            
+            let max_blocking_frac = params
+                .get("max_blocking_frac")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            
+            let insecure_rng_seed = params
+                .get("insecure_rng_seed")
+                .and_then(|s| s.parse::<u64>().ok());
+            
+            Ok(NodeType::ClientMBN(ClientMBN::new(
+                id, coreside, machines, Instant::now(), 
+                max_padding_frac, max_blocking_frac, insecure_rng_seed
+            )))
         },
         "RelayMBN" => {
-            let coreside = coreside_link.ok_or_else(|| NodeError::ProcessingError("RelayMBN requires coreside_link".to_string()))?;
-            let edgeside = edgeside_link.ok_or_else(|| NodeError::ProcessingError("RelayMBN requires edgeside_link".to_string()))?;
-            Ok(NodeType::RelayMBN(RelayMBN::new(id, coreside, edgeside)))
+            let coreside = coreside_link
+                .ok_or("RelayMBN requires coreside_link")?;
+            let edgeside = edgeside_link
+                .ok_or("RelayMBN requires edgeside_link")?;
+            
+            // Parse MBN-specific parameters from params HashMap
+            let machines = params
+                .get("machines")
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(Vec::new);
+            
+            let max_padding_frac = params
+                .get("max_padding_frac")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            
+            let max_blocking_frac = params
+                .get("max_blocking_frac")
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            
+            let insecure_rng_seed = params
+                .get("insecure_rng_seed")
+                .and_then(|s| s.parse::<u64>().ok());
+            
+            Ok(NodeType::RelayMBN(RelayMBN::new(
+                id, coreside, edgeside, machines, Instant::now(),
+                max_padding_frac, max_blocking_frac, insecure_rng_seed
+            )))
         },
-        _ => Err(NodeError::ProcessingError(format!(
-            "Unknown node type: {}", node_type
-        ))),
+        _ => Err(format!("Unknown node type: {}", node_type)),
     }
 }
 
 
 
-fn check_dependent_packets(s_event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
+pub fn check_dependent_packets(s_event: &SimulEvent, sq: &mut SimulQueue, outgoing_link: &LinkType) {
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
     
     if let Some(dependencies) = sq.dependent_tx.remove(&s_event.packet_idx) {
@@ -145,7 +205,7 @@ fn check_dependent_packets(s_event: &SimulEvent, sq: &mut SimulQueue, outgoing_l
 }
 
 
-fn make_network_receive_from_sent (s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+pub fn make_network_receive_from_sent (s_event: &SimulEvent, _topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
     let new_t_event = match s_event.event {
         TriggerEvent::NormalSent => TriggerEvent::NormalRecv,
         TriggerEvent::TunnelSent => TriggerEvent::TunnelRecv,
@@ -185,7 +245,7 @@ fn make_network_receive_from_sent (s_event: &SimulEvent, topology: &NetworkTopol
 
 
 
-fn forward_network_receive_from_receive (s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+pub fn forward_network_receive_from_receive (s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
     let new_t_event = match s_event.event {
         TriggerEvent::NormalRecv => TriggerEvent::NormalRecv,
         TriggerEvent::TunnelRecv => TriggerEvent::TunnelRecv,
@@ -363,255 +423,6 @@ impl TrafficServerBasic {
     }
 }
 
-// MBN (Maybenot) node types - initially behave like Basic nodes but designed for future MBN integration
-
-#[derive(Debug, Copy, Clone)]
-pub struct ClientMBN {
-    pub id: usize,
-    coreside_link: usize,
-}
-
-impl ClientMBN {
-    pub fn new(id: usize, coreside_link: usize) -> Self {
-        Self {
-            id,
-            coreside_link,
-        }
-    }
-
-    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
-        match &s_event.event {
-            TriggerEvent::NormalSent => {
-                let forward_s_event = SimulEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
-                    contains_padding: false,
-                    bypass: s_event.bypass,
-                    replace: s_event.replace,
-                    q_sequence_nr: 0, // Will be overwritten by push()
-                    #[cfg(debug_assertions)]
-                    debug_note: None,
-                };
-                sq.push(forward_s_event);
-            }
-            
-
-
-            TriggerEvent::TunnelSent => {
-                make_network_receive_from_sent(s_event, topology, linkstate, sq);
-            }
-
-
-            TriggerEvent::PaddingSent { .. } => {
-                let forward_s_event = SimulEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
-                    contains_padding: true,
-                    bypass: s_event.bypass,
-                    replace: s_event.replace,
-                    q_sequence_nr: 0, // Will be overwritten by push()
-                    #[cfg(debug_assertions)]
-                    debug_note: None,
-                };
-                sq.push(forward_s_event);
-            }
-
-
-
-            TriggerEvent::TunnelRecv => {
-                let new_t_event = match &s_event.contains_padding {
-                    true => {
-                        TriggerEvent::PaddingRecv
-                    },
-                    false => {
-                        TriggerEvent::NormalRecv
-                    }
-                };
-                let forward_s_event = SimulEvent {
-                    event: new_t_event,
-                    time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
-                    contains_padding: s_event.contains_padding,
-                    bypass: s_event.bypass,
-                    replace: s_event.replace,
-                    q_sequence_nr: 0, // Will be overwritten by push()
-                    #[cfg(debug_assertions)]
-                    debug_note: None,
-                };
-                sq.push(forward_s_event);
-            }
-
-
-            TriggerEvent::NormalRecv => {
-                let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_linkid();
-                let outgoing_link = &linkstate.links[outgoing_link_id];
-
-                check_dependent_packets(s_event, sq, outgoing_link);
-            }
-            TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { machine } => {}
-            TriggerEvent::BlockingEnd => {}
-
-            _ => {
-                panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
-            }
-        }
-    }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_linkid(&self) -> usize {
-        self.coreside_link
-    }
-
-    pub fn get_edgeside_linkid(&self) -> usize {
-        panic!("ClientMBN does not have an edgeside link")
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct RelayMBN {
-    pub id: usize,
-    pub coreside_link: usize,
-    pub edgeside_link: usize,
-}
-
-impl RelayMBN {
-    pub fn new(id: usize, coreside_link: usize, edgeside_link: usize) -> Self {
-        Self {
-            id,
-            coreside_link,
-            edgeside_link,
-        }
-    }
-
-    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
-        match &s_event.event {
-            TriggerEvent::TunnelRecv => {
-                let new_event = match &s_event.contains_padding {
-                    true => {
-                        TriggerEvent::PaddingRecv
-                    },
-                    false => {
-                        TriggerEvent::NormalRecv
-                    }
-                };
-                let forward_event = SimulEvent {
-                    event: new_event,
-                    time: s_event.time,
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx,
-                    link_idx: s_event.link_idx,
-                    contains_padding: false,
-                    bypass: false,
-                    replace: false,
-                    q_sequence_nr: 0, // Will be overwritten by push()
-                    #[cfg(debug_assertions)]
-                    debug_note: None,
-                };
-                sq.push(forward_event);
-            }
-            TriggerEvent::NormalRecv => {
-                let outlink = topology.get_outlink(s_event.node_idx, s_event.link_idx).unwrap();
-                if  outlink == self.coreside_link {
-                    forward_network_receive_from_receive(s_event, topology, linkstate, sq);
-                } else if outlink == self.edgeside_link {
-                    let new_s_event = SimulEvent {
-                        event: TriggerEvent::NormalSent,
-                        time: s_event.time,
-                        packet_idx: s_event.packet_idx,
-                        node_idx: s_event.node_idx,
-                        link_idx: outlink,
-                        contains_padding: false,
-                        bypass: false,
-                        replace: false,
-                        q_sequence_nr: 0, // Will be overwritten by push()
-                        #[cfg(debug_assertions)]
-                        debug_note: None, 
-                    };
-                    sq.push(new_s_event);
-                } else {
-                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
-                }
-            }
-
-            TriggerEvent::NormalSent => {
-                if  s_event.link_idx == self.coreside_link {
-                    make_network_receive_from_sent(s_event, topology, linkstate, sq);
-                } else if s_event.link_idx == self.edgeside_link {
-                    let forward_s_event = SimulEvent {
-                        event: TriggerEvent::TunnelSent,
-                        time: s_event.time, 
-                        packet_idx: s_event.packet_idx,
-                        node_idx: s_event.node_idx, 
-                        link_idx: s_event.link_idx, 
-                        contains_padding: false,
-                        bypass: s_event.bypass,
-                        replace: s_event.replace,
-                        q_sequence_nr: 0, // Will be overwritten by push()
-                        #[cfg(debug_assertions)]
-                        debug_note: None,
-                    };
-                    sq.push(forward_s_event);
-                } else {
-                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
-                }
-            }
-
-
-            TriggerEvent::TunnelSent => {
-                make_network_receive_from_sent(s_event, topology, linkstate, sq);
-            }
-
-
-            TriggerEvent::PaddingSent { .. } => {
-                let forward_s_event = SimulEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
-                    contains_padding: true,
-                    bypass: s_event.bypass,
-                    replace: s_event.replace,
-                    q_sequence_nr: 0, // Will be overwritten by push()
-                    #[cfg(debug_assertions)]
-                    debug_note: None,
-                };
-                sq.push(forward_s_event);
-            }
-            TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { machine } => {}
-            TriggerEvent::BlockingEnd => {}
-    
-            _ => {
-                panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);
-            }
-        }
-    }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_linkid(&self) -> usize {
-        self.coreside_link
-    }
-
-    pub fn get_edgeside_linkid(&self) -> usize {
-        self.edgeside_link
-    }
-}
 
 
 #[cfg(test)]
@@ -638,14 +449,16 @@ mod tests {
 
     #[test]
     fn test_client_mbn_creation() {
-        let client = ClientMBN::new(4, 2);
+        use std::time::Instant;
+        let client = ClientMBN::new(4, 2, vec![], Instant::now(), 0.0, 0.0, None);
         assert_eq!(client.node_id(), 4);
         assert_eq!(client.get_coreside_linkid(), 2);
     }
 
     #[test]
     fn test_relay_mbn_creation() {
-        let relay = RelayMBN::new(5, 2, 3);
+        use std::time::Instant;
+        let relay = RelayMBN::new(5, 2, 3, vec![], Instant::now(), 0.0, 0.0, None);
         assert_eq!(relay.node_id(), 5);
         assert_eq!(relay.get_coreside_linkid(), 2);
         assert_eq!(relay.get_edgeside_linkid(), 3);
@@ -653,28 +466,35 @@ mod tests {
 
     #[test]
     fn test_node_factory() {
-        let client = create_node("ClientBasic", 1, Some(0), None).unwrap();
+        use std::collections::HashMap;
+        
+        let empty_params = HashMap::new();
+        
+        let client = create_node("ClientBasic", 1, Some(0), None, &empty_params).unwrap();
         assert_eq!(client.node_id(), 1);
         assert_eq!(client.type_name(), "ClientBasic");
 
-        let router = create_node("RouterBasic", 2, Some(0), Some(1)).unwrap();
+        let router = create_node("RouterBasic", 2, Some(0), Some(1), &empty_params).unwrap();
         assert_eq!(router.node_id(), 2);
         assert_eq!(router.type_name(), "RouterBasic");
 
-        let server = create_node("TrafficServerBasic", 3, None, Some(0)).unwrap();
+        let server = create_node("TrafficServerBasic", 3, None, Some(0), &empty_params).unwrap();
         assert_eq!(server.node_id(), 3);
         assert_eq!(server.type_name(), "TrafficServerBasic");
 
-        // Test new MBN node types
-        let client_mbn = create_node("ClientMBN", 4, Some(2), None).unwrap();
+        // Test new MBN node types - these require current_time parameter
+        let mut mbn_params = HashMap::new();
+        mbn_params.insert("current_time".to_string(), "0".to_string()); // 0 nanoseconds from now
+        
+        let client_mbn = create_node("ClientMBN", 4, Some(2), None, &mbn_params).unwrap();
         assert_eq!(client_mbn.node_id(), 4);
         assert_eq!(client_mbn.type_name(), "ClientMBN");
 
-        let relay_mbn = create_node("RelayMBN", 5, Some(2), Some(3)).unwrap();
+        let relay_mbn = create_node("RelayMBN", 5, Some(2), Some(3), &mbn_params).unwrap();
         assert_eq!(relay_mbn.node_id(), 5);
         assert_eq!(relay_mbn.type_name(), "RelayMBN");
 
-        let invalid = create_node("InvalidType", 6, None, None);
+        let invalid = create_node("InvalidType", 6, None, None, &empty_params);
         assert!(invalid.is_err());
     }
 }

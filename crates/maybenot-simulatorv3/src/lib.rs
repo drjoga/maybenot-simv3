@@ -1,6 +1,7 @@
 
 pub mod events;
 pub mod nodes;
+pub mod nodesMBN;
 pub mod links;
 pub mod network;
 pub mod queue;
@@ -510,30 +511,45 @@ pub fn simul_advanced(
     // put the mocked current time at the first event
     let mut current_time = sq.earliest_event_instant;
 
-    let mut client = SimState::new(
-        machines_client,
-        current_time,
-        args.max_padding_frac_client,
-        args.max_blocking_frac_client,
-        //args.clone().client_integration,
-        args.insecure_rng_seed,
-    );
-    let mut server = SimState::new(
-        machines_server,
-        current_time,
-        args.max_padding_frac_server,
-        args.max_blocking_frac_server,
-        //args.clone().server_integration,
-        // if we have an insecure seed, we use the next number in the sequence
-        // to avoid the same seed for both client and server
-        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
-    );
+    // Initialize MBN nodes with SimState if they exist
+    if topology.has_mb {
+        // Initialize client MBN node if it exists
+        if let Some(client_node) = topology.nodes.get(topology.mb_client) {
+            if let crate::nodes::NodeType::ClientMBN(client_mbn) = client_node {
+                // Update the SimState in the existing node
+                let new_state = SimState::new(
+                    machines_client.to_vec(),
+                    current_time,
+                    args.max_padding_frac_client,
+                    args.max_blocking_frac_client,
+                    args.insecure_rng_seed,
+                );
+                *client_mbn.sim_state.borrow_mut() = new_state;
+            }
+        }
+
+        // Initialize server MBN node if it exists  
+        if let Some(server_node) = topology.nodes.get(topology.mb_server) {
+            if let crate::nodes::NodeType::RelayMBN(relay_mbn) = server_node {
+                // Update the SimState in the existing node
+                let new_state = SimState::new(
+                    machines_server.to_vec(),
+                    current_time,
+                    args.max_padding_frac_server,
+                    args.max_blocking_frac_server,
+                    args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
+                );
+                *relay_mbn.sim_state.borrow_mut() = new_state;
+            }
+        }
+    }
+
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
     let mut sim_iterations = 0;
     let _start_time = current_time;
-    while let Some(next) = pick_next(sq, &mut client, &mut server, topology, linkstate, current_time) {
+    while let Some(next) = pick_next_node_based(sq, topology, linkstate, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -551,17 +567,24 @@ pub fn simul_advanced(
             _ => {}
         }
 
-        if let Some(blocking_until) = client.blocking_until {
-            debug!(
-                "sim(): client is blocked until time {:#?}",
-                blocking_until.duration_since(sq.zero_instant)
-            );
-        }
-        if let Some(blocking_until) = server.blocking_until {
-            debug!(
-                "sim(): server is blocked until time {:#?}",
-                blocking_until.duration_since(sq.zero_instant)
-            );
+        // Debug blocking status from nodes
+        if topology.has_mb {
+            if let Some(crate::nodes::NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+                if let Some(blocking_until) = client_mbn.sim_state.borrow().blocking_until {
+                    debug!(
+                        "sim(): client is blocked until time {:#?}",
+                        blocking_until.duration_since(sq.zero_instant)
+                    );
+                }
+            }
+            if let Some(crate::nodes::NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+                if let Some(blocking_until) = relay_mbn.sim_state.borrow().blocking_until {
+                    debug!(
+                        "sim(): server is blocked until time {:#?}",
+                        blocking_until.duration_since(sq.zero_instant)
+                    );
+                }
+            }
         }
 
 
@@ -570,12 +593,19 @@ pub fn simul_advanced(
         topology.nodes[next.node_idx]
             .handle_event(&next, &topology, linkstate, sq);
 
-        if next.node_idx == topology.mb_client {
-            debug!("sim(): trigger @client framework {:?}", next.event);
-            trigger_update(&mut client, &next, &current_time, sq, topology, true);
-        } else if next.node_idx == topology.mb_server {
-            debug!("sim(): trigger @server framework {:?}", next.event);
-            trigger_update(&mut server, &next, &current_time, sq, topology, false);
+        // Call trigger_update on MBN nodes after handling the event
+        if topology.has_mb {
+            if next.node_idx == topology.mb_client {
+                debug!("sim(): trigger @client framework {:?}", next.event);
+                if let Some(crate::nodes::NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+                    client_mbn.trigger_update(&next, &current_time, sq, topology);
+                }
+            } else if next.node_idx == topology.mb_server {
+                debug!("sim(): trigger @server framework {:?}", next.event);
+                if let Some(crate::nodes::NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+                    relay_mbn.trigger_update(&next, &current_time, sq, topology);
+                }
+            }
         }
         
         // get actions, update scheduled actions
@@ -811,6 +841,223 @@ fn pick_next<M: AsRef<[Machine]>>(
     }   
     pick_next(sq, client, server, topology, _linkstate, current_time)
     
+}
+
+// Node-based version of pick_next that queries nodes directly instead of using global SimState
+fn pick_next_node_based(
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    _linkstate: &mut NetworkLinkstate,
+    current_time: Instant,
+) -> Option<SimulEvent> {
+    use crate::nodes::NodeType;
+    
+    // Collect scheduled actions and internal timers from MBN nodes
+    let mut min_scheduled_action = Duration::MAX;
+    let mut min_internal_timer = Duration::MAX;
+    let mut client_blocking_until: Option<Instant> = None;
+    let mut server_blocking_until: Option<Instant> = None;
+
+    // Check client MBN node
+    if topology.has_mb {
+        if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+            let state = client_mbn.sim_state.borrow();
+            
+            // Check scheduled actions
+            for action in state.scheduled_action.iter().flatten() {
+                if action.time >= current_time {
+                    let duration = action.time.duration_since(current_time);
+                    if duration < min_scheduled_action {
+                        min_scheduled_action = duration;
+                    }
+                }
+            }
+            
+            // Check internal timers
+            for timer in state.scheduled_internal_timer.iter().flatten() {
+                if *timer >= current_time {
+                    let duration = timer.duration_since(current_time);
+                    if duration < min_internal_timer {
+                        min_internal_timer = duration;
+                    }
+                }
+            }
+            
+            client_blocking_until = state.blocking_until;
+        }
+
+        // Check server MBN node
+        if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+            let state = relay_mbn.sim_state.borrow();
+            
+            // Check scheduled actions
+            for action in state.scheduled_action.iter().flatten() {
+                if action.time >= current_time {
+                    let duration = action.time.duration_since(current_time);
+                    if duration < min_scheduled_action {
+                        min_scheduled_action = duration;
+                    }
+                }
+            }
+            
+            // Check internal timers
+            for timer in state.scheduled_internal_timer.iter().flatten() {
+                if *timer >= current_time {
+                    let duration = timer.duration_since(current_time);
+                    if duration < min_internal_timer {
+                        min_internal_timer = duration;
+                    }
+                }
+            }
+            
+            server_blocking_until = state.blocking_until;
+        }
+    }
+
+    // Check blocking expiry
+    let (min_blocking, blocking_is_client) = match (client_blocking_until, server_blocking_until) {
+        (Some(c), Some(s)) => {
+            if c < s {
+                (c.duration_since(current_time), true)
+            } else {
+                (s.duration_since(current_time), false)
+            }
+        }
+        (Some(c), None) => (c.duration_since(current_time), true),
+        (None, Some(s)) => (s.duration_since(current_time), false),
+        (None, None) => (Duration::MAX, true),
+    };
+
+    // Check queue
+    let queue_next = sq.peek();
+    let queue_duration = match queue_next {
+        Some(event) => event.time.duration_since(current_time),
+        None => Duration::MAX,
+    };
+
+    // Debug output
+    if min_scheduled_action == Duration::MAX {
+        debug!("\tpick_next_node_based(): peek_scheduled_action = None");
+    } else {
+        debug!("\tpick_next_node_based(): peek_scheduled_action = {:?}", min_scheduled_action);
+    }
+
+    if min_internal_timer == Duration::MAX {
+        debug!("\tpick_next_node_based(): peek_scheduled_internal_timer = None");
+    } else {
+        debug!("\tpick_next_node_based(): peek_scheduled_internal_timer = {:?}", min_internal_timer);
+    }
+
+    if min_blocking == Duration::MAX {
+        debug!("\tpick_next_node_based(): peek_blocked_exp = None");
+    } else {
+        debug!("\tpick_next_node_based(): peek_blocked_exp = {:?}", min_blocking);
+    }
+
+    if queue_duration == Duration::MAX {
+        debug!("\tpick_next_node_based(): peek_queue = None");
+    } else {
+        debug!("\tpick_next_node_based(): peek_queue = {}", queue_next.unwrap().display_relative(sq));
+    }
+
+    // No next event?
+    if min_scheduled_action == Duration::MAX
+        && min_internal_timer == Duration::MAX
+        && min_blocking == Duration::MAX
+        && queue_duration == Duration::MAX
+    {
+        return None;
+    }
+
+    // Pick the earliest event
+    
+    // Blocking expiry is earliest
+    if min_blocking <= min_scheduled_action && min_blocking <= min_internal_timer && min_blocking <= queue_duration {
+        debug!("\tpick_next_node_based(): picked blocking");
+        
+        // Clear blocking state from the appropriate node
+        if topology.has_mb {
+            if blocking_is_client {
+                if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+                    client_mbn.sim_state.borrow_mut().blocking_until = None;
+                }
+            } else {
+                if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+                    relay_mbn.sim_state.borrow_mut().blocking_until = None;
+                }
+            }
+        }
+
+        let e = SimulEvent {
+            event: TriggerEvent::BlockingEnd,
+            time: current_time + min_blocking,
+            packet_idx: usize::MAX,
+            node_idx: if blocking_is_client {
+                topology.mb_client
+            } else {
+                topology.mb_server
+            },
+            link_idx: if blocking_is_client {
+                topology.nodes[topology.mb_client].get_coreside_linkid()
+            } else {
+                topology.nodes[topology.mb_server].get_edgeside_linkid()
+            },
+            bypass: false,
+            replace: false,
+            contains_padding: false,
+            q_sequence_nr: 0,
+            #[cfg(debug_assertions)]
+            debug_note: None,
+        };
+        return Some(e);
+    }
+
+    if queue_duration <= min_scheduled_action && queue_duration <= min_internal_timer {
+        debug!("\tpick_next_node_based(): picked queue");
+        return sq.pop();
+    }
+
+
+    // Internal timer is next
+    if min_internal_timer <= min_scheduled_action  {
+        debug!("\tpick_next_node_based(): picked internal timer");
+        let target_time = current_time + min_internal_timer;
+        
+        // Find and execute the internal timer from the appropriate node
+        if topology.has_mb {
+            if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+                if let Some(event) = client_mbn.do_internal_timer(target_time) {
+                    return Some(event);
+                }
+            }
+            if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+                if let Some(event) = relay_mbn.do_internal_timer(target_time) {
+                    return Some(event);
+                }
+            }
+        }
+    }
+
+
+    // Scheduled action is last
+    debug!("\tpick_next_node_based(): picked scheduled action");
+    let target_time = current_time + min_scheduled_action;
+    
+    // Find and execute the scheduled action from the appropriate node
+    if topology.has_mb {
+        if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+            if let Some(event) = client_mbn.do_scheduled_action(target_time) {
+                return Some(event);
+            }
+        }
+        if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+            if let Some(event) = relay_mbn.do_scheduled_action(target_time) {
+                return Some(event);
+            }
+        }
+    }
+    None
+
 }
 
 
