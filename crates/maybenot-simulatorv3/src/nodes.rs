@@ -457,6 +457,9 @@ impl ClientMBN {
                 check_dependent_packets(s_event, sq, outgoing_link);
             }
             TriggerEvent::PaddingRecv => {}
+            TriggerEvent::BlockingBegin { machine } => {}
+            TriggerEvent::BlockingEnd => {}
+
             _ => {
                 panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
             }
@@ -588,6 +591,8 @@ impl RelayMBN {
                 sq.push(forward_s_event);
             }
             TriggerEvent::PaddingRecv => {}
+            TriggerEvent::BlockingBegin { machine } => {}
+            TriggerEvent::BlockingEnd => {}
     
             _ => {
                 panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);

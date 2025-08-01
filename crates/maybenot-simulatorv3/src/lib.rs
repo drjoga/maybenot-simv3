@@ -113,7 +113,9 @@ impl SimulEvent {
         };
         format!(
             "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, time_since_zero, self.packet_idx, self.node_idx, self.link_idx,
+            self.event, time_since_zero, self.packet_idx, 
+            if self.packet_idx == usize::MAX { "MAX".to_string() } else {self.packet_idx.to_string() },
+            self.link_idx,
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
