@@ -10,6 +10,124 @@ pub trait MBNNode {
     fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>>;
     fn get_node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
+    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>>;
+    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>>;
+}
+
+// Helper function to handle TunnelSent events with blocking logic
+pub fn mbn_handle_tunnel_sent<T: MBNNode>(
+    node: &T,
+    s_event: &SimulEvent,
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    linkstate: &mut NetworkLinkstate,
+) {
+    let sim_state = node.get_sim_state().borrow();
+    
+    // Check if we're currently blocking
+    if let Some(blocking_until) = sim_state.blocking_until {
+        if s_event.time < blocking_until {
+            // We're in blocking period - queue the event
+            let blocking_bypassable = sim_state.blocking_bypassable;
+            drop(sim_state); // Release borrow before queuing
+            
+            debug!("Blocking TunnelSent at {:?} until {:?}", s_event.time, blocking_until);
+            
+            if blocking_bypassable && s_event.bypass {
+                // Bypassable blocking and event has bypass flag - send immediately
+                debug!("Bypassable blocking with bypass flag - sending immediately");
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+            } else if blocking_bypassable {
+                // Bypassable blocking but no bypass flag - queue in bypassable queue
+                debug!("Queuing in bypassable queue");
+                node.get_bypassable_queue().borrow_mut().push(s_event.clone());
+            } else {
+                // Non-bypassable blocking - queue in blocking queue
+                debug!("Queuing in blocking queue");
+                node.get_blocking_queue().borrow_mut().push(s_event.clone());
+            }
+            return;
+        }
+    }
+    
+    // Not blocking or past blocking time - send immediately
+    drop(sim_state);
+    debug!("No blocking - sending TunnelSent immediately at {:?}", s_event.time);
+    crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+}
+
+// Helper function to handle TunnelSent event creation with blocking logic
+pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
+    node: &T,
+    s_event: &SimulEvent,
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    linkstate: &mut NetworkLinkstate,
+) {
+    let sim_state = node.get_sim_state().borrow();
+    
+    // Check if we're currently blocking
+    if let Some(blocking_until) = sim_state.blocking_until {
+        if s_event.time < blocking_until {
+            // We're in blocking period - queue the event without adding to simulation queue
+            let blocking_bypassable = sim_state.blocking_bypassable;
+            drop(sim_state); // Release borrow before queuing
+            
+            debug!("Blocking TunnelSent creation at {:?} until {:?}", s_event.time, blocking_until);
+            
+            if blocking_bypassable && s_event.bypass {
+                // Bypassable blocking and event has bypass flag - send immediately
+                debug!("Bypassable blocking with bypass flag - adding to queue immediately");
+                sq.push(s_event.clone());
+            } else if blocking_bypassable {
+                // Bypassable blocking but no bypass flag - queue in bypassable queue
+                debug!("Queuing TunnelSent in bypassable queue");
+                node.get_bypassable_queue().borrow_mut().push(s_event.clone());
+            } else {
+                // Non-bypassable blocking - queue in blocking queue
+                debug!("Queuing TunnelSent in blocking queue");
+                node.get_blocking_queue().borrow_mut().push(s_event.clone());
+            }
+            return;
+        }
+    }
+    
+    // Not blocking or past blocking time - add to simulation queue immediately
+    drop(sim_state);
+    debug!("No blocking - adding TunnelSent to queue immediately at {:?}", s_event.time);
+    sq.push(s_event.clone());
+}
+
+// Helper function to release queued events when blocking ends
+pub fn mbn_release_blocked_events<T: MBNNode>(
+    node: &T,
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    linkstate: &mut NetworkLinkstate,
+    current_time: Instant,
+) {
+    // Release all events from both queues
+    let mut blocking_events = node.get_blocking_queue().borrow_mut();
+    let mut bypassable_events = node.get_bypassable_queue().borrow_mut();
+    
+    debug!("Releasing {} blocking events and {} bypassable events", 
+           blocking_events.len(), bypassable_events.len());
+    
+    // Move all blocking queue events to simulation queue with updated time
+    for mut event in blocking_events.drain(..) {
+        debug!("Releasing blocked event: {:?} originally at {:?}, now at {:?}", 
+               event.event, event.time, current_time);
+        event.time = current_time;
+        sq.push(event);
+    }
+    
+    // Move all bypassable queue events to simulation queue with updated time
+    for mut event in bypassable_events.drain(..) {
+        debug!("Releasing bypassable event: {:?} originally at {:?}, now at {:?}", 
+               event.event, event.time, current_time);
+        event.time = current_time;
+        sq.push(event);
+    }
 }
 
 // Generic helper functions for MBN operations
@@ -159,7 +277,8 @@ pub fn mbn_do_internal_timer<T: MBNNode>(
 
 pub fn mbn_do_scheduled_action<T: MBNNode>(
     node: &T,
-    target: Instant
+    target: Instant,
+    sq: &mut SimulQueue
 ) -> Option<SimulEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut a: Option<ScheduledAction> = None;
@@ -216,6 +335,8 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
             if replace || block > state.blocking_until.unwrap_or(a.time) {
                 state.blocking_until = Some(block);
                 state.blocking_bypassable = bypass;
+                // BlockingEnd events are generated by the main simulation loop
+                // to ensure proper timing relative to other events
             }
             event_bypass = state.blocking_bypassable;
 
@@ -243,6 +364,8 @@ pub struct ClientMBN {
     pub id: usize,
     coreside_link: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub blocking_queue: RefCell<Vec<SimulEvent>>,
+    pub bypassable_queue: RefCell<Vec<SimulEvent>>,
 }
 
 impl MBNNode for ClientMBN {
@@ -256,6 +379,14 @@ impl MBNNode for ClientMBN {
     
     fn get_action_link_id(&self) -> usize {
         self.coreside_link
+    }
+    
+    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>> {
+        &self.blocking_queue
+    }
+    
+    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>> {
+        &self.bypassable_queue
     }
 }
 
@@ -281,6 +412,8 @@ impl ClientMBN {
             id,
             coreside_link,
             sim_state,
+            blocking_queue: RefCell::new(Vec::new()),
+            bypassable_queue: RefCell::new(Vec::new()),
         }
     }
 
@@ -300,12 +433,13 @@ impl ClientMBN {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                sq.push(forward_s_event);
+                // Use blocking-aware logic to decide whether to queue immediately or block
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
             }
             
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                mbn_handle_tunnel_sent(self, s_event, sq, topology, linkstate);
             }
 
 
@@ -323,7 +457,8 @@ impl ClientMBN {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                sq.push(forward_s_event);
+                // Use blocking-aware logic to decide whether to queue immediately or block
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
             }
 
 
@@ -361,8 +496,18 @@ impl ClientMBN {
                 crate::nodes::check_dependent_packets(s_event, sq, outgoing_link);
             }
             TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { machine } => {}
-            TriggerEvent::BlockingEnd => {}
+            TriggerEvent::BlockingBegin { .. } => {
+                // Blocking state is already updated in mbn_do_scheduled_action
+            }
+            TriggerEvent::BlockingEnd => {
+                // Release any queued events with current time
+                mbn_release_blocked_events(self, sq, topology, linkstate, s_event.time);
+                
+                // Clear blocking state
+                let mut state = self.sim_state.borrow_mut();
+                state.blocking_until = None;
+                state.blocking_bypassable = false;
+            }
 
             _ => {
                 panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
@@ -384,8 +529,8 @@ impl ClientMBN {
         mbn_do_internal_timer(self, target)
     }
 
-    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target)
+    pub fn do_scheduled_action(&self, target: Instant, sq: &mut SimulQueue) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target, sq)
     }
 
     pub fn node_id(&self) -> usize {
@@ -407,6 +552,8 @@ pub struct RelayMBN {
     pub coreside_link: usize,
     pub edgeside_link: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub blocking_queue: RefCell<Vec<SimulEvent>>,
+    pub bypassable_queue: RefCell<Vec<SimulEvent>>,
 }
 
 impl MBNNode for RelayMBN {
@@ -420,6 +567,14 @@ impl MBNNode for RelayMBN {
     
     fn get_action_link_id(&self) -> usize {
         self.edgeside_link
+    }
+    
+    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>> {
+        &self.blocking_queue
+    }
+    
+    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>> {
+        &self.bypassable_queue
     }
 }
 
@@ -447,6 +602,8 @@ impl RelayMBN {
             coreside_link,
             edgeside_link,
             sim_state,
+            blocking_queue: RefCell::new(Vec::new()),
+            bypassable_queue: RefCell::new(Vec::new()),
         }
     }
 
@@ -517,7 +674,8 @@ impl RelayMBN {
                         #[cfg(debug_assertions)]
                         debug_note: None,
                     };
-                    sq.push(forward_s_event);
+                    // Use blocking-aware logic to decide whether to queue immediately or block
+                    mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
                 } else {
                     panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
                 }
@@ -525,7 +683,7 @@ impl RelayMBN {
 
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                mbn_handle_tunnel_sent(self, s_event, sq, topology, linkstate);
             }
 
 
@@ -543,11 +701,22 @@ impl RelayMBN {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                sq.push(forward_s_event);
+                // Use blocking-aware logic to decide whether to queue immediately or block
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
             }
             TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { machine } => {}
-            TriggerEvent::BlockingEnd => {}
+            TriggerEvent::BlockingBegin { .. } => {
+                // Blocking state is already updated in mbn_do_scheduled_action
+            }
+            TriggerEvent::BlockingEnd => {
+                // Release any queued events with current time
+                mbn_release_blocked_events(self, sq, topology, linkstate, s_event.time);
+                
+                // Clear blocking state
+                let mut state = self.sim_state.borrow_mut();
+                state.blocking_until = None;
+                state.blocking_bypassable = false;
+            }
     
             _ => {
                 panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);
@@ -569,8 +738,8 @@ impl RelayMBN {
         mbn_do_internal_timer(self, target)
     }
 
-    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target)
+    pub fn do_scheduled_action(&self, target: Instant, sq: &mut SimulQueue) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target, sq)
     }
 
     pub fn node_id(&self) -> usize {

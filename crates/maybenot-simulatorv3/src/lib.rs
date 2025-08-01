@@ -549,7 +549,7 @@ pub fn simul_advanced(
 
     let mut sim_iterations = 0;
     let _start_time = current_time;
-    while let Some(next) = pick_next_node_based(sq, topology, linkstate, current_time) {
+    while let Some(next) = pick_next(sq, topology, linkstate, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -696,7 +696,7 @@ pub fn simul_advanced(
     trace
 }
 
-fn pick_next<M: AsRef<[Machine]>>(
+fn pick_next_old<M: AsRef<[Machine]>>(
     sq: &mut SimulQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
@@ -828,7 +828,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         if let Some(a) = act {
             sq.push(a.clone());
         }
-        return pick_next(sq, client, server, topology, _linkstate, current_time);
+        return pick_next_old(sq, client, server, topology, _linkstate, current_time);
     }
 
     // what's left is scheduled actions: find the action act on the action,
@@ -839,9 +839,23 @@ fn pick_next<M: AsRef<[Machine]>>(
     if let Some(a) = act {
         sq.push(a.clone());
     }   
-    pick_next(sq, client, server, topology, _linkstate, current_time)
+    pick_next_old(sq, client, server, topology, _linkstate, current_time)
     
 }
+
+fn pick_next(
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    _linkstate: &mut NetworkLinkstate,
+    current_time: Instant,
+) -> Option<SimulEvent> {
+    if topology.has_mb {
+        pick_next_node_based(sq, topology, _linkstate, current_time)
+    } else {
+        sq.pop()
+    }
+}
+
 
 // Node-based version of pick_next that queries nodes directly instead of using global SimState
 fn pick_next_node_based(
@@ -1046,12 +1060,12 @@ fn pick_next_node_based(
     // Find and execute the scheduled action from the appropriate node
     if topology.has_mb {
         if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
-            if let Some(event) = client_mbn.do_scheduled_action(target_time) {
+            if let Some(event) = client_mbn.do_scheduled_action(target_time, sq) {
                 return Some(event);
             }
         }
         if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
-            if let Some(event) = relay_mbn.do_scheduled_action(target_time) {
+            if let Some(event) = relay_mbn.do_scheduled_action(target_time, sq) {
                 return Some(event);
             }
         }
