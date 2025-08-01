@@ -157,10 +157,10 @@ fn make_network_receive_from_sent (s_event: &SimulEvent, topology: &NetworkTopol
     let to_node = linkstate.links[link_id].to_node();
     let prop_us = linkstate.links[link_id].prop_us();
     
-    debug!("\tNode {} sending NormalSent -> creating NormalRecv at node via link {}", 
+    debug!("\tNode {} sending xxSent -> creating xxRecv at node via link {}", 
             s_event.node_idx, link_id);
     //print s_event time and sq.earliest_event_instant
-    debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
+    //debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
     let current_duration = s_event.time.checked_duration_since(sq.earliest_event_instant)
         .expect(&format!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_idx));
     
@@ -456,6 +456,7 @@ impl ClientMBN {
 
                 check_dependent_packets(s_event, sq, outgoing_link);
             }
+            TriggerEvent::PaddingRecv => {}
             _ => {
                 panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
             }
@@ -586,6 +587,8 @@ impl RelayMBN {
                 };
                 sq.push(forward_s_event);
             }
+            TriggerEvent::PaddingRecv => {}
+    
             _ => {
                 panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);
             }

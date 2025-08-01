@@ -44,10 +44,10 @@ pub fn run_test_sim(
     let (topology, mut linkstate) = Network::from_toml_str(&toml_str)
         .expect("Failed to parse the network configuration from TOML string");
     print!("toml string: {}\n", toml_str);
-    // The trafficserver events require incresing the max length compared to what is specced in tests
-    let max_trace_length = 4 * max_trace_length;
+    // The trafficserver events require incresing the max length compared to what is specced in old tests
+    let max_trace_length = 2 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
-    args.continue_after_all_normal_packets_processed = true;
+    args.continue_after_all_normal_packets_processed = false;
     let mut sq = make_sq(input.to_string(), &topology, delay, as_ms);
     let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args);
     //print!("{:?}\n\n", trace);
@@ -55,7 +55,7 @@ pub fn run_test_sim(
     for event in &trace {
         println!("{}", event.display_full(&sq,&topology,&linkstate));
     }
-    let mut fmt = fmt_trace(trace.as_slice(), client, as_ms, topology);
+    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -219,7 +219,7 @@ pub fn run_test_sim_trace(
         simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args)
     });
 
-    let mut fmt = fmt_trace(trace.as_slice(), client, as_ms, topology);
+    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -229,7 +229,7 @@ pub fn run_test_sim_trace(
     }
 }
 
-fn fmt_trace(trace: &[SimulEvent], client: bool, ms: bool, topology: NetworkTopology) -> String {
+fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology) -> String {
     fn fmt_event(e: &SimulEvent, base: Instant, ms: bool) -> String {
         format!(
             "{:1},{}",
@@ -244,7 +244,7 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, ms: bool, topology: NetworkTopo
     let base = trace[0].time;
     let mut s: String = "".to_string();
     for s_event in trace {
-        if s_event.event != TriggerEvent::TunnelSent && s_event.event != TriggerEvent::TunnelRecv {
+        if only_packets && s_event.event != TriggerEvent::TunnelSent && s_event.event != TriggerEvent::TunnelRecv {
             continue; // Skip non-tunnel events
         }
         if client {
@@ -253,7 +253,10 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, ms: bool, topology: NetworkTopo
             }
         } else {
             // Only show events on the servers "interface" towards client
-            if s_event.node_idx == topology.mb_server {
+            if s_event.node_idx == topology.mb_server && 
+            (s_event.link_idx == topology.nodes[topology.mb_server].get_edgeside_linkid()  || 
+            // FIXME: Remove hardcoding!!
+            s_event.link_idx == 2) {
                 s = format!("{} {}", s, fmt_event(s_event, base, ms));
             }
         }
@@ -301,6 +304,8 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
         .collect::<Vec<_>>()
         .join(" ");
 */
+
+    sq.highest_depend_tx = s.split_whitespace().count();
     let traffic_events = traffic_trace_prepare(&s, sq.zero_instant, ttrace_ts_to_c_delay_ns);
     print!("----------------------------------\n");
     event_schedule_print(&traffic_events, ttrace_ts_to_c_delay_ns);

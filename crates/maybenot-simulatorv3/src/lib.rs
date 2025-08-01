@@ -16,12 +16,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use maybenot::TriggerEvent;
 
 use log::{debug, warn};
 use network::{NetworkTopology, NetworkLinkstate};
 
-use maybenot::{Framework, Machine, TriggerAction};
+use maybenot::{Framework, Machine,  MachineId, Timer, TriggerAction, TriggerEvent};
 use rand::{rngs::ThreadRng, RngCore};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
@@ -29,7 +28,7 @@ use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
     queue_peek::{
-        peek_scheduled_action, peek_scheduled_internal_timer,
+        peek_blocked_exp, peek_scheduled_action, peek_scheduled_internal_timer,
     },
 };
 
@@ -135,7 +134,7 @@ impl SimulEvent {
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
             format!("{:?}", self.event),
             time_since_zero,
-            self.packet_idx,
+            if self.packet_idx == usize::MAX { "MAX".to_string() } else {self.packet_idx.to_string() },
             self.node_idx,
             topology.nodes[self.node_idx].type_name(),
             self.link_idx,
@@ -190,6 +189,7 @@ pub struct SimulQueue {
     heap: BinaryHeap<SimulEvent>,
     pub(crate) dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
     next_q_sequence_nr: u64,
+    pub highest_depend_tx: usize,
 }
 
 impl SimulQueue {
@@ -201,6 +201,7 @@ impl SimulQueue {
             heap: BinaryHeap::new(),
             dependent_tx: HashMap::new(),
             next_q_sequence_nr: 0,
+            highest_depend_tx: 0,
         }
     }
 
@@ -224,6 +225,12 @@ impl SimulQueue {
 
     pub fn is_empty(&self) -> bool {
         self.heap.is_empty()
+    }
+
+    pub fn no_normal_packets(&self) -> bool {
+        self.heap.iter().all(|e| {
+            e.packet_idx > self.highest_depend_tx
+        }) 
     }
 
 }
@@ -494,7 +501,7 @@ pub fn simul_advanced(
         args.max_trace_length
     } else {
         // a rough estimate of the number of events in the trace
-        sq.len() * 2
+        sq.len() * 5
     };
     let mut trace: Vec<SimulEvent> = Vec::with_capacity(expected_trace_len);
 
@@ -542,18 +549,33 @@ pub fn simul_advanced(
             _ => {}
         }
 
+        if let Some(blocking_until) = client.blocking_until {
+            debug!(
+                "sim(): client is blocked until time {:#?}",
+                blocking_until.duration_since(sq.zero_instant)
+            );
+        }
+        if let Some(blocking_until) = server.blocking_until {
+            debug!(
+                "sim(): server is blocked until time {:#?}",
+                blocking_until.duration_since(sq.zero_instant)
+            );
+        }
+
+
         debug!("sim(): next event: {}", next.display_relative(sq));
 
         topology.nodes[next.node_idx]
             .handle_event(&next, &topology, linkstate, sq);
+
+        if next.node_idx == topology.mb_client {
+            debug!("sim(): trigger @client framework {:?}", next.event);
+            trigger_update(&mut client, &next, &current_time, sq, topology, true);
+        } else if next.node_idx == topology.mb_server {
+            debug!("sim(): trigger @server framework {:?}", next.event);
+            trigger_update(&mut server, &next, &current_time, sq, topology, false);
+        }
         
-        // Add any response events to the simulation queue
-        //for response_event in response_events {
-        //    sq.push(response_event);
-        //} 
-
-        // Call the .handle function on the handler appropriate for the node type of the node having the event.
-
         // get actions, update scheduled actions
         debug!("sim(): trigger framework {:?}", next.event);
 
@@ -624,10 +646,12 @@ pub fn simul_advanced(
         }
 
         // check if we should stop after all normal packets have been processed
-        //if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
-        //    debug!("sim(): we done, all normal packets processed");
-        //    break;
-        //}
+        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
+            debug!("sim(): we done, all normal packets processed");
+            print!("Highest dependent tx: {}", sq.highest_depend_tx);
+            print!("heap: {:?}", sq.heap);
+            break;
+        }
 
         debug!("sim(): main loop end, more work?");
         debug!("#########################################################");
@@ -644,40 +668,103 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimulQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
-    _topology: &NetworkTopology,
+    topology: &NetworkTopology,
     _linkstate: &mut NetworkLinkstate,
     current_time: Instant,
 ) -> Option<SimulEvent> {
     // find the earliest scheduled action, internal timer, block expiry,
-    // aggregate delay, and queued events to determine the next event
+    // and queued events to determine the next event
     let s = peek_scheduled_action(
         &client.scheduled_action,
         &server.scheduled_action,
         current_time,
     );
-    debug!("\tpick_next(): peek_scheduled_action = {:?}", s);
+    if s == Duration::MAX {
+        debug!("\tpick_next(): peek_scheduled_action = None");
+    } else {
+        debug!("\tpick_next(): peek_scheduled_action = {:?}", s);
+    }
 
     let i = peek_scheduled_internal_timer(
         &client.scheduled_internal_timer,
         &server.scheduled_internal_timer,
         current_time,
     );
-    debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", i);
+    if i == Duration::MAX {
+        debug!("\tpick_next(): peek_scheduled_internal_timer = None");
+    } else {
+        debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", i);
+    }
+
+    let (b, b_is_client) =
+        peek_blocked_exp(client.blocking_until, server.blocking_until, current_time);
+    if b == Duration::MAX {
+        debug!("\tpick_next(): peek_blocked_exp = None");
+    } else {
+        debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
+    }
 
     let q = sq.peek();
     let qt = match q {
         Some(event) => event.time - current_time,
         None => Duration::MAX,
     };
-    debug!("\tpick_next(): peek_queue = {:?}", q);
+    if qt == Duration::MAX {
+        debug!("\tpick_next(): peek_queue = None");
+    } else {
+        debug!("\tpick_next(): peek_queue = {}", q.unwrap().display_relative(&sq));
+    }
 
     // no next?
     if s == Duration::MAX
         && i == Duration::MAX
+        && b == Duration::MAX
         && qt == Duration::MAX
     {
         return None;
     }
+
+
+    // next is blocking expiry, 
+    if b <= s && b <= i && b <= qt {
+        debug!("\tpick_next(): picked blocking");
+        // create SimEvent and turn off blocking, ASSUMPTION: block outgoing is
+        // reported from integration
+        //let delay: Duration;
+        if b_is_client {
+            //delay = client.reporting_delay();
+            client.blocking_until = None;
+        } else {
+            //delay = server.reporting_delay();
+            server.blocking_until = None;
+        }
+
+        let e = SimulEvent {
+            event: TriggerEvent::BlockingEnd,
+            time: current_time + b, //,+ delay,
+            //integration_delay: delay,
+            //client: b_is_client,
+            packet_idx: usize::MAX,
+            node_idx: if b_is_client {
+                topology.mb_client
+            } else {
+                topology.mb_server
+            },
+            link_idx: if b_is_client {
+                topology.nodes[topology.mb_client].get_coreside_linkid()
+            } else {
+                topology.nodes[topology.mb_server].get_edgeside_linkid()
+            },
+            bypass: false,
+            replace: false,
+            contains_padding: false,
+            q_sequence_nr: 0,
+            #[cfg(debug_assertions)]
+            debug_note: None,
+        };
+        return Some(e);
+    }
+
 
     // We prioritize the queue next: in general, stuff happens faster outside
     // the framework than inside it. On overload, the user of the framework will
@@ -687,8 +774,8 @@ fn pick_next<M: AsRef<[Machine]>>(
             "\tpick_next(): picked queue",
         );
         let mut tmp = sq.pop().unwrap();
-        debug!("\tpick_next(): popped from queue {:?}", tmp);
-        // check if blocking moves the event forward in time
+        debug!("\tpick_next(): popped from queue");
+        // check if blocking moves the event forward in time  TODO: Remove when blocking is implemented
         if current_time + qt > tmp.time {
             // move the event forward in time
             tmp.time = current_time + qt;
@@ -697,34 +784,370 @@ fn pick_next<M: AsRef<[Machine]>>(
         return Some(tmp);
     }
 
-    return None;
+    //return None;
 
-    /* 
+     
     // next we pick internal events, which should be faster than scheduled
     // actions due to less work
     if i <= s {
         debug!("\tpick_next(): picked internal timer");
         let target = current_time + i;
-        let act = do_internal_timer(client, server, target);
+        let act = do_internal_timer(client, server, target, topology);
         if let Some(a) = act {
-            sq.push_sim(a.clone());
+            sq.push(a.clone());
         }
-        return pick_next(sq, client, server, network, current_time);
+        return pick_next(sq, client, server, topology, _linkstate, current_time);
     }
 
     // what's left is scheduled actions: find the action act on the action,
     // putting the event into the sim queue, and then recurse
     debug!("\tpick_next(): picked scheduled action");
     let target = current_time + s;
-    let act = do_scheduled_action(client, server, target);
+    let act = do_scheduled_action(client, server, target, topology);
     if let Some(a) = act {
-        sq.push_sim(a.clone());
-    }
-    */
-    // No wasteful recursion
-    // pick_next(sq, client, server, network, current_time)
+        sq.push(a.clone());
+    }   
+    pick_next(sq, client, server, topology, _linkstate, current_time)
     
 }
+
+
+
+
+
+
+
+
+fn do_internal_timer<M: AsRef<[Machine]>>(
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
+    target: Instant,
+    topology: &NetworkTopology,
+) -> Option<SimulEvent> {
+    let mut machine: Option<MachineId> = None;
+    let mut is_client = false;
+
+    for (id, opt) in client.scheduled_internal_timer.iter_mut().enumerate() {
+        if let Some(a) = opt {
+            if *a == target {
+                machine = Some(MachineId::from_raw(id));
+                is_client = true;
+                *opt = None;
+                break;
+            }
+        }
+    }
+
+    if machine.is_none() {
+        for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
+            if let Some(a) = opt {
+                if *a == target {
+                    machine = Some(MachineId::from_raw(id));
+                    is_client = false;
+                    *opt = None;
+                    break;
+                }
+            }
+        }
+    }
+
+    assert!(machine.is_some(), "BUG: no internal action found");
+
+    // create SimEvent with TimerEnd
+    Some(SimulEvent {
+        event: TriggerEvent::TimerEnd {
+            machine: machine.unwrap(),
+        },
+        time: target,
+        //integration_delay: Duration::from_micros(0), // TODO: is this correct?
+        //client: is_client,
+            packet_idx: usize::MAX,
+            node_idx: if is_client {
+                topology.mb_client
+            } else {
+                topology.mb_server
+            },
+            link_idx: if is_client {
+                topology.nodes[topology.mb_client].get_coreside_linkid()
+            } else {
+                topology.nodes[topology.mb_server].get_edgeside_linkid()
+            },
+        bypass: false,
+        replace: false,
+        contains_padding: false,
+        q_sequence_nr: 0,
+        #[cfg(debug_assertions)]
+        debug_note: None,
+
+    })
+}
+
+
+
+fn do_scheduled_action<M: AsRef<[Machine]>>(
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
+    target: Instant,
+    topology: &NetworkTopology,
+) -> Option<SimulEvent> {
+    // find the action
+    let mut a: Option<ScheduledAction> = None;
+    let mut is_client = false;
+
+    for opt in client.scheduled_action.iter_mut() {
+        if let Some(sa) = opt {
+            if sa.time == target {
+                a = Some(sa.clone());
+                is_client = true;
+                *opt = None;
+                break;
+            }
+        }
+    }
+
+    // cannot schedule a None action, so if we found one, done
+    if a.is_none() {
+        for opt in server.scheduled_action.iter_mut() {
+            if let Some(sa) = opt {
+                if sa.time == target {
+                    a = Some(sa.clone());
+                    is_client = false;
+                    *opt = None;
+                    break;
+                }
+            }
+        }
+    }
+
+    // no action found
+    assert!(a.is_some(), "BUG: no action found");
+    let a = a.unwrap();
+
+    // Set node and link indices based on whether the action is for the client or server
+    let (node_idx, link_idx) = if is_client {
+        let idx = topology.mb_client;
+        (idx, topology.nodes[idx].get_coreside_linkid())
+    } else {
+        let idx = topology.mb_server;
+        (idx, topology.nodes[idx].get_edgeside_linkid())
+    };
+
+
+    // do the action
+    match a.action {
+        TriggerAction::Cancel { .. } => {
+            // this should never happen, bug
+            panic!("BUG: cancel action in scheduled action");
+        }
+        TriggerAction::UpdateTimer { .. } => {
+            // this should never happen, bug
+            panic!("BUG: update timer action in scheduled action");
+        }
+        TriggerAction::SendPadding {
+            timeout: _,
+            bypass,
+            replace,
+            machine,
+        } => {
+            /*let action_delay = if is_client {
+                client.action_delay()
+            } else {
+                server.action_delay()
+            };*/
+            Some(SimulEvent {
+                event: TriggerEvent::PaddingSent { machine },
+                time: a.time,
+                //integration_delay: action_delay,
+                //client: is_client,
+                packet_idx: usize::MAX,
+                node_idx,
+                link_idx,
+                bypass,
+                replace,
+                contains_padding: true,
+                q_sequence_nr: 0,
+                #[cfg(debug_assertions)]
+                debug_note: None,
+            }) 
+        }
+        TriggerAction::BlockOutgoing {
+            timeout: _,
+            duration,
+            bypass,
+            replace,
+            machine,
+        } => {
+            let block = a.time + duration;
+            let event_bypass;
+            /* 
+            // ASSUMPTION: block outgoing reported from integration
+            let total_delay = if is_client {
+                client.action_delay() + client.reporting_delay()
+            } else {
+                server.action_delay() + server.reporting_delay()
+            };
+            let reported = a.time + total_delay;
+            */
+            // should we update client/server blocking?
+            if is_client {
+                if replace || block > client.blocking_until.unwrap_or(a.time) {
+                    client.blocking_until = Some(block);
+                    client.blocking_bypassable = bypass;
+                }
+                event_bypass = client.blocking_bypassable;
+            } else {
+                if replace || block > server.blocking_until.unwrap_or(a.time) {
+                    server.blocking_until = Some(block);
+                    server.blocking_bypassable = bypass;
+                }
+                event_bypass = server.blocking_bypassable;
+            }
+
+            // event triggered regardless
+            Some(SimulEvent {
+                event: TriggerEvent::BlockingBegin { machine },
+                time: a.time, //reported,
+                //integration_delay: total_delay,
+                //client: is_client,
+                packet_idx: usize::MAX,
+                node_idx,
+                link_idx,
+                bypass: event_bypass,
+                replace: false,
+                contains_padding: false,
+                q_sequence_nr: 0,
+                #[cfg(debug_assertions)]
+                debug_note: None,
+            })
+        }
+    }
+}
+
+fn trigger_update<M: AsRef<[Machine]>>(
+    state: &mut SimState<M, RngSource>,
+    next: &SimulEvent,
+    current_time: &Instant,
+    sq: &mut SimulQueue,
+    topology: &NetworkTopology,
+    is_client: bool,
+) {
+
+    // Set node and link indices based on whether the action is for the client or server
+    let (node_idx, link_idx) = if is_client {
+        let idx = topology.mb_client;
+        (idx, topology.nodes[idx].get_coreside_linkid())
+    } else {
+        let idx = topology.mb_server;
+        (idx, topology.nodes[idx].get_edgeside_linkid())
+    };
+
+
+    //let trigger_delay = state.trigger_delay();
+
+    // parse actions and update
+    for action in state
+        .framework
+        .trigger_events(&[next.event.clone()], *current_time)
+    {
+        match action {
+            TriggerAction::Cancel { machine, timer } => {
+                debug!(
+                    "\ttrigger_update(): cancel action {:?} {:?}",
+                    machine, timer
+                );
+                // here we make a simplifying assumption of no trigger delay for
+                // cancel actions
+                match timer {
+                    Timer::Action => {
+                        state.scheduled_action[machine.into_raw()] = None;
+                    }
+                    Timer::Internal => {
+                        state.scheduled_internal_timer[machine.into_raw()] = None;
+                    }
+                    Timer::All => {
+                        state.scheduled_action[machine.into_raw()] = None;
+                        state.scheduled_internal_timer[machine.into_raw()] = None;
+                    }
+                }
+            }
+            TriggerAction::SendPadding {
+                timeout,
+                bypass: _,
+                replace: _,
+                machine,
+            } => {
+                debug!(
+                    "\ttrigger_update(): send padding action {:?} {:?}",
+                    timeout, machine
+                );
+                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
+                    action: action.clone(),
+                    time: *current_time + *timeout,//  + trigger_delay,
+                });
+            }
+            TriggerAction::BlockOutgoing {
+                timeout,
+                duration: _,
+                bypass: _,
+                replace: _,
+                machine,
+            } => {
+                debug!(
+                    "\ttrigger_update(): block outgoing action {:?} {:?}",
+                    timeout, machine
+                );
+                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
+                    action: action.clone(),
+                    time: *current_time + *timeout,// + trigger_delay,
+                });
+            }
+            TriggerAction::UpdateTimer {
+                duration,
+                replace,
+                machine,
+            } => {
+                debug!(
+                    "\ttrigger_update(): update timer action {:?} {:?}",
+                    duration, machine
+                );
+                // get current internal timer duration, if any
+                let current =
+                    state.scheduled_internal_timer[machine.into_raw()].unwrap_or(*current_time);
+
+                // update the timer
+                if *replace || current < *current_time + *duration {
+                    state.scheduled_internal_timer[machine.into_raw()] =
+                        Some(*current_time + *duration);
+                    // TimerBegin event
+                    sq.push(SimulEvent {
+                        event: TriggerEvent::TimerBegin { machine: *machine },
+                        time: *current_time,
+                        //integration_delay: Duration::from_micros(0), // TODO: is this correct?
+                        //client: is_client,
+                        packet_idx: usize::MAX,
+                        node_idx,
+                        link_idx,
+                        bypass: false,
+                        replace: false,
+                        contains_padding: false,
+                        q_sequence_nr: 0,
+                        #[cfg(debug_assertions)]
+                        debug_note: None,
+                    });
+                }
+            }
+        };
+    }
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -769,6 +1192,8 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
         }
     }
 
+    sq.highest_depend_tx = oneline.split_whitespace().count();
+
     let traffic_events = traffic_trace_prepare(&oneline, sq.zero_instant, ttrace_ts_to_c_delay.as_nanos() as i64);
 
     // print out events if there are not a lot. Current printinout function is slow for large traces.
@@ -777,7 +1202,7 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
     }
     fill_simq(&traffic_events, &topology, &mut sq);
     let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
-    println!("SimQ length: {:?}   oneline length: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), oneline.len(), traffic_events.dependent_tx.len(), total_dependent_events);
+    println!("SimQ length: {:?}   oneline events: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), sq.highest_depend_tx, traffic_events.dependent_tx.len(), total_dependent_events);
     sq
 }
 

@@ -239,26 +239,24 @@ pub fn peek_scheduled_internal_timer(
     earliest
 }
 
+
 pub fn peek_blocked_exp(
     blocking_c: Option<Instant>,
     blocking_s: Option<Instant>,
-    blocking_w: Option<Instant>,
     current_time: Instant,
-) -> (Duration, bool, bool) {
-    // We'll track the earliest instant along with flags:
-    // (instant, is_c, is_w)
-    let earliest = [
-        blocking_c.map(|t| (t, true, false)),
-        blocking_s.map(|t| (t, false, false)),
-        blocking_w.map(|t| (t, false, true)),
-    ]
-    .into_iter()
-    .flatten()
-    .min_by_key(|(t, _, _)| *t);
-
-    match earliest {
-        Some((t, is_c, is_w)) => (t.duration_since(current_time), is_c, is_w),
-        // If none of the blockings are set, return Duration::MAX.
-        None => (Duration::MAX, true, false),
+) -> (Duration, bool) {
+    match (blocking_c, blocking_s) {
+        (Some(c), Some(s)) => {
+            if c < s {
+                (c.duration_since(current_time), true)
+            } else {
+                (s.duration_since(current_time), false)
+            }
+        }
+        (Some(c), None) => (c.duration_since(current_time), true),
+        (None, Some(s)) => (s.duration_since(current_time), false),
+        (None, None) => (Duration::MAX, true),
     }
 }
+
+
