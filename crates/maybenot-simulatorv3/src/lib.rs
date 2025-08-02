@@ -230,10 +230,34 @@ impl SimulQueue {
         self.heap.is_empty()
     }
 
-    pub fn no_normal_packets(&self) -> bool {
-        self.heap.iter().all(|e| {
+    pub fn no_normal_packets(&self, topology: &network::NetworkTopology) -> bool {
+        // Check main simulation queue
+        let heap_check = self.heap.iter().all(|e| {
             e.packet_idx > self.highest_depend_tx
-        }) 
+        });
+        
+        if !heap_check {
+            return false;
+        }
+        
+        // Check MBN node blocking queues
+        use crate::nodes::NodeType;
+        
+        // Check client MBN blocking queue if it exists
+        if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
+            if !client_mbn.queue_normal.borrow().is_empty() {
+                return false;
+            }
+        }
+        
+        // Check server MBN blocking queue if it exists
+        if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
+            if !relay_mbn.queue_normal.borrow().is_empty() {
+                return false;
+            }
+        }
+        
+        true
     }
 
 }
@@ -473,7 +497,7 @@ impl SimulatorArgs {
         Self {
             max_trace_length,
             max_sim_iterations: 0,
-            //This bool has different impact in v3 , should be removed
+            //This bool has different impact in v3 , should be noted
             continue_after_all_normal_packets_processed: true,
             only_client_events: false,
             only_network_activity,
@@ -678,10 +702,10 @@ pub fn simul_advanced(
         }
 
         // check if we should stop after all normal packets have been processed
-        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
+        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets(topology) {
             debug!("sim(): we done, all normal packets processed");
             print!("Highest dependent tx: {}", sq.highest_depend_tx);
-            print!("heap: {:?}", sq.heap);
+            print!(" Heap: {:?}\n", sq.heap);
             break;
         }
 

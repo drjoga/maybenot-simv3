@@ -3,6 +3,7 @@ use crate::{SimulEvent, SimulQueue, SimState, RngSource, ScheduledAction};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use std::time::Instant;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use log::debug;
 
 // Trait for MBN nodes to enable generic implementations
@@ -10,8 +11,8 @@ pub trait MBNNode {
     fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>>;
     fn get_node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
-    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>>;
-    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>>;
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>>;
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>>;
 }
 
 // Helper function to handle TunnelSent events with blocking logic
@@ -38,13 +39,13 @@ pub fn mbn_handle_tunnel_sent<T: MBNNode>(
                 debug!("Bypassable blocking with bypass flag - sending immediately");
                 crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
             } else if blocking_bypassable {
-                // Bypassable blocking but no bypass flag - queue in bypassable queue
-                debug!("Queuing in bypassable queue");
-                node.get_bypassable_queue().borrow_mut().push(s_event.clone());
+                // Bypassable blocking but no bypass flag - queue in normal queue
+                debug!("Queuing in normal queue");
+                node.get_queue_normal().borrow_mut().push_back(s_event.clone());
             } else {
-                // Non-bypassable blocking - queue in blocking queue
-                debug!("Queuing in blocking queue");
-                node.get_blocking_queue().borrow_mut().push(s_event.clone());
+                // Non-bypassable blocking - queue in padding queue
+                debug!("Queuing in padding queue");
+                node.get_queue_padding().borrow_mut().push_back(s_event.clone());
             }
             return;
         }
@@ -56,6 +57,8 @@ pub fn mbn_handle_tunnel_sent<T: MBNNode>(
     crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
 }
 
+
+
 // Helper function to handle TunnelSent event creation with blocking logic
 pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     node: &T,
@@ -65,36 +68,57 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     linkstate: &mut NetworkLinkstate,
 ) {
     let sim_state = node.get_sim_state().borrow();
-    
+    let blocking_bypassable = sim_state.blocking_bypassable;
+    let blocking_until = sim_state.blocking_until;
+    drop(sim_state); // Release borrow before queuing
+
     // Check if we're currently blocking
-    if let Some(blocking_until) = sim_state.blocking_until {
+    if let Some(blocking_until) = blocking_until {
         if s_event.time < blocking_until {
-            // We're in blocking period - queue the event without adding to simulation queue
-            let blocking_bypassable = sim_state.blocking_bypassable;
-            drop(sim_state); // Release borrow before queuing
-            
-            debug!("Blocking TunnelSent creation at {:?} until {:?}", s_event.time, blocking_until);
-            
+            // We're in blocking period 
+
             if blocking_bypassable && s_event.bypass {
-                // Bypassable blocking and event has bypass flag - send immediately
-                debug!("Bypassable blocking with bypass flag - adding to queue immediately");
-                sq.push(s_event.clone());
-            } else if blocking_bypassable {
-                // Bypassable blocking but no bypass flag - queue in bypassable queue
-                debug!("Queuing TunnelSent in bypassable queue");
-                node.get_bypassable_queue().borrow_mut().push(s_event.clone());
+                // The blocking is bypassable
+
+                // replace flag is set: if we have a normal packet queued up /
+                // blocked, we can replace the padding with that FIXME: here be
+                // bugs related to integration delays
+                if s_event.contains_padding  {
+                    if s_event.replace {
+                        // Check if we have a normal packet queued up
+                        let mut normal_queue = node.get_queue_normal().borrow_mut();
+
+                        if let Some(mut dequeued_normal_event) = normal_queue.pop_front() {
+                            dequeued_normal_event.time = s_event.time; 
+                            dequeued_normal_event.bypass = true;
+                            debug!("Replacing bypass padding with normal event: {:?}", dequeued_normal_event);
+                            sq.push(dequeued_normal_event);
+                            return;
+                        }   
+                        else {
+                            debug!("No normal to replace with, sending bypass padding");
+                        }
+                    } else {
+                        debug!("Sending bypass padding");  
+                    }
+                } else {
+                    debug!("Sending bypass Normal packet");
+                }
             } else {
-                // Non-bypassable blocking - queue in blocking queue
-                debug!("Queuing TunnelSent in blocking queue");
-                node.get_blocking_queue().borrow_mut().push(s_event.clone());
+                if s_event.contains_padding {
+                    node.get_queue_padding().borrow_mut().push_back(s_event.clone());
+                    debug!("Blocking Padding enqued");
+                    return;
+                } else {
+                    node.get_queue_normal().borrow_mut().push_back(s_event.clone());
+                    debug!("Blocking Normal enqued");
+                    return;
+                }
             }
-            return;
         }
     }
-    
-    // Not blocking or past blocking time - add to simulation queue immediately
-    drop(sim_state);
-    debug!("No blocking - adding TunnelSent to queue immediately at {:?}", s_event.time);
+    // Not blocking or past blocking time or bypass fallthrough - add to simulation queue immediately
+    debug!("TunnelSent immediately");
     sq.push(s_event.clone());
 }
 
@@ -107,23 +131,23 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
     current_time: Instant,
 ) {
     // Release all events from both queues
-    let mut blocking_events = node.get_blocking_queue().borrow_mut();
-    let mut bypassable_events = node.get_bypassable_queue().borrow_mut();
+    let mut padding_events = node.get_queue_padding().borrow_mut();
+    let mut normal_events = node.get_queue_normal().borrow_mut();
     
-    debug!("Releasing {} blocking events and {} bypassable events", 
-           blocking_events.len(), bypassable_events.len());
+    debug!("Releasing {} padding events and {} normal events", 
+           padding_events.len(), normal_events.len());
     
-    // Move all blocking queue events to simulation queue with updated time
-    for mut event in blocking_events.drain(..) {
-        debug!("Releasing blocked event: {:?} originally at {:?}, now at {:?}", 
+    // Move all padding queue events to simulation queue with updated time
+    for mut event in padding_events.drain(..) {
+        debug!("Releasing padding event: {:?} originally at {:?}, now at {:?}", 
                event.event, event.time, current_time);
         event.time = current_time;
         sq.push(event);
     }
     
-    // Move all bypassable queue events to simulation queue with updated time
-    for mut event in bypassable_events.drain(..) {
-        debug!("Releasing bypassable event: {:?} originally at {:?}, now at {:?}", 
+    // Move all normal queue events to simulation queue with updated time
+    for mut event in normal_events.drain(..) {
+        debug!("Releasing normal event: {:?} originally at {:?}, now at {:?}", 
                event.event, event.time, current_time);
         event.time = current_time;
         sq.push(event);
@@ -364,8 +388,8 @@ pub struct ClientMBN {
     pub id: usize,
     coreside_link: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
-    pub blocking_queue: RefCell<Vec<SimulEvent>>,
-    pub bypassable_queue: RefCell<Vec<SimulEvent>>,
+    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
 }
 
 impl MBNNode for ClientMBN {
@@ -381,12 +405,12 @@ impl MBNNode for ClientMBN {
         self.coreside_link
     }
     
-    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>> {
-        &self.blocking_queue
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_padding
     }
     
-    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>> {
-        &self.bypassable_queue
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_normal
     }
 }
 
@@ -412,8 +436,8 @@ impl ClientMBN {
             id,
             coreside_link,
             sim_state,
-            blocking_queue: RefCell::new(Vec::new()),
-            bypassable_queue: RefCell::new(Vec::new()),
+            queue_padding: RefCell::new(VecDeque::new()),
+            queue_normal: RefCell::new(VecDeque::new()),
         }
     }
 
@@ -508,6 +532,10 @@ impl ClientMBN {
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
+            TriggerEvent::TimerBegin { .. } => {
+            }
+            TriggerEvent::TimerEnd { .. }  => {
+            }
 
             _ => {
                 panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
@@ -552,8 +580,8 @@ pub struct RelayMBN {
     pub coreside_link: usize,
     pub edgeside_link: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
-    pub blocking_queue: RefCell<Vec<SimulEvent>>,
-    pub bypassable_queue: RefCell<Vec<SimulEvent>>,
+    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
 }
 
 impl MBNNode for RelayMBN {
@@ -569,12 +597,12 @@ impl MBNNode for RelayMBN {
         self.edgeside_link
     }
     
-    fn get_blocking_queue(&self) -> &RefCell<Vec<SimulEvent>> {
-        &self.blocking_queue
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_padding
     }
     
-    fn get_bypassable_queue(&self) -> &RefCell<Vec<SimulEvent>> {
-        &self.bypassable_queue
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_normal
     }
 }
 
@@ -602,8 +630,8 @@ impl RelayMBN {
             coreside_link,
             edgeside_link,
             sim_state,
-            blocking_queue: RefCell::new(Vec::new()),
-            bypassable_queue: RefCell::new(Vec::new()),
+            queue_padding: RefCell::new(VecDeque::new()),
+            queue_normal: RefCell::new(VecDeque::new()),
         }
     }
 
@@ -717,7 +745,11 @@ impl RelayMBN {
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
-    
+            TriggerEvent::TimerBegin { .. } => {
+            }
+            TriggerEvent::TimerEnd { .. }  => {
+            }
+
             _ => {
                 panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);
             }

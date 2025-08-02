@@ -624,7 +624,9 @@ fn test_bypass_replace_machine() {
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
         // with all events, we also get SP events and blocking events
-        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
+        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -650,7 +652,9 @@ fn test_bypass_replace_machine() {
     run_test_sim(
         "0,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
         // with all events, we also get SP events and blocking events
-        "0,sn 0,st 1,bb 2,sn 2,sn 3,sp 3,st 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
+        "0,sn 0,st 1,bb 2,sn 2,sn 3,sp 3,st 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"0,sn 0,st 1,bb 2,sn 2,sn 3,sp 3,st 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
         Duration::from_micros(5),
         &[m.clone()],
         &[],

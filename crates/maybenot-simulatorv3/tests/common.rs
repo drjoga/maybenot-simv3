@@ -47,7 +47,7 @@ pub fn run_test_sim(
     // The trafficserver events require incresing the max length compared to what is specced in old tests
     let max_trace_length = 2 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
-    args.continue_after_all_normal_packets_processed = true;
+    args.continue_after_all_normal_packets_processed = false;
     let mut sq = make_sq(input.to_string(), &topology, delay, as_ms);
     let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args);
     //print!("{:?}\n\n", trace);
