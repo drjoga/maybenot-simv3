@@ -47,7 +47,7 @@ pub fn run_test_sim(
     // The trafficserver events require incresing the max length compared to what is specced in old tests
     let max_trace_length = 2 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
-    args.continue_after_all_normal_packets_processed = false;
+    args.continue_after_all_normal_packets_processed = true;
     let mut sq = make_sq(input.to_string(), &topology, delay, as_ms);
     let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args);
     //print!("{:?}\n\n", trace);
@@ -55,7 +55,7 @@ pub fn run_test_sim(
     for event in &trace {
         println!("{}", event.display_full(&sq,&topology,&linkstate));
     }
-    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology);
+    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &sq);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -219,7 +219,7 @@ pub fn run_test_sim_trace(
         simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args)
     });
 
-    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology);
+    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &sq);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -229,19 +229,27 @@ pub fn run_test_sim_trace(
     }
 }
 
-fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology) -> String {
+fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology, sq: &SimulQueue) -> String {
     fn fmt_event(e: &SimulEvent, base: Instant, ms: bool) -> String {
-        format!(
-            "{:1},{}",
+        let time_value = if e.time >= base {
+            // Event is at or after base time
             match ms {
-                true => e.time.duration_since(base).as_millis(),
-                false => e.time.duration_since(base).as_micros(),
-            },
-            e.event
-        )
+                true => e.time.duration_since(base).as_millis() as i64,
+                false => e.time.duration_since(base).as_micros() as i64,
+            }
+        } else {
+            // Event is before base time (negative time)
+            let duration = base.duration_since(e.time);
+            match ms {
+                true => -(duration.as_millis() as i64),
+                false => -(duration.as_micros() as i64),
+            }
+        };
+        
+        format!("{},{}", time_value, e.event)
     }
 
-    let base = trace[0].time;
+    let base = sq.zero_instant;
     let mut s: String = "".to_string();
     for s_event in trace {
         if only_packets && s_event.event != TriggerEvent::TunnelSent && s_event.event != TriggerEvent::TunnelRecv {
