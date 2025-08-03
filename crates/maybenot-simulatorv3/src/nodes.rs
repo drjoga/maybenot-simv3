@@ -2,7 +2,7 @@ use maybenot::TriggerEvent;
 use crate::{SimulEvent, SimulQueue};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use crate::links::LinkType;
-use crate::nodesMBN::{ClientMBN, RelayMBN};
+use crate::mbn_nodes::{ClientMBN, RelayMBN};
 use std::time::{Duration, Instant};
 use log::debug;
 

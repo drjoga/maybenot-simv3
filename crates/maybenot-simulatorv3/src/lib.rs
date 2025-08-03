@@ -1,5 +1,6 @@
 pub mod nodes;
-pub mod nodesMBN;
+pub mod mbn_nodes;
+pub mod mbn_helpers;
 pub mod links;
 pub mod network;
 pub mod linktrace;
@@ -20,7 +21,7 @@ use maybenot::{Framework, Machine,  TriggerAction, TriggerEvent};
 use rand::{rngs::ThreadRng, RngCore};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
-use nodesMBN::initialize_mbn_sim_states;
+use mbn_helpers::initialize_mbn_sim_states;
 
 
 
