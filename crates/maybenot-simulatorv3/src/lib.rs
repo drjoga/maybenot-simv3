@@ -1,4 +1,3 @@
-pub mod events;
 pub mod nodes;
 pub mod nodesMBN;
 pub mod links;
