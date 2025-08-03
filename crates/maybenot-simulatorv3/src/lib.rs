@@ -897,7 +897,7 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
 
     sq.highest_depend_tx = oneline.split_whitespace().count();
 
-    let traffic_events = traffic_trace_prepare(&oneline, sq.zero_instant, ttrace_ts_to_c_delay.as_nanos() as i64);
+    let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
     // print out events if there are not a lot. Current printinout function is slow for large traces.
     if traffic_events.dependent_tx.len() < 200{
@@ -943,7 +943,7 @@ pub struct TrafficTraceData {
 /// - For each receive event, we search among client send events for the most recent candidate whose timestamp
 ///   is at or before (recv time - 4×delay). If found (and the time difference is at least 4×delay), that dependency
 ///   is recorded; otherwise, the receive event is treated as a webserver simQ_push event.
-pub fn traffic_trace_prepare(s: &String, zero_instant: Instant, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
+pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
     let mut pkt_events: Vec<PacketEvent> = Vec::new();
 
     // Parse input string into ordered PacketEvents.

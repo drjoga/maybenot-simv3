@@ -314,7 +314,7 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
 */
 
     sq.highest_depend_tx = s.split_whitespace().count();
-    let traffic_events = traffic_trace_prepare(&s, sq.zero_instant, ttrace_ts_to_c_delay_ns);
+    let traffic_events = traffic_trace_prepare(&s, ttrace_ts_to_c_delay_ns);
     print!("----------------------------------\n");
     event_schedule_print(&traffic_events, ttrace_ts_to_c_delay_ns);
     print!("----------------------------------\n");
