@@ -1,4 +1,3 @@
-
 pub mod events;
 pub mod nodes;
 pub mod nodesMBN;
@@ -650,45 +649,6 @@ pub fn simul_advanced(
         
         // get actions, update scheduled actions
         debug!("sim(): trigger framework {:?}", next.event);
-
-        /* 
-        // conditional save to resulting trace: only on network activity if set
-        // in fn arg, and only on client activity if set in fn arg
-        if (!args.only_network_activity || network_activity)
-            && (!args.only_client_events || next.node_idx == network.client)
-        {
-            // this should be a network trace: adjust timestamps based on any
-            // integration delays
-            let mut n = next.clone();
-            match next.event {
-                TriggerEvent::NormalSent => {
-                    // remove the reporting delay
-                    //n.time -= n.integration_delay;
-                }
-                TriggerEvent::PaddingSent { .. } => {
-                    // padding packet adds the action delay
-                    //n.time += n.integration_delay;
-                }
-                TriggerEvent::TunnelSent => {
-                    if n.contains_padding {
-                        // padding packet adds the action delay
-                        //n.time += n.integration_delay;
-                    } else {
-                        // normal packet removes the reporting delay
-                        //n.time -= n.integration_delay;
-                    }
-                }
-                TriggerEvent::TunnelRecv | TriggerEvent::PaddingRecv | TriggerEvent::NormalRecv => {
-                    // remove the reporting delay
-                    //n.time -= n.integration_delay;
-                }
-
-                _ => {}
-            }
-
-            trace.push(n);
-        } */
-
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg

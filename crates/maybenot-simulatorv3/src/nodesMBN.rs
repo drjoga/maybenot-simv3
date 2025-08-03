@@ -15,49 +15,6 @@ pub trait MBNNode {
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>>;
 }
 
-// Helper function to handle TunnelSent events with blocking logic
-pub fn mbn_handle_tunnel_sent<T: MBNNode>(
-    node: &T,
-    s_event: &SimulEvent,
-    sq: &mut SimulQueue,
-    topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
-) {
-    let sim_state = node.get_sim_state().borrow();
-    
-    // Check if we're currently blocking
-    if let Some(blocking_until) = sim_state.blocking_until {
-        if s_event.time < blocking_until {
-            // We're in blocking period - queue the event
-            let blocking_bypassable = sim_state.blocking_bypassable;
-            drop(sim_state); // Release borrow before queuing
-            
-            debug!("Blocking TunnelSent at {:?} until {:?}", s_event.time, blocking_until);
-            
-            if blocking_bypassable && s_event.bypass {
-                // Bypassable blocking and event has bypass flag - send immediately
-                debug!("Bypassable blocking with bypass flag - sending immediately");
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
-            } else if blocking_bypassable {
-                // Bypassable blocking but no bypass flag - queue in normal queue
-                debug!("Queuing in normal queue");
-                node.get_queue_normal().borrow_mut().push_back(s_event.clone());
-            } else {
-                // Non-bypassable blocking - queue in padding queue
-                debug!("Queuing in padding queue");
-                node.get_queue_padding().borrow_mut().push_back(s_event.clone());
-            }
-            return;
-        }
-    }
-    
-    // Not blocking or past blocking time - send immediately
-    drop(sim_state);
-    debug!("No blocking - sending TunnelSent immediately at {:?}", s_event.time);
-    crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
-}
-
-
 
 // Helper function to handle TunnelSent event creation with blocking logic
 pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
@@ -463,7 +420,7 @@ impl ClientMBN {
             
 
             TriggerEvent::TunnelSent => {
-                mbn_handle_tunnel_sent(self, s_event, sq, topology, linkstate);
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
             }
 
 
@@ -711,7 +668,7 @@ impl RelayMBN {
 
 
             TriggerEvent::TunnelSent => {
-                mbn_handle_tunnel_sent(self, s_event, sq, topology, linkstate);
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
             }
 
 
