@@ -105,6 +105,22 @@ pub struct SimulEvent {
 }
 
 impl SimulEvent {
+    /// Format event as compact string for column alignment
+    fn format_event_compact(&self) -> String {
+        match &self.event {
+            TriggerEvent::NormalSent => "NormalSent".to_string(),
+            TriggerEvent::NormalRecv => "NormalRecv".to_string(),
+            TriggerEvent::TunnelSent => "TunnelSent".to_string(),
+            TriggerEvent::TunnelRecv => "TunnelRecv".to_string(),
+            TriggerEvent::PaddingSent { machine } => format!("PadSent-M{}", machine.into_raw()),
+            TriggerEvent::PaddingRecv => "PaddingRecv".to_string(),
+            TriggerEvent::BlockingBegin { machine } => format!("BlockBeg-M{}", machine.into_raw()),
+            TriggerEvent::BlockingEnd => "BlockingEnd".to_string(),
+            TriggerEvent::TimerBegin { machine } => format!("TimerBeg-M{}", machine.into_raw()),
+            TriggerEvent::TimerEnd { machine } => format!("TimerEnd-M{}", machine.into_raw()),
+        }
+    }
+
     /// Display SimulEvent with time as microseconds since sq.zero_instant
     pub fn display_relative(&self, sq: &SimulQueue) -> String {
         let time_since_zero = if self.time >= sq.zero_instant {
@@ -135,7 +151,7 @@ impl SimulEvent {
         // NormalSent at 25 μs (pkt 5, node 2 TrafficServerBasic, link 0 n2->n1) P:F B:F R:F
         format!(
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
-            format!("{:?}", self.event),
+            self.format_event_compact(),
             time_since_zero,
             if self.packet_idx == usize::MAX { "MAX".to_string() } else {self.packet_idx.to_string() },
             self.node_idx,
