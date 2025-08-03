@@ -1,7 +1,7 @@
 use maybenot::{TriggerEvent, Machine, TriggerAction, Timer, MachineId};
 use crate::{SimulEvent, SimulQueue, SimState, RngSource, ScheduledAction};
 use crate::network::{NetworkTopology, NetworkLinkstate};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use log::debug;
@@ -13,6 +13,73 @@ pub trait MBNNode {
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>>;
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>>;
+}
+
+
+
+pub fn peek_scheduled_action(
+    scheduled_c: &[Option<ScheduledAction>],
+    scheduled_s: &[Option<ScheduledAction>],
+    current_time: Instant,
+) -> Duration {
+    // there are at most one scheduled action per machine, so we can just
+    // iterate over all of them quickly
+    let mut earliest = Duration::MAX;
+
+    for a in scheduled_c.iter().flatten() {
+        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
+            earliest = a.time.duration_since(current_time);
+        }
+    }
+    for a in scheduled_s.iter().flatten() {
+        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
+            earliest = a.time.duration_since(current_time);
+        }
+    }
+
+    earliest
+}
+
+pub fn peek_scheduled_internal_timer(
+    internal_c: &[Option<Instant>],
+    internal_s: &[Option<Instant>],
+    current_time: Instant,
+) -> Duration {
+    // there are at most one internal event per machine, so we can just
+    // iterate over all of them quickly
+    let mut earliest = Duration::MAX;
+
+    for t in internal_c.iter().flatten() {
+        if *t >= current_time && t.duration_since(current_time) < earliest {
+            earliest = t.duration_since(current_time);
+        }
+    }
+    for t in internal_s.iter().flatten() {
+        if *t >= current_time && t.duration_since(current_time) < earliest {
+            earliest = t.duration_since(current_time);
+        }
+    }
+
+    earliest
+}
+
+pub fn peek_blocked_exp(
+    blocking_c: Option<Instant>,
+    blocking_s: Option<Instant>,
+    current_time: Instant,
+) -> (Duration, bool) {
+    match (blocking_c, blocking_s) {
+        (Some(c), Some(s)) => {
+            if c < s {
+                (c.duration_since(current_time), true)
+            } else {
+                (s.duration_since(current_time), false)
+            }
+        }
+        (Some(c), None) => (c.duration_since(current_time), true),
+        (None, Some(s)) => (s.duration_since(current_time), false),
+        (None, None) => (Duration::MAX, true),
+    }
 }
 
 

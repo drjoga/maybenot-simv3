@@ -3,9 +3,6 @@ pub mod nodes;
 pub mod nodesMBN;
 pub mod links;
 pub mod network;
-pub mod queue;
-pub mod queue_event;
-pub mod queue_peek;
 pub mod linktrace;
 pub mod linkbundle;
 pub mod integration;
@@ -25,12 +22,11 @@ use rand::{rngs::ThreadRng, RngCore};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
-
-use crate::{
-    queue_peek::{
-        peek_blocked_exp, peek_scheduled_action, peek_scheduled_internal_timer,
-    },
+use crate::nodesMBN::{
+    peek_blocked_exp, peek_scheduled_action, peek_scheduled_internal_timer,
 };
+
+
 
 
 
@@ -279,27 +275,6 @@ impl SimulQueue {
 
 
 
-/// SimEvent represents an event in the v1 simulator. It is used internally to
-/// represent events that are to be processed by the simulator (in SimQueue) and
-/// events that are produced by the simulator (the resulting trace).
-#[derive(PartialEq, Hash, Eq, Clone, Debug)]
-pub struct SimEvent {
-    /// the actual event
-    pub event: TriggerEvent,
-    /// the time of the event taking place
-    pub time: Instant,
-    /// Packet ID for triggering dependent tx events
-    pub packet_idx: usize,
-    /// flag to track padding or normal packet
-    pub contains_padding: bool,
-    /// internal flag to mark event as bypass
-    bypass: bool,
-    /// internal flag to mark event as replace
-    replace: bool,
-    // debug note
-    #[cfg(debug_assertions)]
-    pub debug_note: Option<String>,
-}
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
 fn event_to_usize(e: &TriggerEvent) -> usize {
@@ -319,22 +294,6 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
     }
 }
 
-// for SimEvent, implement Ord and PartialOrd to allow for sorting by time
-impl Ord for SimEvent {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // reverse order to get the smallest time first
-        self.time
-            .cmp(&other.time)
-            .then_with(|| event_to_usize(&self.event).cmp(&event_to_usize(&other.event)))
-            .reverse()
-    }
-}
-
-impl PartialOrd for SimEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 
 
