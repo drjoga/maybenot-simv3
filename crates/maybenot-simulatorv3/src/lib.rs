@@ -16,16 +16,11 @@ use std::{
 use log::{debug, warn};
 use network::{NetworkTopology, NetworkLinkstate};
 
-use maybenot::{Framework, Machine,  MachineId, Timer, TriggerAction, TriggerEvent};
+use maybenot::{Framework, Machine,  TriggerAction, TriggerEvent};
 use rand::{rngs::ThreadRng, RngCore};
 use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
-
-use crate::nodesMBN::{
-    peek_blocked_exp, peek_scheduled_action, peek_scheduled_internal_timer,
-};
-
-
+use nodesMBN::initialize_mbn_sim_states;
 
 
 
@@ -85,14 +80,15 @@ pub struct SimulEvent {
     /// Node index and link index for the event
     pub node_idx: usize,
     pub link_idx: usize,
+    /// sequence number for deterministic insertion ordering when timestamp is identical
+    pub q_sequence_nr: u64,
+    // Start of MaybeNot specific fields
     /// flag to track padding or normal packet
     pub contains_padding: bool,
     /// internal flag to mark event as bypass
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
-    /// sequence number for deterministic insertion ordering
-    pub q_sequence_nr: u64,
     // debug note
     #[cfg(debug_assertions)]
     pub debug_note: Option<String>,
@@ -160,6 +156,22 @@ impl SimulEvent {
 }
 
 
+// A display fmt for SimulEvent that shows the event type, time, and packet index as one line
+// and has P:T B:F R:T according to the booleans 
+impl std::fmt::Display for SimulEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?} at {:?} (pkt {}, node {}, link {}) P:{} B:{} R:{}",
+            self.event, self.time, self.packet_idx, self.node_idx, self.link_idx,
+            if self.contains_padding { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+}
+
+
 // for SimulEvent, implement Ord and PartialOrd to allow for sorting by time
 impl Ord for SimulEvent {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -179,21 +191,6 @@ impl PartialOrd for SimulEvent {
 }
 
 
-// A display fmt for SimulEvent that shows the event type, time, and packet index as one line
-// and has P:T B:F R:T according to the booleans 
-impl std::fmt::Display for SimulEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?} at {:?} (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, self.time, self.packet_idx, self.node_idx, self.link_idx,
-            if self.contains_padding { "T" } else { "F" },
-            if self.bypass { "T" } else { "F" },
-            if self.replace { "T" } else { "F" }
-        )
-    }
-}
-
 
 #[derive(Clone, Debug)]
 pub struct SimulQueue {
@@ -209,7 +206,11 @@ impl SimulQueue {
     pub fn new() -> Self {
         let now_time = Instant::now();
         Self {
+            // sq.zero_instant holds the time instant which is used to represent relative
+            // time zero in the traffic trace
             zero_instant: now_time,
+            // earliest_event_instant is the earliest event time in the queue, used to
+            // calculate relative time in the trace. May be earlier than zero_instant.
             earliest_event_instant: now_time,
             heap: BinaryHeap::new(),
             dependent_tx: HashMap::new(),
@@ -241,12 +242,8 @@ impl SimulQueue {
     }
 
     pub fn no_normal_packets(&self, topology: &network::NetworkTopology) -> bool {
-        // Check main simulation queue
-        let heap_check = self.heap.iter().all(|e| {
-            e.packet_idx > self.highest_depend_tx
-        });
-        
-        if !heap_check {
+        // Check main simulation queue, see if any of traffic trace packer are in it. 
+        if !self.heap.iter().all(|e| {e.packet_idx > self.highest_depend_tx}) {
             return false;
         }
         
@@ -510,35 +507,7 @@ pub fn simul_advanced(
 
     // Initialize MBN nodes with SimState if they exist
     if topology.has_mb {
-        // Initialize client MBN node if it exists
-        if let Some(client_node) = topology.nodes.get(topology.mb_client) {
-            if let crate::nodes::NodeType::ClientMBN(client_mbn) = client_node {
-                // Update the SimState in the existing node
-                let new_state = SimState::new(
-                    machines_client.to_vec(),
-                    current_time,
-                    args.max_padding_frac_client,
-                    args.max_blocking_frac_client,
-                    args.insecure_rng_seed,
-                );
-                *client_mbn.sim_state.borrow_mut() = new_state;
-            }
-        }
-
-        // Initialize server MBN node if it exists  
-        if let Some(server_node) = topology.nodes.get(topology.mb_server) {
-            if let crate::nodes::NodeType::RelayMBN(relay_mbn) = server_node {
-                // Update the SimState in the existing node
-                let new_state = SimState::new(
-                    machines_server.to_vec(),
-                    current_time,
-                    args.max_padding_frac_server,
-                    args.max_blocking_frac_server,
-                    args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
-                );
-                *relay_mbn.sim_state.borrow_mut() = new_state;
-            }
-        }
+        initialize_mbn_sim_states(topology, machines_client, machines_server, current_time, args);
     }
 
     debug!("sim(): client machines {}", machines_client.len());
@@ -872,12 +841,12 @@ fn pick_next_node_based(
     // Find and execute the scheduled action from the appropriate node
     if topology.has_mb {
         if let Some(NodeType::ClientMBN(client_mbn)) = topology.nodes.get(topology.mb_client) {
-            if let Some(event) = client_mbn.do_scheduled_action(target_time, sq) {
+            if let Some(event) = client_mbn.do_scheduled_action(target_time) {
                 return Some(event);
             }
         }
         if let Some(NodeType::RelayMBN(relay_mbn)) = topology.nodes.get(topology.mb_server) {
-            if let Some(event) = relay_mbn.do_scheduled_action(target_time, sq) {
+            if let Some(event) = relay_mbn.do_scheduled_action(target_time) {
                 return Some(event);
             }
         }
@@ -899,10 +868,6 @@ fn pick_next_node_based(
 /// the trace for use with [`sim`].
 pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay: Duration) -> SimulQueue {
     let mut sq = SimulQueue::new();    
-
-    // sq.zero_instamt holds the time instant which is used to represent relative 
-    // time zero in the treffic trace
-    let starting_time = sq.zero_instant;
 
     let mut oneline = String::new();
 
@@ -966,7 +931,7 @@ pub struct TrafficTraceData {
     /// Client send events that did not depend on any prior receive.
     pub client_simq_push: Vec<PacketEvent>,
     /// Client receive events that did not have a qualifying client send dependency.
-    pub webserver_simq_push: Vec<PacketEvent>,
+    pub trafficserver_simq_push: Vec<PacketEvent>,
     /// Dictionary mapping each receive packet_idx to a list of dependet events: (dependent packet_idx, delta, client EventKind)
     pub dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
 }
@@ -1025,11 +990,11 @@ pub fn traffic_trace_prepare(s: &String, zero_instant: Instant, ttrace_ts_to_c_d
         }
     }
 
-    // Process webserver events: for each client receive event, try to find the most recent client send event
+    // Process trafficserver events: for each client receive event, try to find the most recent client send event
     // that occurred at or before (recv time - 2 * ttrace_ts_to_c_delay_ns). If found,
-    // record that as a dependency; otherwise, mark the receive as a simQ push for webserver.
+    // record that as a dependency; otherwise, mark the receive as a simQ push for trafficserver.
     let client_sends: Vec<&PacketEvent> = pkt_events.iter().filter(|e| e.kind == EventKind::CliSend).collect();
-    let mut webserver_simq_push = Vec::new();
+    let mut trafficserver_simq_push = Vec::new();
     for pkt_event in &pkt_events {
         if pkt_event.kind == EventKind::CliReceive {
             let boundary = pkt_event.time_ns - (2 * ttrace_ts_to_c_delay_ns);
@@ -1044,13 +1009,13 @@ pub fn traffic_trace_prepare(s: &String, zero_instant: Instant, ttrace_ts_to_c_d
                 } else {
                     let mut adjusted_event = pkt_event.clone();
                     adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
-                    webserver_simq_push.push(adjusted_event);
+                    trafficserver_simq_push.push(adjusted_event);
                 } 
             } else {
                 // Fix since some traces start with 0,r or time < which is messy, 
                 let mut adjusted_event = pkt_event.clone();
                 adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
-                webserver_simq_push.push(adjusted_event);
+                trafficserver_simq_push.push(adjusted_event);
                 //panic!("Receive event {} is too early to be a server simQ push", event.packet_idx);
             }   
         }
@@ -1067,10 +1032,10 @@ pub fn traffic_trace_prepare(s: &String, zero_instant: Instant, ttrace_ts_to_c_d
     }
     */
 
-    debug!("{:#?}\n{:#?}\n{:#?}\n", client_simq_push, webserver_simq_push, dependent_tx);
+    debug!("{:#?}\n{:#?}\n{:#?}\n", client_simq_push, trafficserver_simq_push, dependent_tx);
     TrafficTraceData {
         client_simq_push,
-        webserver_simq_push,
+        trafficserver_simq_push,
         dependent_tx,
     }
     
@@ -1083,7 +1048,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     let mut pkt_events: Vec<PacketEvent> = traffic.client_simq_push.clone();
     pkt_events.extend(
         traffic
-            .webserver_simq_push
+            .trafficserver_simq_push
             .clone()
             .into_iter()
             .map(|mut pkt_event| {
@@ -1179,7 +1144,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     }
 
     println!("\nInitial webserver simQ push events:");
-    for event in &traffic.webserver_simq_push {
+    for event in &traffic.trafficserver_simq_push {
         println!("cli_recv  [#{:5}  @{:7}]   webserver_send simQ_push", event.packet_idx, event.time_ns);
     }
 
@@ -1245,7 +1210,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
         sq.push(simul_event);
     }
     
-    for event in &traffic_events.webserver_simq_push {
+    for event in &traffic_events.trafficserver_simq_push {
         let event_instant = get_event_instant(sq, event);
         let simul_event = SimulEvent {
             event: TriggerEvent::NormalSent,

@@ -1,5 +1,5 @@
 use maybenot::{TriggerEvent, Machine, TriggerAction, Timer, MachineId};
-use crate::{SimulEvent, SimulQueue, SimState, RngSource, ScheduledAction};
+use crate::{SimulEvent, SimulQueue, SimState, RngSource, ScheduledAction, SimulatorArgs};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use std::time::{Duration, Instant};
 use std::cell::RefCell;
@@ -82,14 +82,47 @@ pub fn peek_blocked_exp(
     }
 }
 
+/// Initialize MBN nodes with SimState for simulation
+pub fn initialize_mbn_sim_states(
+    topology: &NetworkTopology,
+    machines_client: &[Machine],
+    machines_server: &[Machine],
+    current_time: Instant,
+    args: &SimulatorArgs,
+) {
+    // Initialize client MBN node - expect it to exist and be ClientMBN
+    let crate::nodes::NodeType::ClientMBN(client_mbn) = &topology.nodes[topology.mb_client] else {
+        panic!("Expected ClientMBN node at topology.mb_client index {}", topology.mb_client);
+    };
+    let new_state = SimState::new(
+        machines_client.to_vec(),
+        current_time,
+        args.max_padding_frac_client,
+        args.max_blocking_frac_client,
+        args.insecure_rng_seed,
+    );
+    *client_mbn.sim_state.borrow_mut() = new_state;
+
+    // Initialize server MBN node - expect it to exist and be RelayMBN
+    let crate::nodes::NodeType::RelayMBN(relay_mbn) = &topology.nodes[topology.mb_server] else {
+        panic!("Expected RelayMBN node at topology.mb_server index {}", topology.mb_server);
+    };
+    let new_state = SimState::new(
+        machines_server.to_vec(),
+        current_time,
+        args.max_padding_frac_server,
+        args.max_blocking_frac_server,
+        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
+    );
+    *relay_mbn.sim_state.borrow_mut() = new_state;
+}
+
 
 // Helper function to handle TunnelSent event creation with blocking logic
 pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     node: &T,
     s_event: &SimulEvent,
     sq: &mut SimulQueue,
-    topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
 ) {
     let sim_state = node.get_sim_state().borrow();
     let blocking_bypassable = sim_state.blocking_bypassable;
@@ -150,8 +183,6 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
 pub fn mbn_release_blocked_events<T: MBNNode>(
     node: &T,
     sq: &mut SimulQueue,
-    topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
     current_time: Instant,
 ) {
     // Release all events from both queues
@@ -325,8 +356,7 @@ pub fn mbn_do_internal_timer<T: MBNNode>(
 
 pub fn mbn_do_scheduled_action<T: MBNNode>(
     node: &T,
-    target: Instant,
-    sq: &mut SimulQueue
+    target: Instant
 ) -> Option<SimulEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut a: Option<ScheduledAction> = None;
@@ -482,7 +512,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
             
 
@@ -506,7 +536,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
 
 
@@ -549,7 +579,7 @@ impl ClientMBN {
             }
             TriggerEvent::BlockingEnd => {
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, topology, linkstate, s_event.time);
+                mbn_release_blocked_events(self, sq, s_event.time);
                 
                 // Clear blocking state
                 let mut state = self.sim_state.borrow_mut();
@@ -559,10 +589,6 @@ impl ClientMBN {
             TriggerEvent::TimerBegin { .. } => {
             }
             TriggerEvent::TimerEnd { .. }  => {
-            }
-
-            _ => {
-                panic!("ClientMBN cannot handle s_event: {:?}", s_event.event);
             }
         }
     }
@@ -581,8 +607,8 @@ impl ClientMBN {
         mbn_do_internal_timer(self, target)
     }
 
-    pub fn do_scheduled_action(&self, target: Instant, sq: &mut SimulQueue) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target, sq)
+    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target)
     }
 
     pub fn node_id(&self) -> usize {
@@ -727,7 +753,7 @@ impl RelayMBN {
                         debug_note: None,
                     };
                     // Use blocking-aware logic to decide whether to queue immediately or block
-                    mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
+                    mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
                 } else {
                     panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
                 }
@@ -754,7 +780,7 @@ impl RelayMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq, topology, linkstate);
+                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
             TriggerEvent::PaddingRecv => {}
             TriggerEvent::BlockingBegin { .. } => {
@@ -762,7 +788,7 @@ impl RelayMBN {
             }
             TriggerEvent::BlockingEnd => {
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, topology, linkstate, s_event.time);
+                mbn_release_blocked_events(self, sq, s_event.time);
                 
                 // Clear blocking state
                 let mut state = self.sim_state.borrow_mut();
@@ -772,10 +798,6 @@ impl RelayMBN {
             TriggerEvent::TimerBegin { .. } => {
             }
             TriggerEvent::TimerEnd { .. }  => {
-            }
-
-            _ => {
-                panic!("RelayMBN cannot handle s_event: {:?}", s_event.event);
             }
         }
     }
@@ -794,8 +816,8 @@ impl RelayMBN {
         mbn_do_internal_timer(self, target)
     }
 
-    pub fn do_scheduled_action(&self, target: Instant, sq: &mut SimulQueue) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target, sq)
+    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target)
     }
 
     pub fn node_id(&self) -> usize {
