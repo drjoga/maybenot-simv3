@@ -82,10 +82,8 @@ pub fn initialize_mbn_sim_states(
     current_time: Instant,
     args: &SimulatorArgs,
 ) {
-    // Initialize client MBN node - expect it to exist and be ClientMBN
-    let crate::nodes::NodeType::ClientMBN(client_mbn) = &topology.nodes[topology.mb_client] else {
-        panic!("Expected ClientMBN node at topology.mb_client index {}", topology.mb_client);
-    };
+    // Initialize client MBN node using trait abstraction
+    let client_mbn = topology.get_mbn_client();
     let new_state = SimState::new(
         machines_client.to_vec(),
         current_time,
@@ -93,12 +91,10 @@ pub fn initialize_mbn_sim_states(
         args.max_blocking_frac_client,
         args.insecure_rng_seed,
     );
-    *client_mbn.sim_state.borrow_mut() = new_state;
+    *client_mbn.get_sim_state().borrow_mut() = new_state;
 
-    // Initialize server MBN node - expect it to exist and be RelayMBN
-    let crate::nodes::NodeType::RelayMBN(relay_mbn) = &topology.nodes[topology.mb_server] else {
-        panic!("Expected RelayMBN node at topology.mb_server index {}", topology.mb_server);
-    };
+    // Initialize server MBN node using trait abstraction
+    let relay_mbn = topology.get_mbn_server();
     let new_state = SimState::new(
         machines_server.to_vec(),
         current_time,
@@ -106,7 +102,7 @@ pub fn initialize_mbn_sim_states(
         args.max_blocking_frac_server,
         args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
-    *relay_mbn.sim_state.borrow_mut() = new_state;
+    *relay_mbn.get_sim_state().borrow_mut() = new_state;
 }
 
 
@@ -119,7 +115,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
     sq: &mut SimulQueue,
     _topology: &NetworkTopology
 ) {
-    let node_idx = node.get_node_id();
+    let node_idx = node.node_id();
     let link_idx = node.get_action_link_id();
 
     // Clone the actions to avoid borrowing issues
@@ -245,7 +241,7 @@ pub fn mbn_do_internal_timer<T: MBNNode>(
         event: TriggerEvent::TimerEnd { machine },
         time: target,
         packet_idx: usize::MAX,
-        node_idx: node.get_node_id(),
+        node_idx: node.node_id(),
         link_idx: node.get_action_link_id(),
         bypass: false,
         replace: false,
@@ -292,7 +288,7 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
                 event: TriggerEvent::PaddingSent { machine },
                 time: a.time,
                 packet_idx: usize::MAX,
-                node_idx: node.get_node_id(),
+                node_idx: node.node_id(),
                 link_idx: node.get_action_link_id(),
                 bypass,
                 replace,
@@ -324,7 +320,7 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
                 event: TriggerEvent::BlockingBegin { machine },
                 time: a.time,
                 packet_idx: usize::MAX,
-                node_idx: node.get_node_id(),
+                node_idx: node.node_id(),
                 link_idx: node.get_action_link_id(),
                 bypass: event_bypass,
                 replace: false,

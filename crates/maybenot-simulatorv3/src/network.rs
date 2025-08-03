@@ -1,5 +1,6 @@
 use crate::links::{LinkType, create_link};
 use crate::nodes::{NodeType, create_node};
+use crate::mbn_nodes::MBNNode;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -291,6 +292,20 @@ impl NetworkTopology {
 
     pub fn nodes(&self) -> &[NodeType] {
         &self.nodes
+    }
+
+    pub fn get_mbn_client(&self) -> &dyn MBNNode {
+        match &self.nodes[self.mb_client] {
+            NodeType::ClientMBN(client) => client,
+            _ => panic!("MBN client node not found or wrong type"),
+        }
+    }
+
+    pub fn get_mbn_server(&self) -> &dyn MBNNode {
+        match &self.nodes[self.mb_server] {
+            NodeType::RelayMBN(server) => server,
+            _ => panic!("MBN server node not found or wrong type"),
+        }
     }
 
 }

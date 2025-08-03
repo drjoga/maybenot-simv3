@@ -104,10 +104,15 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
 // Trait for MBN nodes to enable generic implementations
 pub trait MBNNode {
     fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>>;
-    fn get_node_id(&self) -> usize;
+    fn node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>>;
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>>;
+    
+    // Methods needed for simulation
+    fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology);
+    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent>;
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent>;
 }
 
 
@@ -125,7 +130,7 @@ impl MBNNode for ClientMBN {
         &self.sim_state
     }
     
-    fn get_node_id(&self) -> usize {
+    fn node_id(&self) -> usize {
         self.id
     }
     
@@ -139,6 +144,18 @@ impl MBNNode for ClientMBN {
     
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
         &self.queue_normal
+    }
+    
+    fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology) {
+        mbn_trigger_update(self, s_event, current_time, sq, topology)
+    }
+    
+    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_internal_timer(self, target)
+    }
+    
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target)
     }
 }
 
@@ -313,7 +330,7 @@ impl MBNNode for RelayMBN {
         &self.sim_state
     }
     
-    fn get_node_id(&self) -> usize {
+    fn node_id(&self) -> usize {
         self.id
     }
     
@@ -327,6 +344,18 @@ impl MBNNode for RelayMBN {
     
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
         &self.queue_normal
+    }
+    
+    fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology) {
+        mbn_trigger_update(self, s_event, current_time, sq, topology)
+    }
+    
+    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_internal_timer(self, target)
+    }
+    
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target)
     }
 }
 
