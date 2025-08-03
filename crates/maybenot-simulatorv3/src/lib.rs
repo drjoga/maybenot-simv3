@@ -545,7 +545,6 @@ pub fn simul_advanced(
                     blocking_until.duration_since(sq.zero_instant)
                 );
             }
-            
             let relay_mbn = topology.get_mbn_server();
             if let Some(blocking_until) = relay_mbn.get_sim_state().borrow().blocking_until {
                 debug!(
@@ -558,6 +557,7 @@ pub fn simul_advanced(
 
         debug!("sim(): next event: {}", next.display_relative(sq));
 
+        // Handle event at node
         topology.nodes[next.node_idx]
             .handle_event(&next, &topology, linkstate, sq);
 
@@ -573,9 +573,6 @@ pub fn simul_advanced(
                 relay_mbn.trigger_update(&next, &current_time, sq, topology);
             }
         }
-        
-        // get actions, update scheduled actions
-        debug!("sim(): trigger framework {:?}", next.event);
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
@@ -643,67 +640,70 @@ fn pick_next_mbn(
     topology: &NetworkTopology,
     current_time: Instant,
 ) -> Option<SimulEvent> {
-    
+
+    let client_mbn = topology.get_mbn_client();
+    let relay_mbn = topology.get_mbn_server();
+
     // Collect scheduled actions and internal timers from MBN nodes
     let mut min_scheduled_action = Duration::MAX;
+    let mut action_node = client_mbn; 
     let mut min_internal_timer = Duration::MAX;
-    let mut client_blocking_until: Option<Instant> = None;
-    let mut server_blocking_until: Option<Instant> = None;
+    let mut timer_node = client_mbn;
+    let client_blocking_until: Option<Instant>;
+    let server_blocking_until: Option<Instant>;
 
     // Check client MBN node
-    if topology.has_mb {
-        let client_mbn = topology.get_mbn_client();
-        let state = client_mbn.get_sim_state().borrow();
-        
-        // Check scheduled actions
-        for action in state.scheduled_action.iter().flatten() {
-            if action.time >= current_time {
-                let duration = action.time.duration_since(current_time);
-                if duration < min_scheduled_action {
-                    min_scheduled_action = duration;
-                }
+    let state = client_mbn.get_sim_state().borrow();
+    
+    // Check scheduled actions
+    for action in state.scheduled_action.iter().flatten() {
+        if action.time >= current_time {
+            let duration = action.time.duration_since(current_time);
+            if duration < min_scheduled_action {
+                min_scheduled_action = duration;
             }
         }
-        
-        // Check internal timers
-        for timer in state.scheduled_internal_timer.iter().flatten() {
-            if *timer >= current_time {
-                let duration = timer.duration_since(current_time);
-                if duration < min_internal_timer {
-                    min_internal_timer = duration;
-                }
-            }
-        }
-        
-        client_blocking_until = state.blocking_until;
-        drop(state);
-
-        // Check server MBN node
-        let relay_mbn = topology.get_mbn_server();
-        let state = relay_mbn.get_sim_state().borrow();
-        
-        // Check scheduled actions
-        for action in state.scheduled_action.iter().flatten() {
-            if action.time >= current_time {
-                let duration = action.time.duration_since(current_time);
-                if duration < min_scheduled_action {
-                    min_scheduled_action = duration;
-                }
-            }
-        }
-        
-        // Check internal timers
-        for timer in state.scheduled_internal_timer.iter().flatten() {
-            if *timer >= current_time {
-                let duration = timer.duration_since(current_time);
-                if duration < min_internal_timer {
-                    min_internal_timer = duration;
-                }
-            }
-        }
-        
-        server_blocking_until = state.blocking_until;
     }
+    
+    // Check internal timers
+    for timer in state.scheduled_internal_timer.iter().flatten() {
+        if *timer >= current_time {
+            let duration = timer.duration_since(current_time);
+            if duration < min_internal_timer {
+                min_internal_timer = duration;
+            }
+        }
+    }
+    client_blocking_until = state.blocking_until;
+    drop(state);
+
+    // Check server MBN node
+    let state = relay_mbn.get_sim_state().borrow();
+    
+    // Check scheduled actions
+    for action in state.scheduled_action.iter().flatten() {
+        if action.time >= current_time {
+            let duration = action.time.duration_since(current_time);
+            if duration < min_scheduled_action {
+                min_scheduled_action = duration;
+                action_node = relay_mbn;
+            }
+        }
+    }
+    
+    // Check internal timers
+    for timer in state.scheduled_internal_timer.iter().flatten() {
+        if *timer >= current_time {
+            let duration = timer.duration_since(current_time);
+            if duration < min_internal_timer {
+                min_internal_timer = duration;
+                timer_node = relay_mbn;
+            }
+        }
+    }    
+    server_blocking_until = state.blocking_until;
+    drop(state);
+    
 
     // Check blocking expiry
     let (min_blocking, blocking_is_client) = match (client_blocking_until, server_blocking_until) {
@@ -728,27 +728,27 @@ fn pick_next_mbn(
 
     // Debug output
     if min_scheduled_action == Duration::MAX {
-        debug!("\tpick_next_node_based(): peek_scheduled_action = None");
+        debug!("\tpick_next(): peek_scheduled_action = None");
     } else {
-        debug!("\tpick_next_node_based(): peek_scheduled_action = {:?}", min_scheduled_action);
+        debug!("\tpick_next(): peek_scheduled_action = {:?}", min_scheduled_action);
     }
 
     if min_internal_timer == Duration::MAX {
-        debug!("\tpick_next_node_based(): peek_scheduled_internal_timer = None");
+        debug!("\tpick_next(): peek_scheduled_internal_timer = None");
     } else {
-        debug!("\tpick_next_node_based(): peek_scheduled_internal_timer = {:?}", min_internal_timer);
+        debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", min_internal_timer);
     }
 
     if min_blocking == Duration::MAX {
-        debug!("\tpick_next_node_based(): peek_blocked_exp = None");
+        debug!("\tpick_next(): peek_blocked_exp = None");
     } else {
-        debug!("\tpick_next_node_based(): peek_blocked_exp = {:?}", min_blocking);
+        debug!("\tpick_next(): peek_blocked_exp = {:?}", min_blocking);
     }
 
     if queue_duration == Duration::MAX {
-        debug!("\tpick_next_node_based(): peek_queue = None");
+        debug!("\tpick_next(): peek_queue = None");
     } else {
-        debug!("\tpick_next_node_based(): peek_queue = {}", queue_next.unwrap().display_relative(sq));
+        debug!("\tpick_next(): peek_queue = {}", queue_next.unwrap().display_relative(sq));
     }
 
     // No next event?
@@ -764,17 +764,13 @@ fn pick_next_mbn(
     
     // Blocking expiry is earliest
     if min_blocking <= min_scheduled_action && min_blocking <= min_internal_timer && min_blocking <= queue_duration {
-        debug!("\tpick_next_node_based(): picked blocking");
+        debug!("\tpick_next(): picked blocking");
         
         // Clear blocking state from the appropriate node
-        if topology.has_mb {
-            if blocking_is_client {
-                let client_mbn = topology.get_mbn_client();
-                client_mbn.get_sim_state().borrow_mut().blocking_until = None;
-            } else {
-                let relay_mbn = topology.get_mbn_server();
-                relay_mbn.get_sim_state().borrow_mut().blocking_until = None;
-            }
+        if blocking_is_client {
+            client_mbn.get_sim_state().borrow_mut().blocking_until = None;
+        } else {
+            relay_mbn.get_sim_state().borrow_mut().blocking_until = None;
         }
 
         let e = SimulEvent {
@@ -801,45 +797,28 @@ fn pick_next_mbn(
         return Some(e);
     }
 
+    // Queue is next
     if queue_duration <= min_scheduled_action && queue_duration <= min_internal_timer {
-        debug!("\tpick_next_node_based(): picked queue");
+        debug!("\tpick_next(): picked queue");
         return sq.pop();
     }
 
-
     // Internal timer is next
     if min_internal_timer <= min_scheduled_action  {
-        debug!("\tpick_next_node_based(): picked internal timer");
+        debug!("\tpick_next(): picked internal timer");
         let target_time = current_time + min_internal_timer;
         
-        // Find and execute the internal timer from the appropriate node
-        if topology.has_mb {
-            let client_mbn = topology.get_mbn_client();
-            if let Some(event) = client_mbn.do_internal_timer(target_time) {
-                return Some(event);
-            }
-            let relay_mbn = topology.get_mbn_server();
-            if let Some(event) = relay_mbn.do_internal_timer(target_time) {
-                return Some(event);
-            }
+        if let Some(event) = timer_node.do_internal_timer(target_time) {
+            return Some(event);
         }
     }
 
-
     // Scheduled action is last
-    debug!("\tpick_next_node_based(): picked scheduled action");
+    debug!("\tpick_next(): picked scheduled action");
     let target_time = current_time + min_scheduled_action;
     
-    // Find and execute the scheduled action from the appropriate node
-    if topology.has_mb {
-        let client_mbn = topology.get_mbn_client();
-        if let Some(event) = client_mbn.do_scheduled_action(target_time) {
-            return Some(event);
-        }
-        let relay_mbn = topology.get_mbn_server();
-        if let Some(event) = relay_mbn.do_scheduled_action(target_time) {
-            return Some(event);
-        }
+    if let Some(event) = action_node.do_scheduled_action(target_time) {
+        return Some(event);
     }
     None
 

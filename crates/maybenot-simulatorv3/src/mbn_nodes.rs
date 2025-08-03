@@ -205,12 +205,6 @@ impl ClientMBN {
                 // Use blocking-aware logic to decide whether to queue immediately or block
                 mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
-            
-
-            TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
-            }
-
 
             TriggerEvent::PaddingSent { .. } => {
                 let forward_s_event = SimulEvent {
@@ -230,7 +224,9 @@ impl ClientMBN {
                 mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
 
-
+            TriggerEvent::TunnelSent => {
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+            }
 
             TriggerEvent::TunnelRecv => {
                 let new_t_event = match &s_event.contains_padding {
@@ -257,17 +253,13 @@ impl ClientMBN {
                 sq.push(forward_s_event);
             }
 
-
             TriggerEvent::NormalRecv => {
                 let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_linkid();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
                 crate::nodes::check_dependent_packets(s_event, sq, outgoing_link);
             }
-            TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { .. } => {
-                // Blocking state is already updated in mbn_do_scheduled_action
-            }
+
             TriggerEvent::BlockingEnd => {
                 // Release any queued events with current time
                 mbn_release_blocked_events(self, sq, s_event.time);
@@ -277,29 +269,8 @@ impl ClientMBN {
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
-            TriggerEvent::TimerBegin { .. } => {
-            }
-            TriggerEvent::TimerEnd { .. }  => {
-            }
+            _ => {}
         }
-    }
-
-    pub fn trigger_update(
-        &self, 
-        s_event: &SimulEvent, 
-        current_time: &Instant, 
-        sq: &mut SimulQueue, 
-        topology: &NetworkTopology
-    ) {
-        mbn_trigger_update(self, s_event, current_time, sq, topology)
-    }
-
-    pub fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_internal_timer(self, target)
-    }
-
-    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target)
     }
 
     pub fn node_id(&self) -> usize {
@@ -414,6 +385,7 @@ impl RelayMBN {
                 };
                 sq.push(forward_event);
             }
+
             TriggerEvent::NormalRecv => {
                 let outlink = topology.get_outlink(s_event.node_idx, s_event.link_idx).unwrap();
                 if  outlink == self.coreside_link {
@@ -462,12 +434,6 @@ impl RelayMBN {
                 }
             }
 
-
-            TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
-            }
-
-
             TriggerEvent::PaddingSent { .. } => {
                 let forward_s_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
@@ -485,10 +451,11 @@ impl RelayMBN {
                 // Use blocking-aware logic to decide whether to queue immediately or block
                 mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
             }
-            TriggerEvent::PaddingRecv => {}
-            TriggerEvent::BlockingBegin { .. } => {
-                // Blocking state is already updated in mbn_do_scheduled_action
+
+            TriggerEvent::TunnelSent => {
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
             }
+
             TriggerEvent::BlockingEnd => {
                 // Release any queued events with current time
                 mbn_release_blocked_events(self, sq, s_event.time);
@@ -498,29 +465,8 @@ impl RelayMBN {
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
-            TriggerEvent::TimerBegin { .. } => {
-            }
-            TriggerEvent::TimerEnd { .. }  => {
-            }
+            _ => {}
         }
-    }
-
-    pub fn trigger_update(
-        &self, 
-        s_event: &SimulEvent, 
-        current_time: &Instant, 
-        sq: &mut SimulQueue, 
-        topology: &NetworkTopology
-    ) {
-        mbn_trigger_update(self, s_event, current_time, sq, topology)
-    }
-
-    pub fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_internal_timer(self, target)
-    }
-
-    pub fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
-        mbn_do_scheduled_action(self, target)
     }
 
     pub fn node_id(&self) -> usize {
