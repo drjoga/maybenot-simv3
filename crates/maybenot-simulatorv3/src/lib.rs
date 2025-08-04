@@ -37,7 +37,7 @@ use mbn_helpers::initialize_mbn_sim_states;
 // have to work around this by using an enum to support selecting rng source as
 // a simulation option.
 #[derive(Debug)]
-enum RngSource {
+pub enum RngSource {
     Thread(ThreadRng),
     Xoshiro(Xoshiro256StarStar),
 }
@@ -306,7 +306,7 @@ pub struct ScheduledAction {
     time: Instant,
 }
 
-/// The state of the client, or server, or webserver in the simulator.
+/// The state of the client, or relay in the simulator.
 #[derive(Debug)]
 pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
@@ -514,6 +514,10 @@ pub fn simul_advanced(
         initialize_mbn_sim_states(topology, machines_client, machines_server, current_time, args);
     }
 
+    let client_mbn = if topology.has_mb { Some(topology.get_mbn_client()) } else { None };
+    let relay_mbn = if topology.has_mb { Some(topology.get_mbn_server()) } else { None };
+
+
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
@@ -537,18 +541,14 @@ pub fn simul_advanced(
         }
 
         // Debug blocking status from nodes
-        if topology.has_mb {
-            let client_mbn = topology.get_mbn_client();
-            if let Some(blocking_until) = client_mbn.get_sim_state().borrow().blocking_until {
-                debug!(
-                    "sim(): client is blocked until time {:#?}",
+        if client_mbn.is_some() && relay_mbn.is_some(){
+            if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
+                debug!("sim(): client is blocked until time {:#?}",
                     blocking_until.duration_since(sq.zero_instant)
                 );
-            }
-            let relay_mbn = topology.get_mbn_server();
-            if let Some(blocking_until) = relay_mbn.get_sim_state().borrow().blocking_until {
-                debug!(
-                    "sim(): server is blocked until time {:#?}",
+            }        
+            if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
+                debug!("sim(): server is blocked until time {:#?}",
                     blocking_until.duration_since(sq.zero_instant)
                 );
             }
@@ -565,12 +565,10 @@ pub fn simul_advanced(
         if topology.has_mb {
             if next.node_idx == topology.mb_client {
                 debug!("sim(): trigger @client framework {:?}", next.event);
-                let client_mbn = topology.get_mbn_client();
-                client_mbn.trigger_update(&next, &current_time, sq, topology);
+                client_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
             } else if next.node_idx == topology.mb_server {
                 debug!("sim(): trigger @server framework {:?}", next.event);
-                let relay_mbn = topology.get_mbn_server();
-                relay_mbn.trigger_update(&next, &current_time, sq, topology);
+                relay_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
             }
         }
 
@@ -580,7 +578,7 @@ pub fn simul_advanced(
             (!args.only_network_activity || next.event == TriggerEvent::TunnelRecv ||
              next.event == TriggerEvent::TunnelSent) 
         {
-            trace.push(next.clone());            
+            trace.push(next);            
         }
 
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
@@ -614,7 +612,7 @@ pub fn simul_advanced(
     }
 
     // sort the trace by time
-    // TIME-TEST: 3.6 -> 4.7 ms when sorting the trac
+    // TIME-TEST: 3.6 -> 4.7 ms when sorting the trace
     trace.sort_by(|a, b| a.time.cmp(&b.time));
 
     trace

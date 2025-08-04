@@ -1,13 +1,10 @@
 use std::time::Duration;
 
 
-use maybenot_simulatorv3::{network::Network, parse_trace, sim, simul_advanced, SimulatorArgs};
+use maybenot_simulatorv3::{network::Network, parse_trace,simul_advanced, SimulatorArgs};
 
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ndarray::Array2;
-use rand::Rng;
-use rayon::prelude::*;
+use criterion::{criterion_group, criterion_main, Criterion};
 
 
 
@@ -35,6 +32,7 @@ fn v3_simulator_run(c: &mut Criterion) {
             let mut args = SimulatorArgs::new(0, true);
             args.max_sim_iterations = nr_sim_events;
             args.only_client_events = true;
+            args.continue_after_all_normal_packets_processed = false;
             let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
 
             output_len = trace.len();

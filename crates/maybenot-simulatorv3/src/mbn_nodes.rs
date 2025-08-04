@@ -12,7 +12,7 @@ use log::debug;
 // Helper function to handle TunnelSent event creation with blocking logic
 pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     node: &T,
-    s_event: &SimulEvent,
+    s_event: SimulEvent,
     sq: &mut SimulQueue,
 ) {
     let sim_state = node.get_sim_state().borrow();
@@ -54,11 +54,11 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
                 }
             } else {
                 if s_event.contains_padding {
-                    node.get_queue_padding().borrow_mut().push_back(s_event.clone());
+                    node.get_queue_padding().borrow_mut().push_back(s_event);
                     debug!("Blocking Padding enqued");
                     return;
                 } else {
-                    node.get_queue_normal().borrow_mut().push_back(s_event.clone());
+                    node.get_queue_normal().borrow_mut().push_back(s_event);
                     debug!("Blocking Normal enqued");
                     return;
                 }
@@ -67,7 +67,7 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     }
     // Not blocking or past blocking time or bypass fallthrough - add to simulation queue immediately
     debug!("TunnelSent immediately");
-    sq.push(s_event.clone());
+    sq.push(s_event);
 }
 
 // Helper function to release queued events when blocking ends
@@ -203,7 +203,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
+                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::PaddingSent { .. } => {
@@ -221,7 +221,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
+                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::TunnelSent => {
@@ -428,7 +428,7 @@ impl RelayMBN {
                         debug_note: None,
                     };
                     // Use blocking-aware logic to decide whether to queue immediately or block
-                    mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
+                    mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
                 } else {
                     panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
                 }
@@ -449,7 +449,7 @@ impl RelayMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, &forward_s_event, sq);
+                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::TunnelSent => {

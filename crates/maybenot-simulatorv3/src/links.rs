@@ -86,7 +86,7 @@ pub struct BottleneckTputLink {
     pub from: usize,
     pub to: usize,
     pub prop_us: Duration,
-    network_bottleneck: NetworkBottleneck,
+    _network_bottleneck: NetworkBottleneck,
 }
 
 impl BottleneckTputLink {
@@ -96,7 +96,7 @@ impl BottleneckTputLink {
             from,
             to,
             prop_us,
-            network_bottleneck: NetworkBottleneck::new(window, queue_pps),
+            _network_bottleneck: NetworkBottleneck::new(window, queue_pps),
         }
     }
     pub fn sample(&self, _current_duration: Duration,) -> Duration {
@@ -434,42 +434,7 @@ pub fn create_link(
 }
 
 
-///// 
-
-
-
-
-
-// Labels for the different types of simulated networks there are,
-// in terms of how the bottleneck is modeled
-#[derive(Debug, Clone)]
-pub enum ExtendedNetworkLabels {
-    Bottleneck,
-}
-
-#[derive(Debug, Clone)]
-pub enum ExtendedNetwork {
-    Bottleneck(NetworkBottleneck),
-}
-
-impl ExtendedNetwork {
-    pub fn new_bottleneck(window: Duration, queue_pps: Option<usize>) -> Self {
-        ExtendedNetwork::Bottleneck(NetworkBottleneck::new(window, queue_pps))
-    }
-
-
-    pub fn sample(
-        &mut self,
-        current_time: &Instant,
-        is_client: bool,
-    ) -> (Duration, Option<Duration>) {
-        match self {
-            ExtendedNetwork::Bottleneck(bn) => bn.sample(current_time, is_client),
-        }
-    }
-
-}
-
+/// NOTE: NOT WORKING CURRENTLY, needs to be adapted to v3
 /// a network bottleneck that adds delay to packets above a certain packets per
 /// window limit (default 1s window, so pps), and keeps track of the aggregate
 /// delay to add to packets due to the bottleneck or accumulated blocking by
