@@ -107,7 +107,7 @@ mod tests {
 
     fn create_dummy_linktrace() -> LinkTrace {
         let trace_data = "100\n200\n300";
-        LinkTrace::new_std_res(trace_data, trace_data)
+        LinkTrace::new_std_res(trace_data)
     }
 
     #[test]

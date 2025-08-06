@@ -48,10 +48,6 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
 
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
-    // print out events if there are not a lot. Current printinout function is slow for large traces.
-    if traffic_events.dependent_tx.len() < 200{
-        event_schedule_print(&traffic_events, ttrace_ts_to_c_delay.as_nanos() as i64);
-    }
     fill_simq(&traffic_events, &topology, &mut sq);
     let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
     println!("SimQ length: {:?}   oneline events: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), sq.highest_depend_tx, traffic_events.dependent_tx.len(), total_dependent_events);
@@ -349,7 +345,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             time: event_instant,
             packet_idx: event.packet_idx,
             node_idx: topology.client, // Client node index
-            link_idx: topology.nodes[topology.client].get_coreside_linkid(), // Client->Relay link
+            link_idx: topology.nodes[topology.client].get_coreside_out_id(), // Client->Relay link
             contains_padding: false,
             bypass: false,
             replace: false,
@@ -367,7 +363,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
             time: event_instant,
             packet_idx: event.packet_idx,
             node_idx: topology.traffic_server, // TrafficServer node index
-            link_idx: topology.nodes[topology.traffic_server].get_edgeside_linkid(), // TrafficServer->Relay link
+            link_idx: topology.nodes[topology.traffic_server].get_edgeside_out_id(), // TrafficServer->Relay link
             contains_padding: false,
             bypass: false,
             replace: false,

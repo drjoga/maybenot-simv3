@@ -16,6 +16,7 @@ fn v3_simulator_run(c: &mut Criterion) {
 
     //let config_path = "../crates/maybenot-simulatorv3/basic_test.toml";
     let config_path = "../crates/maybenot-simulatorv3/mbn_test.toml";
+    //let config_path = "../crates/maybenot-simulatorv3/mbnfast.toml";
     let (topology, linkstate) = Network::from_toml_file(config_path).unwrap();
 
     println!("Config path: {}", config_path);
@@ -27,10 +28,11 @@ fn v3_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let mut linkstate2 = linkstate.clone(); 
             let mut input_trace2 = input_trace.clone();
-            let nr_sim_events = 56829;   // 30097 with basic tom, 56829 with mbn toml, gives 10000 client events to be comparable
+            // 30097 with basic toml, 56829 with mbn toml, gives 10000 client events to be comparable
+            //let nr_sim_events = 56829;   
 
-            let mut args = SimulatorArgs::new(0, true);
-            args.max_sim_iterations = nr_sim_events;
+            let mut args = SimulatorArgs::new(20, true);
+            //args.max_sim_iterations = nr_sim_events;
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
             let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);

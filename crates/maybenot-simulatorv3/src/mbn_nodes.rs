@@ -1,8 +1,9 @@
 use maybenot::{TriggerEvent, Machine};
+use crate::nodes::check_dependent_packets;
 use crate::{SimulEvent, SimulQueue, SimState, RngSource};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use crate::mbn_helpers::{mbn_trigger_update, mbn_do_internal_timer, mbn_do_scheduled_action};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use log::debug;
@@ -119,7 +120,7 @@ pub trait MBNNode {
 #[derive(Debug)]
 pub struct ClientMBN {
     pub id: usize,
-    coreside_link: usize,
+    coreside_out: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
@@ -135,7 +136,7 @@ impl MBNNode for ClientMBN {
     }
     
     fn get_action_link_id(&self) -> usize {
-        self.coreside_link
+        self.coreside_out
     }
     
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
@@ -162,7 +163,7 @@ impl MBNNode for ClientMBN {
 impl ClientMBN {
     pub fn new(
         id: usize, 
-        coreside_link: usize,
+        coreside_out: usize,
         machines: Vec<Machine>,
         current_time: Instant,
         max_padding_frac: f64,
@@ -179,7 +180,7 @@ impl ClientMBN {
         
         Self {
             id,
-            coreside_link,
+            coreside_out,
             sim_state,
             queue_padding: RefCell::new(VecDeque::new()),
             queue_normal: RefCell::new(VecDeque::new()),
@@ -254,10 +255,10 @@ impl ClientMBN {
             }
 
             TriggerEvent::NormalRecv => {
-                let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_linkid();
+                let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
-                crate::nodes::check_dependent_packets(s_event, sq, outgoing_link);
+                crate::nodes::check_dependent_packets(s_event, sq, outgoing_link, 0);
             }
 
             TriggerEvent::BlockingEnd => {
@@ -277,20 +278,17 @@ impl ClientMBN {
         self.id
     }
 
-    pub fn get_coreside_linkid(&self) -> usize {
-        self.coreside_link
-    }
-
-    pub fn get_edgeside_linkid(&self) -> usize {
-        panic!("ClientMBN does not have an edgeside link")
+    pub fn get_coreside_out_id(&self) -> usize {
+        self.coreside_out
     }
 }
 
 #[derive(Debug)]
 pub struct RelayMBN {
     pub id: usize,
-    pub coreside_link: usize,
-    pub edgeside_link: usize,
+    pub coreside_out: usize,
+    pub edgeside_in: usize,
+    pub edgeside_out: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
@@ -306,7 +304,7 @@ impl MBNNode for RelayMBN {
     }
     
     fn get_action_link_id(&self) -> usize {
-        self.edgeside_link
+        self.edgeside_out
     }
     
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
@@ -333,8 +331,9 @@ impl MBNNode for RelayMBN {
 impl RelayMBN {
     pub fn new(
         id: usize, 
-        coreside_link: usize, 
-        edgeside_link: usize,
+        coreside_out: usize, 
+        edgeside_in: usize,
+        edgeside_out: usize,
         machines: Vec<Machine>,
         current_time: Instant,
         max_padding_frac: f64,
@@ -351,8 +350,9 @@ impl RelayMBN {
         
         Self {
             id,
-            coreside_link,
-            edgeside_link,
+            coreside_out,
+            edgeside_in,
+            edgeside_out,
             sim_state,
             queue_padding: RefCell::new(VecDeque::new()),
             queue_normal: RefCell::new(VecDeque::new()),
@@ -388,9 +388,9 @@ impl RelayMBN {
 
             TriggerEvent::NormalRecv => {
                 let outlink = topology.get_outlink(s_event.node_idx, s_event.link_idx).unwrap();
-                if  outlink == self.coreside_link {
+                if  outlink == self.coreside_out {
                     crate::nodes::forward_network_receive_from_receive(s_event, topology, linkstate, sq);
-                } else if outlink == self.edgeside_link {
+                } else if outlink == self.edgeside_out {
                     let new_s_event = SimulEvent {
                         event: TriggerEvent::NormalSent,
                         time: s_event.time,
@@ -411,9 +411,9 @@ impl RelayMBN {
             }
 
             TriggerEvent::NormalSent => {
-                if  s_event.link_idx == self.coreside_link {
+                if  s_event.link_idx == self.coreside_out {
                     crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
-                } else if s_event.link_idx == self.edgeside_link {
+                } else if s_event.link_idx == self.edgeside_out {
                     let forward_s_event = SimulEvent {
                         event: TriggerEvent::TunnelSent,
                         time: s_event.time, 
@@ -473,11 +473,252 @@ impl RelayMBN {
         self.id
     }
 
-    pub fn get_coreside_linkid(&self) -> usize {
-        self.coreside_link
+    pub fn get_coreside_out_id(&self) -> usize {
+        self.coreside_out
     }
 
-    pub fn get_edgeside_linkid(&self) -> usize {
-        self.edgeside_link
+    pub fn get_edgeside_out_id(&self) -> usize {
+        self.edgeside_out
+    }
+
+    pub fn get_edgeside_in_id(&self) -> usize {
+        self.edgeside_in
+    }
+}
+
+#[derive(Debug)]
+pub struct RelayMBNtserver {
+    pub id: usize,
+    pub edgeside_in: usize,
+    pub edgeside_out: usize,
+    pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
+    pub ts_prop_us: Duration,
+}
+
+impl MBNNode for RelayMBNtserver {
+    fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>> {
+        &self.sim_state
+    }
+    
+    fn node_id(&self) -> usize {
+        self.id
+    }
+    
+    fn get_action_link_id(&self) -> usize {
+        self.edgeside_out
+    }
+    
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_padding
+    }
+    
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+        &self.queue_normal
+    }
+    
+    fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology) {
+        mbn_trigger_update(self, s_event, current_time, sq, topology)
+    }
+    
+    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_internal_timer(self, target)
+    }
+    
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+        mbn_do_scheduled_action(self, target)
+    }
+}
+
+impl RelayMBNtserver {
+    pub fn new(
+        id: usize, 
+        edgeside_in: usize, 
+        edgeside_out: usize,
+        machines: Vec<Machine>,
+        current_time: Instant,
+        max_padding_frac: f64,
+        max_blocking_frac: f64,
+        insecure_rng_seed: Option<u64>,
+        ts_prop_us: Duration,
+    ) -> Self {
+        let sim_state = RefCell::new(SimState::new(
+            machines,
+            current_time,
+            max_padding_frac,
+            max_blocking_frac,
+            insecure_rng_seed
+        ));
+        
+        Self {
+            id,
+            edgeside_in,
+            edgeside_out,
+            sim_state,
+            queue_padding: RefCell::new(VecDeque::new()),
+            queue_normal: RefCell::new(VecDeque::new()),
+            ts_prop_us,
+        }
+    }
+
+    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+        match &s_event.event {
+            TriggerEvent::TunnelRecv => {
+                let new_event = match &s_event.contains_padding {
+                    true => {
+                        TriggerEvent::PaddingRecv
+                    },
+                    false => {
+                        TriggerEvent::NormalRecv
+                    }
+                };
+                let forward_event = SimulEvent {
+                    event: new_event,
+                    time: s_event.time,
+                    packet_idx: s_event.packet_idx,
+                    node_idx: s_event.node_idx,
+                    link_idx: s_event.link_idx,
+                    contains_padding: false,
+                    bypass: false,
+                    replace: false,
+                    q_sequence_nr: 0, // Will be overwritten by push()
+                    #[cfg(debug_assertions)]
+                    debug_note: None,
+                };
+                sq.push(forward_event);
+            }
+
+            TriggerEvent::NormalRecv => {
+                debug!("\tqueue {:#?} tx_depend check RelayMBNtserver", TriggerEvent::NormalRecv);
+                let mut timeadjusted_event = s_event.clone();
+                timeadjusted_event.time += self.ts_prop_us; // Add delay to trafficserver
+                let outgoing_link = &linkstate.links[self.edgeside_out];
+                check_dependent_packets(&timeadjusted_event, sq, outgoing_link, self.ts_prop_us.as_micros()  as u64);
+               
+/* 
+                if let Some(dependencies) = sq.dependent_tx.remove(&s_event.packet_idx) {
+                    let link_id = outgoing_link.link_id();
+                    
+                    for (new_pktidx, delta, event_kind) in dependencies {
+                        debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?}", 
+                            new_pktidx, delta, event_kind);
+                        
+                        sq.push(SimulEvent {
+                            event: TriggerEvent::NormalSent,
+                            time: s_event.time + Duration::from_nanos(delta as u64),
+                            packet_idx: new_pktidx,
+                            node_idx: s_event.node_idx,
+                            link_idx: link_id,
+                            contains_padding: false,
+                            bypass: false,
+                            replace: false,
+                            q_sequence_nr: 0, // Will be overwritten by push()
+                            #[cfg(debug_assertions)]
+                            debug_note: None,
+                        });
+                    }
+                }
+                */
+            }
+
+/*
+
+                // Collect dependent events first to avoid borrow conflicts
+                let dependent_events: Vec<_> = sq.dependent_tx.remove(&s_event.packet_idx)
+                    .map(|deps| deps.into_iter().collect())
+                    .unwrap_or_default();
+                
+                // Create NormalSent events for dependent packets with ts_prop_us delay
+                for (dep_packet_idx, delta_ns, event_kind) in dependent_events {
+                    if event_kind == crate::traffic_parse::EventKind::CliReceive {
+                        // Create edgeside NormalSent event with additional ts_prop_us delay
+                        let ts_delay = std::time::Duration::from_micros(2 * self.ts_prop_us);
+                        let new_s_event = SimulEvent {
+                            event: TriggerEvent::NormalSent,
+                            time: s_event.time + std::time::Duration::from_nanos(delta_ns as u64) + ts_delay,
+                            packet_idx: dep_packet_idx,
+                            node_idx: s_event.node_idx,
+                            link_idx: self.edgeside_link,
+                            contains_padding: false,
+                            bypass: false,
+                            replace: false,
+                            q_sequence_nr: 0, // Will be overwritten by push()
+                            #[cfg(debug_assertions)]
+                            debug_note: Some("Dependent packet from RelayMBNtserver".to_string()),
+                        };
+                        sq.push(new_s_event);
+                    }
+                }
+                // Ignore coreside NormalRecv (shouldn't happen in this topology)
+            }
+*/
+            TriggerEvent::NormalSent => {
+                // Only handle edgeside NormalSent - convert to TunnelSent with blocking logic
+                if s_event.link_idx == self.edgeside_out {
+                    let forward_s_event = SimulEvent {
+                        event: TriggerEvent::TunnelSent,
+                        time: s_event.time, 
+                        packet_idx: s_event.packet_idx,
+                        node_idx: s_event.node_idx, 
+                        link_idx: s_event.link_idx, 
+                        contains_padding: false,
+                        bypass: s_event.bypass,
+                        replace: s_event.replace,
+                        q_sequence_nr: 0, // Will be overwritten by push()
+                        #[cfg(debug_assertions)]
+                        debug_note: None,
+                    };
+                    // Use blocking-aware logic to decide whether to queue immediately or block
+                    mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                }
+                // Ignore coreside NormalSent (shouldn't happen)
+            }
+
+            TriggerEvent::PaddingSent { .. } => {
+                let forward_s_event = SimulEvent {
+                    event: TriggerEvent::TunnelSent,
+                    time: s_event.time, 
+                    packet_idx: s_event.packet_idx,
+                    node_idx: s_event.node_idx, 
+                    link_idx: s_event.link_idx, 
+                    contains_padding: true,
+                    bypass: s_event.bypass,
+                    replace: s_event.replace,
+                    q_sequence_nr: 0, // Will be overwritten by push()
+                    #[cfg(debug_assertions)]
+                    debug_note: None,
+                };
+                // Use blocking-aware logic to decide whether to queue immediately or block
+                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+            }
+
+            TriggerEvent::TunnelSent => {
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+            }
+
+            TriggerEvent::BlockingEnd => {
+                // Release any queued events with current time
+                mbn_release_blocked_events(self, sq, s_event.time);
+                
+                // Clear blocking state
+                let mut state = self.sim_state.borrow_mut();
+                state.blocking_until = None;
+                state.blocking_bypassable = false;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn node_id(&self) -> usize {
+        self.id
+    }
+
+    pub fn get_edgeside_in_id(&self) -> usize {
+        self.edgeside_in
+    }
+
+    pub fn get_edgeside_out_id(&self) -> usize {
+        self.edgeside_out
     }
 }

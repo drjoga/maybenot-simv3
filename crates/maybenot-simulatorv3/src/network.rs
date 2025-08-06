@@ -22,8 +22,11 @@ pub struct NodeConfig {
     pub id: usize,
     #[serde(rename = "type")]
     pub node_type: String,
-    pub coreside_link: Option<usize>,
-    pub edgeside_link: Option<usize>,
+    pub coreside_out: Option<usize>,
+    pub edgeside_in: Option<usize>,
+    pub edgeside_out: Option<usize>,
+    #[serde(flatten)]
+    pub params: HashMap<String, toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,6 +183,16 @@ impl NetworkTopology {
                     traffic_server_id = Some(node_config.id);
                 }
 
+                "RelayMBNtserver" => {
+                    if mb_server.is_some() {
+                        return Err(NetworkError("Multiple MBN server nodes found. Only one is allowed.".to_string()));
+                    }
+                    if traffic_server_id.is_some() {
+                        return Err(NetworkError("Multiple traffic server nodes found. Only one is allowed.".to_string()));
+                    }
+                    mb_server = Some(node_config.id);
+                    traffic_server_id = Some(node_config.id); // RelayMBNtserver acts as both
+                }
 
                 _ => {} // Other node types are fine
             }
@@ -187,13 +200,13 @@ impl NetworkTopology {
 
         // Ensure we have exactly one client and one traffic server
         let client = client_id.ok_or_else(|| NetworkError("No Client node found. Exactly one is required.".to_string()))?;
-        let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No TrafficServerBasic node found. Exactly one is required.".to_string()))?;
+        let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No traffic server node found. Exactly one TrafficServerBasic or RelayMBNtserver is required.".to_string()))?;
 
         // Set the client and traffic server IDs
         topology.client = client;
         topology.traffic_server = traffic_server;
         
-        // Set MB fields (for future use)
+        // Set MB fields
         if let Some(mb_server_id) = mb_server {
             topology.has_mb = true;
             topology.mb_server = mb_server_id;
@@ -201,13 +214,25 @@ impl NetworkTopology {
 
         // Create nodes
         for node_config in &config.nodes {
-            // For now, pass empty params - MBN parameters will be set during simulation
-            let params = std::collections::HashMap::new();
+            // Convert TOML values to strings for the factory function
+            let mut params = HashMap::new();
+            for (key, value) in &node_config.params {
+                let value_str = match value {
+                    toml::Value::String(s) => s.clone(),
+                    toml::Value::Integer(i) => i.to_string(),
+                    toml::Value::Float(f) => f.to_string(),
+                    toml::Value::Boolean(b) => b.to_string(),
+                    _ => continue, // Skip unsupported parameter types
+                };
+                params.insert(key.clone(), value_str);
+            }
+            
             let node = create_node(
                 &node_config.node_type,
                 node_config.id,
-                node_config.coreside_link,
-                node_config.edgeside_link,
+                node_config.coreside_out,
+                node_config.edgeside_in,
+                node_config.edgeside_out,
                 &params
             ).map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
             topology.add_node(node, node_config.id);
@@ -304,6 +329,7 @@ impl NetworkTopology {
     pub fn get_mbn_server(&self) -> &dyn MBNNode {
         match &self.nodes[self.mb_server] {
             NodeType::RelayMBN(server) => server,
+            NodeType::RelayMBNtserver(server) => server,
             _ => panic!("MBN server node not found or wrong type"),
         }
     }

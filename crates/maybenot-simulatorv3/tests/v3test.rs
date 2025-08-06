@@ -14,25 +14,26 @@ fn full_trace_compare() {
     
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let mut input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let mut sq = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     
     // 30097 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
     // 56829 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 56829, true);
     
-    let output_trace = sim(&[], &[], &mut input_trace, &topology, &mut linkstate, 56829, true);
+
+    let output_trace = sim(&[], &[], &mut sq, &topology, &mut linkstate, 20829, true);
     // print length of output trace
     println!("Output trace length: {}", output_trace.len());
-    
-    // Print the first 5 events in output trace for debugging
-    println!("First 5 events in output trace:");
-    for event in output_trace.iter().take(5) {
-        println!("{}", event);
+
+    // Print the first 15 events in output trace for debugging
+    println!("First 15 events in output trace:");
+    for event in output_trace.iter().take(15) {
+        println!("{}", event.display_full(&sq, &topology, &linkstate));
     }
 
     // Convert output trace to EARLY_TEST_TRACE format (time,direction) - ignoring size
-    let starting_time = input_trace.zero_instant;
+    let starting_time = sq.zero_instant;
     let mut formatted_output = Vec::new();
     
     for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only

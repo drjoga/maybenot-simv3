@@ -86,7 +86,10 @@ fn test_simple_pad_machine() {
     // client machine and server output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn 37,rt 37",
+        "5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn 37,rt 37,rp",
+
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -112,7 +115,9 @@ fn test_simple_pad_machine() {
     // server machine and server output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 28,sp 28,st 30,sn 30,st 35,rt 35,rn 36,sp 36,st",
+        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 28,sp 28,st 30,sn 30,st 35,rt 35,rn",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 28,sp 28,st 30,sn 30,st 35,rt 35,rn 36,sp 36,st",
         Duration::from_micros(5),
         &[],
         &[m],
@@ -162,7 +167,9 @@ fn test_simple_block_machine() {
     // note in the output how 18,sn should be delayed until 20,sn due to blocking
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,be 20,st 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb",
+        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,be 20,st 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,be 20,st 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -175,7 +182,9 @@ fn test_simple_block_machine() {
     // server
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb 40,be",
+        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn",
+        // previous netsim output below, included packet at the end which are not "normal" packets
+        //"5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb 40,be",
         Duration::from_micros(5),
         &[],
         &[m.clone()],
@@ -317,7 +326,9 @@ fn test_block_and_padding() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn",
+        // previous netsim output below, included packet at the end which are not "normal"
+        //"1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m],
         &[],
@@ -432,7 +443,9 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn",
+        // previous netsim output below, included packet at the end which are not "normal"
+        //"1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -462,7 +475,9 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn",
+        // previous netsim output below, included packet at the end which are not "normal"
+        //"1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -492,7 +507,9 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn",
+        // previous netsim output below, included packet at the end which are not "normal"
+        //"1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m],
         &[],

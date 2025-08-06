@@ -5,18 +5,19 @@
 [[Node]]
 id = 0
 type = "ClientMBN"
-coreside_link = 2
+coreside_out = 2
 
 [[Node]]
 id = 1
 type = "RelayMBN"
-coreside_link = 3
-edgeside_link = 1
+coreside_out = 3
+edgeside_out = 1
+edgeside_in = 2
 
 [[Node]]
 id = 2
 type = "TrafficServerBasic"
-edgeside_link = 0
+edgeside_out = 0
 
 # Link definitions
 # Link 0: from node 2 to node 1 (TrafficServer -> Relay)

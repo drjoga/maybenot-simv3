@@ -1,12 +1,11 @@
 use std::env;
-use std::fs::File;
-use std::io::Write;
 use std::time::{Duration, Instant};
 
 use log::debug;
 use maybenot::{action::Action, state::State, Machine, TriggerEvent};
 use maybenot_simulatorv3::{
-    event_schedule_print, SimulEvent,
+    event_schedule_print, 
+    SimulEvent,
     network::{Network, NetworkTopology},
     simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulQueue
 };
@@ -16,7 +15,7 @@ use once_cell::sync::Lazy;
 pub fn run_test_sim(
     input: &str,
     output: &str,
-    delay: Duration,
+    propagation_delay: Duration,
     machines_client: &[Machine],
     machines_server: &[Machine],
     client: bool,
@@ -25,7 +24,9 @@ pub fn run_test_sim(
     as_ms: bool,
 ) {
     //let config_path = "basic_test.toml";
-    let config_path = "mbn_test.toml";
+    //let config_path = "mbn_test.toml";
+    let config_path = "mbnfast.toml";
+
     //Read in config path to toml_str
     let mut toml_str = std::fs::read_to_string(config_path)
         .expect("Failed to read the configuration file");
@@ -33,7 +34,7 @@ pub fn run_test_sim(
     toml_str = toml_str.lines()
         .map(|line| {
             if line.trim_start().starts_with("prop_us") {
-                format!("prop_us = {}", delay.as_micros())
+                format!("prop_us = {}", propagation_delay.as_micros())
             } else {
                 line.to_string()
             }
@@ -43,17 +44,34 @@ pub fn run_test_sim(
 
     let (topology, mut linkstate) = Network::from_toml_str(&toml_str)
         .expect("Failed to parse the network configuration from TOML string");
-    print!("toml string: {}\n", toml_str);
     // The trafficserver events require incresing the max length compared to what is specced in old tests
     let max_trace_length = 2 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
     args.continue_after_all_normal_packets_processed = false;
-    let mut sq = make_sq(input.to_string(), &topology, delay, as_ms);
+    // The test cases assume the timing from netsimv1, where the client <--> relay/server <--> trafficserver
+    // have two occurences of the link delay, so create that to apply when parsing the trace.
+    let adjusted_delay =  propagation_delay * 2;
+    let mut sq = make_sq(input.to_string(), &topology, adjusted_delay, as_ms);
+    // Check if th topology has a short-circuiting relay mbn tserver
+    // If so, we need to adjust the delay for the trafficserver SimQ events
+    if matches!(topology.nodes[topology.mb_server],
+          maybenot_simulatorv3::nodes::NodeType::RelayMBNtserver(_)) {
+            // Iterate over the SimulEvents in the queue and adjust the time for trafficserver events
+            let mut events: Vec<_> = sq.heap.drain().collect();
+            for event in events.iter_mut() {
+                if event.node_idx == topology.mb_server && event.event == TriggerEvent::NormalSent {
+                    // Adjust the time by adding the propagation delay trafserv <--> relay/server
+                    event.time += propagation_delay;
+                }
+            }
+            sq.heap.extend(events);
+    }
+
     let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args);
-    //print!("{:?}\n\n", trace);
-    // Loop over all events in trace and print them
-    for event in &trace {
-        println!("{}", event.display_full(&sq,&topology,&linkstate));
+    if *SHOW_EVENTS {
+        for event in &trace {
+            println!("{}", event.display_full(&sq,&topology,&linkstate));
+        }
     }
     let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &sq);
     if fmt.len() > output.len() {
@@ -180,54 +198,6 @@ trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#
     }
 }
 
-pub fn run_test_sim_trace(
-    input: &str,
-    output: &str,
-    delay: Duration,
-    machines_client: &[Machine],
-    machines_server: &[Machine],
-    client: bool,
-    max_trace_length: usize,
-    only_packets: bool,
-    as_ms: bool,
-    description: &str,
-    use_network: &str,
-    skip_asserts: bool,
-) {
-
-    let config_path = "../crates/maybenot-simulatorv3/basic_test.toml";
-    //Read in config path to toml_str
-    let mut toml_str = std::fs::read_to_string(config_path)
-        .expect("Failed to read the configuration file");
-    //Go through toml_str and change all prop_us in toml_str to the value of delay variable
-    toml_str = toml_str.replace("prop_us", &format!("{}", delay.as_micros()));
-    toml_str = adjust_toml_string(toml_str, use_network.to_string(), TraceSpec::ether100M);
-    
-    let (topology, mut linkstate) = Network::from_toml_str(&toml_str)
-        .expect("Failed to parse the network configuration from TOML string");
-
-
-
-    // The trafficserver events require incresing the max length compared to what is specced in tests
-    let max_trace_length = 4 * max_trace_length;
-    let mut args = SimulatorArgs::new(max_trace_length, only_packets);
-    args.continue_after_all_normal_packets_processed = true;
-    let tracefilename = format!("{}__{}.simtrace", description, use_network);
-
-    let mut sq = make_sq(input.to_string(), &topology, delay, as_ms);
-    let trace = run_and_save_trace(&tracefilename, || {
-        simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args)
-    });
-
-    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &sq);
-    if fmt.len() > output.len() {
-        fmt = fmt.get(0..output.len()).unwrap().to_string();
-    }
-    debug!("input: {}", input);
-    if !skip_asserts {
-        assert_eq!(output, fmt);
-    }
-}
 
 fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology, sq: &SimulQueue) -> String {
     fn fmt_event(e: &SimulEvent, base: Instant, ms: bool) -> String {
@@ -261,10 +231,10 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, t
             }
         } else {
             // Only show events on the servers "interface" towards client
+            let edgeside_out  = topology.nodes[topology.mb_server].get_edgeside_out_id();
+            let edgeside_in = topology.nodes[topology.mb_server].get_edgeside_in_id();
             if s_event.node_idx == topology.mb_server && 
-            (s_event.link_idx == topology.nodes[topology.mb_server].get_edgeside_linkid()  || 
-            // FIXME: Remove hardcoding!!
-            s_event.link_idx == 2) {
+            (s_event.link_idx == edgeside_out  || s_event.link_idx == edgeside_in) {
                 s = format!("{} {}", s, fmt_event(s_event, base, ms));
             }
         }
@@ -280,7 +250,7 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
         false => 1_000 
         
     };
-    let ttrace_ts_to_c_delay_ns =  delay.as_micros() as i64 * 1_000 * 2;
+    let ttrace_ts_to_c_delay_ns =  delay.as_micros() as i64 * 1_000;
     //traffic_trace_prepare now expects the delay in nanoseconds, 
     //so loop throough the string and convert to nanoseconds
     // nonwithstanding the as_ms flag
@@ -315,9 +285,11 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
 
     sq.highest_depend_tx = s.split_whitespace().count();
     let traffic_events = traffic_trace_prepare(&s, ttrace_ts_to_c_delay_ns);
-    print!("----------------------------------\n");
-    event_schedule_print(&traffic_events, ttrace_ts_to_c_delay_ns);
-    print!("----------------------------------\n");
+    if *SHOW_PARSING {
+        print!("----- Parsing -----------------------------\n");
+        event_schedule_print(&traffic_events, ttrace_ts_to_c_delay_ns);
+        print!("----------------------------------\n");
+    }
 
     fill_simq(&traffic_events, topology, &mut sq);        
     sq
@@ -354,28 +326,21 @@ pub fn set_replace(s: &mut State, value: bool) {
     }
 }
 
-/// Runs the closure `f` to produce a result (e.g. the trace), and if the
+/// If the
 /// environment variable `SAVE_TRACE` is set to "1", writes the formatted result
 /// to the specified filename.
-/// eg.   $SAVE_TRACE=1 cargo test
-static SAVE_TRACE: Lazy<bool> = Lazy::new(|| match env::var("SAVE_TRACE").as_deref() {
+/// eg.   $SHOW_TRACE=1 cargo test
+static SHOW_EVENTS: Lazy<bool> = Lazy::new(|| match env::var("SHOW_EVENTS").as_deref() {
     Ok("0") => false,
     Ok("1") => true,
-    Ok(v) => panic!("Invalid SAVE_TRACE value: {}. Expected 0 or 1.", v),
+    Ok(v) => panic!("Invalid SHOW_EVENTS value: {}. Expected 0 or 1.", v),
     Err(_) => false,
 });
 
-pub fn run_and_save_trace<T, F>(filename: &str, f: F) -> T
-where
-    F: FnOnce() -> T,
-    T: std::fmt::Debug,
-{
-    let result = f();
+static SHOW_PARSING: Lazy<bool> = Lazy::new(|| match env::var("SHOW_PARSING").as_deref() {
+    Ok("0") => false,
+    Ok("1") => true,
+    Ok(v) => panic!("Invalid SHOW_PARSING value: {}. Expected 0 or 1.", v),
+    Err(_) => false,
+});
 
-    if *SAVE_TRACE {
-        let mut file = File::create(filename).expect("Failed to create trace output file");
-        write!(file, "{:#?}", result).expect("Failed to write trace to file");
-        println!("Trace saved to {}", filename);
-    }
-    result
-}
