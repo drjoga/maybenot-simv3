@@ -207,7 +207,6 @@ pub struct SimulQueue {
     pub heap: BinaryHeap<SimulEvent>,
     pub(crate) dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
     next_q_sequence_nr: u64,
-    pub highest_depend_tx: usize,
 }
 
 impl SimulQueue {
@@ -223,7 +222,6 @@ impl SimulQueue {
             heap: BinaryHeap::new(),
             dependent_tx: HashMap::new(),
             next_q_sequence_nr: 0,
-            highest_depend_tx: 0,
         }
     }
 
@@ -604,7 +602,6 @@ pub fn simul_advanced(
         // check if we should stop after all normal packets have been processed
         if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets(topology) {
             debug!("sim(): we done, all normal packets processed");
-            debug!("Highest dependent tx: {}", sq.highest_depend_tx);
             debug!(" Heap: {:?}", sq.heap);
             break;
         }

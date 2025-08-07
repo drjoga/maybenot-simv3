@@ -291,7 +291,6 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
         .collect::<Vec<_>>()
         .join(" ");
 
-    sq.highest_depend_tx = s.split_whitespace().count();
     let traffic_events = traffic_trace_prepare(&s, ttrace_ts_to_c_delay_ns);
     if *SHOW_PARSING {
         print!("----- Parsing -----------------------------\n");

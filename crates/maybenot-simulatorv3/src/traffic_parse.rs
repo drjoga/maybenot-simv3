@@ -44,13 +44,11 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
         }
     }
 
-    sq.highest_depend_tx = oneline.split_whitespace().count();
-
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
     fill_simq(&traffic_events, &topology, &mut sq);
     //let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
-    //println!("SimQ length: {:?}   oneline events: {:?} tx_dpend length: {:?} tx_dpend events: {:?}", sq.len(), sq.highest_depend_tx, traffic_events.dependent_tx.len(), total_dependent_events);
+    //println!(" Online events: {:?}   SimQ length: {:?}   tx_dpend length: {:?} tx_dpend events: {:?}", oneline.split_whitespace().count(), sq.len(), traffic_events.dependent_tx.len(), total_dependent_events);
     sq
 }
 
