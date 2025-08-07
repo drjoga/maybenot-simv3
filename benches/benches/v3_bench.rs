@@ -29,11 +29,8 @@ fn v3_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let mut linkstate2 = linkstate.clone(); 
             let mut input_trace2 = input_trace.clone();
-            // 30097 with basic toml, 56829 with mbn toml, gives 10000 client events to be comparable
-            //let nr_sim_events = 56829;   
 
             let mut args = SimulatorArgs::new(10000, true);
-            //args.max_sim_iterations = nr_sim_events;
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
             let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
@@ -65,26 +62,17 @@ fn v3_multi_run(c: &mut Criterion) {
         for config_file in config_files.iter() {
             let config_path = toml_path.clone() + config_file;
             let config_name = config_file.split('_').nth(1).unwrap();
-
             let (topology, linkstate) = Network::from_toml_file(config_path.clone()).unwrap();
-
             let trafserv_to_client_delay= Duration::from_millis(20);
             let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
             let mut output_len = 0;
             let bench_name = format!("v3_{:?}K_{},", sim_event_count/1000,config_name);
             c.bench_function(bench_name.as_str(), |b| {
                 b.iter(|| {
-                    //let mut linkstate2 = linkstate.clone(); 
-                    let mut input_trace2 = input_trace.clone();
-                    // 30097 with basic toml, 56829 with mbn toml, gives 10000 client events to be comparable
-                    //let nr_sim_events = 56829;   
-                    let (topology, mut linkstate2) = Network::from_toml_file(config_path.clone()).unwrap();
-
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
-                    //args.max_sim_iterations = nr_sim_events;
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
+                    let trace = simul_advanced(&[], &[], &topology, &mut linkstate.clone(), &mut input_trace.clone(), &args);
 
                     output_len = trace.len();
                 });
@@ -92,6 +80,44 @@ fn v3_multi_run(c: &mut Criterion) {
             print!("Length of output trace: {}\n", output_len );
         }
     }
+}
+
+
+
+
+fn v3_components(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulatorv3/tests/EARLY_TEST_TRACE.log");
+
+    let toml_path = env!("CARGO_MANIFEST_DIR").to_string();   
+    let config_file = "/benches/mbn_complex_bench.toml";
+
+    let config_path = toml_path.clone() + config_file;
+
+    c.bench_function("SimulatorArgs.new", |b| {
+        b.iter(|| {
+            black_box( SimulatorArgs::new(10_000, true));
+        });
+    });
+
+
+    c.bench_function("TopologyRead", |b| {
+        b.iter(|| {
+            let _ = black_box(Network::from_toml_file(config_path.clone()));
+        });
+    });
+
+    let (topology, _linkstate) = Network::from_toml_file(config_path).unwrap();
+    let trafserv_to_client_delay= Duration::from_millis(20);
+
+    c.bench_function("parse_trace", |b| {
+        b.iter(|| {
+            black_box(parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay));
+        });
+    });
+
+
+
 }
 
 
@@ -125,17 +151,10 @@ fn v3_multi_ratio3(c: &mut Criterion) {
             let bench_name = format!("v3_{:?}K_{}_ClientRatio3,", sim_event_count/1000,config_name);
             c.bench_function(bench_name.as_str(), |b| {
                 b.iter(|| {
-                    let mut linkstate2 = linkstate.clone(); 
-                    let mut input_trace2 = input_trace.clone();
-                    // 30097 with basic toml, 56829 with mbn toml, gives 10000 client events to be comparable
-                    //let nr_sim_events = 56829;   
-
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
-                    //args.max_sim_iterations = nr_sim_events;
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
-
+                    let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &mut input_trace.clone(), &args);
                     output_len = trace.len();
                 });
             });
@@ -187,35 +206,6 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
         }   
     }
 }
-
-
-
-
-/* 
-fn fixedtput_parallel_run_np(c: &mut Criterion) {
-    const EARLY_TRACE: &str =
-        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
-    let network = Network::new(Duration::from_millis(10), None);
-    let sq = parse_trace(EARLY_TRACE, network);
-    let args = SimulatorArgs::new(network, 100000, true);
-    let fixedtput_args = SimulatorArgs {
-        simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
-        client_tput: Some(10_000_000),
-        server_tput: Some(100_000_000),
-        ..args
-    };
-
-    c.bench_function("FixedTput parallel simulation run", |b| {
-        b.iter(|| {
-            (0..100).into_par_iter().for_each(|_| {
-                black_box(sim_advanced(&[], &[], &mut sq.clone(), &mut fixedtput_args.clone()));
-            });
-        });
-    });
-}
-
-
-*/
 
 
 
@@ -313,7 +303,7 @@ fn ratio3_machine() -> Machine {
 
 criterion_group!(
     benches,
-    v3_multi_run_parallel,
+    v3_components,
 );
 
 criterion_group!(
@@ -321,7 +311,8 @@ criterion_group!(
     v3_simulator_run,
     v3_multi_run,
     v3_multi_ratio3,
-    //v3_multi_run_parallel,
+    v3_multi_run_parallel,
+    v3_components,
 );
 
 
