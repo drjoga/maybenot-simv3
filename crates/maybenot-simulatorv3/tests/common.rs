@@ -23,37 +23,60 @@ pub fn run_test_sim(
     only_packets: bool,
     as_ms: bool,
 ) {
-    //let config_path = "basic_test.toml";
-    //let config_path = "mbn_test.toml";
-    let config_path = "mbnfast.toml";
+    let config_files = [
+        "tests/mbn_baseline_test.toml",
+        "tests/mbn_fast_test.toml",
+        "tests/mbn_complex_test.toml"
+    ];
 
+    for config_file in config_files.iter() {
+        run_test_sim_toml(
+            input,
+            output,
+            propagation_delay,
+            machines_client,
+            machines_server,
+            client,
+            max_trace_length,
+            only_packets,
+            as_ms,
+            config_file,
+        );
+    }
+}
+
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_test_sim_toml(
+    input: &str,
+    output: &str,
+    propagation_delay: Duration,
+    machines_client: &[Machine],
+    machines_server: &[Machine],
+    client: bool,
+    max_trace_length: usize,
+    only_packets: bool,
+    as_ms: bool,
+    config_file: &str,
+
+) {
     //Read in config path to toml_str
-    let mut toml_str = std::fs::read_to_string(config_path)
-        .expect("Failed to read the configuration file");
-    //Go through toml_str and change all values for 'prop_us =' in toml_str to be the value of delay variable
-    toml_str = toml_str.lines()
-        .map(|line| {
-            if line.trim_start().starts_with("prop_us") {
-                format!("prop_us = {}", propagation_delay.as_micros())
-            } else {
-                line.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
+    let toml_str = std::fs::read_to_string(config_file)
+        .expect("Failed to read TOML configuration file");
+    // Create Topology and linkstate from the TOML string   
     let (topology, mut linkstate) = Network::from_toml_str(&toml_str)
         .expect("Failed to parse the network configuration from TOML string");
-    // The trafficserver events require incresing the max length compared to what is specced in old tests
-    let max_trace_length = 2 * max_trace_length;
+    // The additional events in more complex topologies require increasing the max length compared to what is specced in old tests
+    let max_trace_length = 3 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
     args.continue_after_all_normal_packets_processed = false;
     // The test cases assume the timing from netsimv1, where the client <--> relay/server <--> trafficserver
     // have two occurences of the link delay, so create that to apply when parsing the trace.
     let adjusted_delay =  propagation_delay * 2;
     let mut sq = make_sq(input.to_string(), &topology, adjusted_delay, as_ms);
-    // Check if th topology has a short-circuiting relay mbn tserver
+    // Check if the topology has a short-circuiting relay mbn tserver
     // If so, we need to adjust the delay for the trafficserver SimQ events
+    // TODO: Should be generalized away by separating trace_ts_client_delay and sim_ts_client_delay
     if matches!(topology.nodes[topology.mb_server],
           maybenot_simulatorv3::nodes::NodeType::RelayMBNtserver(_)) {
             // Iterate over the SimulEvents in the queue and adjust the time for trafficserver events
@@ -267,21 +290,6 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
         })
         .collect::<Vec<_>>()
         .join(" ");
- /* 
-    let s = s.lines()
-        .map(|line| {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() >= 2 {
-                let time = parts[0].parse::<i64>().unwrap() * to_ns_factor; // Convert to nanoseconds
-                let direction = parts[1].to_string();
-                format!("{},{}", time, direction)
-            } else {
-                line.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-*/
 
     sq.highest_depend_tx = s.split_whitespace().count();
     let traffic_events = traffic_trace_prepare(&s, ttrace_ts_to_c_delay_ns);

@@ -418,6 +418,9 @@ impl RouterBasic {
             TriggerEvent::NormalRecv => {
                 forward_network_receive_from_receive(s_event, topology, linkstate, sq);
             }
+            TriggerEvent::TunnelRecv => {
+                forward_network_receive_from_receive(s_event, topology, linkstate, sq);
+            }
             TriggerEvent::PaddingSent { .. } | TriggerEvent::PaddingRecv => {
                 // Relay handles padding traffic
             }
