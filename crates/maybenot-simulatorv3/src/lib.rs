@@ -249,9 +249,11 @@ impl SimulQueue {
         self.heap.is_empty()
     }
 
+    // This function is called for every processed event if continue_after_all_normal_packets_processed is false
+    // Although 
     pub fn no_normal_packets(&self, topology: &network::NetworkTopology) -> bool {
         // Check main simulation queue, see if any of traffic trace packer are in it. 
-        if !self.heap.iter().all(|e| {e.packet_idx > self.highest_depend_tx}) {
+        if self.heap.iter().any(|e| {e.packet_idx < usize::MAX}) {
             return false;
         }
         
