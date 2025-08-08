@@ -6,22 +6,6 @@ use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
 use std::time::{Duration, Instant};
 use log::debug;
 
-#[derive(Debug, Clone)]
-pub enum NodeError {
-    InvalidEvent(String),
-    ProcessingError(String),
-}
-
-impl std::fmt::Display for NodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NodeError::InvalidEvent(msg) => write!(f, "Invalid event: {}", msg),
-            NodeError::ProcessingError(msg) => write!(f, "Processing error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for NodeError {}
 
 // High-performance enum-based node dispatch
 #[derive(Debug)]

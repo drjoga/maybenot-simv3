@@ -52,16 +52,6 @@ pub struct ForwardingRule {
     pub out_link: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct NetworkError(pub String);
-
-impl std::fmt::Display for NetworkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Network error: {}", self.0)
-    }
-}
-
-impl std::error::Error for NetworkError {}
 
 
 #[derive(Debug, Clone)]
@@ -129,23 +119,23 @@ impl NetworkTopology {
     }
 
     /// Load network configuration from a TOML file
-    pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<(Self, NetworkLinkstate), NetworkError> {
+    pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<(Self, NetworkLinkstate), String> {
         let content = fs::read_to_string(path)
-            .map_err(|e| NetworkError(format!("Failed to read file: {}", e)))?;
+            .map_err(|e| format!("Network error: Failed to read file: {}", e))?;
         
         Self::from_toml_str(&content)
     }
 
     /// Load network configuration from a TOML string
-    pub fn from_toml_str(toml_str: &str) -> Result<(Self, NetworkLinkstate), NetworkError> {
+    pub fn from_toml_str(toml_str: &str) -> Result<(Self, NetworkLinkstate), String> {
         let config: NetworkConfig = toml::from_str(toml_str)
-            .map_err(|e| NetworkError(format!("Failed to parse TOML: {}", e)))?;
+            .map_err(|e| format!("Network error: Failed to parse TOML: {}", e))?;
 
         Self::from_config(config)
     }
 
     /// Create network from parsed configuration
-    pub fn from_config(config: NetworkConfig) -> Result<(Self, NetworkLinkstate), NetworkError> {
+    pub fn from_config(config: NetworkConfig) -> Result<(Self, NetworkLinkstate), String> {
         let mut topology = Self::new();
         let mut linkstate = NetworkLinkstate::new();
 
@@ -158,37 +148,37 @@ impl NetworkTopology {
             match node_config.node_type.as_str() {
                 "ClientBasic" => {
                     if client_id.is_some() {
-                        return Err(NetworkError("Multiple Client nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple Client nodes found. Only one is allowed.".to_string());
                     }
                     client_id = Some(node_config.id);
                 }
                 "ClientMBN" => {
                     if client_id.is_some() {
-                        return Err(NetworkError("Multiple Client nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple Client nodes found. Only one is allowed.".to_string());
                     }
                     client_id = Some(node_config.id);
                     topology.mb_client = node_config.id;
                 }
                 "RelayMBN" => {
                     if mb_server.is_some() {
-                        return Err(NetworkError("Multiple RelayMBN nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple RelayMBN nodes found. Only one is allowed.".to_string());
                     }
                     mb_server = Some(node_config.id);
                 }
 
                 "TrafficServerBasic" => {
                     if traffic_server_id.is_some() {
-                        return Err(NetworkError("Multiple TrafficServerBasic nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple TrafficServerBasic nodes found. Only one is allowed.".to_string());
                     }
                     traffic_server_id = Some(node_config.id);
                 }
 
                 "RelayMBNtserver" => {
                     if mb_server.is_some() {
-                        return Err(NetworkError("Multiple MBN server nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple MBN server nodes found. Only one is allowed.".to_string());
                     }
                     if traffic_server_id.is_some() {
-                        return Err(NetworkError("Multiple traffic server nodes found. Only one is allowed.".to_string()));
+                        return Err("Network error: Multiple traffic server nodes found. Only one is allowed.".to_string());
                     }
                     mb_server = Some(node_config.id);
                     traffic_server_id = Some(node_config.id); // RelayMBNtserver acts as both
@@ -199,8 +189,8 @@ impl NetworkTopology {
         }
 
         // Ensure we have exactly one client and one traffic server
-        let client = client_id.ok_or_else(|| NetworkError("No Client node found. Exactly one is required.".to_string()))?;
-        let traffic_server = traffic_server_id.ok_or_else(|| NetworkError("No traffic server node found. Exactly one TrafficServerBasic or RelayMBNtserver is required.".to_string()))?;
+        let client = client_id.ok_or_else(|| "Network error: No Client node found. Exactly one is required.".to_string())?;
+        let traffic_server = traffic_server_id.ok_or_else(|| "Network error: No traffic server node found. Exactly one TrafficServerBasic or RelayMBNtserver is required.".to_string())?;
 
         // Set the client and traffic server IDs
         topology.client = client;
@@ -234,7 +224,7 @@ impl NetworkTopology {
                 node_config.edgeside_in,
                 node_config.edgeside_out,
                 &params
-            ).map_err(|e| NetworkError(format!("Failed to create node {}: {}", node_config.id, e)))?;
+            ).map_err(|e| format!("Network error: Failed to create node {}: {}", node_config.id, e))?;
             topology.add_node(node, node_config.id);
         }
 
@@ -248,7 +238,7 @@ impl NetworkTopology {
                     toml::Value::Integer(i) => i.to_string(),
                     toml::Value::Float(f) => f.to_string(),
                     toml::Value::Boolean(b) => b.to_string(),
-                    _ => return Err(NetworkError(format!("Unsupported parameter type for {}", key))),
+                    _ => return Err(format!("Network error: Unsupported parameter type for {}", key)),
                 };
                 params.insert(key.clone(), value_str);
             }
@@ -259,7 +249,7 @@ impl NetworkTopology {
                 link_config.from,
                 link_config.to,
                 &params
-            ).map_err(|e| NetworkError(format!("Failed to create link {}: {}", link_config.id, e)))?;
+            ).map_err(|e| format!("Network error: Failed to create link {}: {}", link_config.id, e))?;
             
             linkstate.add_link(link, link_config.id);
         }
@@ -275,7 +265,7 @@ impl NetworkTopology {
         for route_config in &config.routes {
             let node_id = route_config.node_id;
             if node_id >= num_nodes {
-                return Err(NetworkError(format!("Invalid node_id {} in routes", node_id)));
+                return Err(format!("Network error: Invalid node_id {} in routes", node_id));
             }
             
             for rule in &route_config.forwarding_rules {
@@ -283,10 +273,10 @@ impl NetworkTopology {
                 let out_link = rule.out_link;
                 
                 if in_link >= num_links {
-                    return Err(NetworkError(format!("Invalid in_link {} for node {}", in_link, node_id)));
+                    return Err(format!("Network error: Invalid in_link {} for node {}", in_link, node_id));
                 }
                 if out_link >= num_links {
-                    return Err(NetworkError(format!("Invalid out_link {} for node {}", out_link, node_id)));
+                    return Err(format!("Network error: Invalid out_link {} for node {}", out_link, node_id));
                 }
                 
                 topology.routes[node_id][in_link] = Some(out_link);
@@ -335,19 +325,3 @@ impl NetworkTopology {
     }
 
 }
-
-impl Default for NetworkTopology {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Default for NetworkLinkstate {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// Legacy Network type for compatibility - use NetworkTopology + NetworkLinkstate instead
-pub type Network = NetworkTopology;
-

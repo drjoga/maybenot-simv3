@@ -434,7 +434,7 @@ pub fn create_link(
 }
 
 
-/// NOTE: NOT WORKING CURRENTLY, needs to be adapted to v3
+/// NOTE: NOT WORKING CURRENTLY, needs to be adapted to v3 or removed
 /// a network bottleneck that adds delay to packets above a certain packets per
 /// window limit (default 1s window, so pps), and keeps track of the aggregate
 /// delay to add to packets due to the bottleneck or accumulated blocking by
@@ -531,6 +531,4 @@ impl WindowCount {
         self.timestamps.len()
     }
 }
-
-
 
