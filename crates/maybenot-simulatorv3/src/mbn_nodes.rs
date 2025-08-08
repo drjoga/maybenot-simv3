@@ -1,6 +1,6 @@
 use maybenot::{TriggerEvent, Machine};
 use crate::nodes::check_dependent_packets;
-use crate::{SimulEvent, SimulQueue, SimState, RngSource};
+use crate::{SimulEvent, SimulInfo, SimulQueue, SimState, RngSource};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use crate::mbn_helpers::{mbn_trigger_update, mbn_do_internal_timer, mbn_do_scheduled_action};
 use std::time::{Instant, Duration};
@@ -187,7 +187,7 @@ impl ClientMBN {
         }
     }
 
-    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, si: &SimulInfo, sq: &mut SimulQueue) {
         match &s_event.event {
             TriggerEvent::NormalSent => {
                 let forward_s_event = SimulEvent {
@@ -204,7 +204,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                mbn_handle_tunnel_sent_creation(self, forward_s_event,  sq);
             }
 
             TriggerEvent::PaddingSent { .. } => {
@@ -222,11 +222,11 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                mbn_handle_tunnel_sent_creation(self, forward_s_event,sq);
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
             }
 
             TriggerEvent::TunnelRecv => {
@@ -258,7 +258,7 @@ impl ClientMBN {
                 let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
-                crate::nodes::check_dependent_packets(s_event, sq, outgoing_link, 0);
+                crate::nodes::check_dependent_packets(s_event, si,sq, outgoing_link, 0);
             }
 
             TriggerEvent::BlockingEnd => {
@@ -359,7 +359,7 @@ impl RelayMBN {
         }
     }
 
-    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, si: &SimulInfo, sq: &mut SimulQueue) {
         match &s_event.event {
             TriggerEvent::TunnelRecv => {
                 let new_event = match &s_event.contains_padding {
@@ -389,7 +389,7 @@ impl RelayMBN {
             TriggerEvent::NormalRecv => {
                 let outlink = topology.get_outlink(s_event.node_idx, s_event.link_idx).unwrap();
                 if  outlink == self.coreside_out {
-                    crate::nodes::forward_network_receive_from_receive(s_event, topology, linkstate, sq);
+                    crate::nodes::forward_network_receive_from_receive(s_event, topology, linkstate, si, sq);
                 } else if outlink == self.edgeside_out {
                     let new_s_event = SimulEvent {
                         event: TriggerEvent::NormalSent,
@@ -412,7 +412,7 @@ impl RelayMBN {
 
             TriggerEvent::NormalSent => {
                 if  s_event.link_idx == self.coreside_out {
-                    crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                    crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
                 } else if s_event.link_idx == self.edgeside_out {
                     let forward_s_event = SimulEvent {
                         event: TriggerEvent::TunnelSent,
@@ -453,7 +453,7 @@ impl RelayMBN {
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
             }
 
             TriggerEvent::BlockingEnd => {
@@ -562,7 +562,7 @@ impl RelayMBNtserver {
         }
     }
 
-    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, sq: &mut SimulQueue) {
+    pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, si: &SimulInfo, sq: &mut SimulQueue) {
         match &s_event.event {
             TriggerEvent::TunnelRecv => {
                 let new_event = match &s_event.contains_padding {
@@ -594,7 +594,7 @@ impl RelayMBNtserver {
                 let mut timeadjusted_event = s_event.clone();
                 timeadjusted_event.time += self.ts_prop_us; // Add delay to trafficserver
                 let outgoing_link = &linkstate.links[self.edgeside_out];
-                check_dependent_packets(&timeadjusted_event, sq, outgoing_link, self.ts_prop_us.as_micros()  as u64);
+                check_dependent_packets(&timeadjusted_event, si,sq, outgoing_link, self.ts_prop_us.as_micros()  as u64);
                
 /* 
                 if let Some(dependencies) = sq.dependent_tx.remove(&s_event.packet_idx) {
@@ -694,7 +694,7 @@ impl RelayMBNtserver {
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, sq);
+                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
             }
 
             TriggerEvent::BlockingEnd => {

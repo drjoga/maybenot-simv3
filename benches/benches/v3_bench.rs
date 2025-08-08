@@ -8,6 +8,8 @@ use criterion::{criterion_group, black_box, criterion_main, Criterion};
 
 use rayon::prelude::*;
 
+//const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
+const SIM_EVENT_COUNTS: [usize; 1] = [10_000, ];
 
 
 fn v3_simulator_run(c: &mut Criterion) {
@@ -23,17 +25,17 @@ fn v3_simulator_run(c: &mut Criterion) {
 
     println!("Config path: {}", config_path);
     let trafserv_to_client_delay= Duration::from_millis(20);
-    let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     let mut output_len = 0;
     c.bench_function("v3_10K_baseline", |b| {
         b.iter(|| {
             let mut linkstate2 = linkstate.clone(); 
-            let mut input_trace2 = input_trace.clone();
+            let mut sq2 = sq.clone();
 
             let mut args = SimulatorArgs::new(10000, true);
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
-            let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &mut input_trace2, &args);
+            let trace = simul_advanced(&[], &[], &topology, &mut linkstate2, &si, &mut sq2, &args);
 
             output_len = trace.len();
         });
@@ -48,8 +50,6 @@ fn v3_multi_run(c: &mut Criterion) {
         include_str!("../../crates/maybenot-simulatorv3/tests/EARLY_TEST_TRACE.log");
 
     let toml_path = env!("CARGO_MANIFEST_DIR").to_string();
-    
-    let sim_event_counts =[5_000,10_000, 20_000];
 
     let config_files = [
         "/benches/mbn_baseline_bench.toml",
@@ -57,14 +57,14 @@ fn v3_multi_run(c: &mut Criterion) {
         "/benches/mbn_complex_bench.toml"
     ];
 
-    for sim_event_count in sim_event_counts.iter() {
+    for sim_event_count in SIM_EVENT_COUNTS.iter() {
 
         for config_file in config_files.iter() {
             let config_path = toml_path.clone() + config_file;
             let config_name = config_file.split('_').nth(1).unwrap();
             let (topology, linkstate) = Network::from_toml_file(config_path.clone()).unwrap();
             let trafserv_to_client_delay= Duration::from_millis(20);
-            let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+            let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
             let mut output_len = 0;
             let bench_name = format!("v3_{:?}K_{},", sim_event_count/1000,config_name);
             c.bench_function(bench_name.as_str(), |b| {
@@ -72,7 +72,7 @@ fn v3_multi_run(c: &mut Criterion) {
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(&[], &[], &topology, &mut linkstate.clone(), &mut input_trace.clone(), &args);
+                    let trace = simul_advanced(&[], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
 
                     output_len = trace.len();
                 });
@@ -129,15 +129,13 @@ fn v3_multi_ratio3(c: &mut Criterion) {
 
     let toml_path = env!("CARGO_MANIFEST_DIR").to_string();
     
-    let sim_event_counts =[5_000,10_000, 20_000];
-
     let config_files = [
         "/benches/mbn_baseline_bench.toml",
         "/benches/mbn_fast_bench.toml",
         "/benches/mbn_complex_bench.toml"
     ];
 
-    for sim_event_count in sim_event_counts.iter() {
+    for sim_event_count in SIM_EVENT_COUNTS.iter() {
 
         for config_file in config_files.iter() {
             let config_path = toml_path.clone() + config_file;
@@ -146,7 +144,7 @@ fn v3_multi_ratio3(c: &mut Criterion) {
             let (topology, linkstate) = Network::from_toml_file(config_path).unwrap();
 
             let trafserv_to_client_delay= Duration::from_millis(20);
-            let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+            let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
             let mut output_len = 0;
             let bench_name = format!("v3_{:?}K_{}_ClientRatio3,", sim_event_count/1000,config_name);
             c.bench_function(bench_name.as_str(), |b| {
@@ -154,7 +152,7 @@ fn v3_multi_ratio3(c: &mut Criterion) {
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &mut input_trace.clone(), &args);
+                    let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
                     output_len = trace.len();
                 });
             });
@@ -172,15 +170,13 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
 
     let toml_path = env!("CARGO_MANIFEST_DIR").to_string();
     
-    let sim_event_counts =[5_000,10_000, 20_000];
-
     let config_files = [
         "/benches/mbn_baseline_bench.toml",
         "/benches/mbn_fast_bench.toml",
         "/benches/mbn_complex_bench.toml"
     ];
 
-    for sim_event_count in sim_event_counts.iter() {
+    for sim_event_count in SIM_EVENT_COUNTS.iter() {
 
         for config_file in config_files.iter() {
             let config_path = toml_path.clone() + config_file;
@@ -189,7 +185,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
             let (topology, _linkstate) = Network::from_toml_file(config_path.clone()).unwrap();
 
             let trafserv_to_client_delay= Duration::from_millis(20);
-            let input_trace = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+            let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
             let mut args = SimulatorArgs::new(*sim_event_count, true);
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
@@ -199,7 +195,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                 b.iter(|| {
                     (0..100).into_par_iter().for_each(|_| {
                         let (topology, mut linkstate) = Network::from_toml_file(config_path.clone()).unwrap();
-                        black_box(simul_advanced(&[], &[], &topology, &mut linkstate, &mut input_trace.clone(), &args.clone()));
+                        black_box(simul_advanced(&[], &[], &topology, &mut linkstate, &si, &mut sq.clone(), &args.clone()));
                     });
                 });
             });
@@ -303,7 +299,9 @@ fn ratio3_machine() -> Machine {
 
 criterion_group!(
     benches,
-    v3_components,
+    v3_multi_run,
+    v3_multi_ratio3,
+    v3_multi_run_parallel,
 );
 
 criterion_group!(

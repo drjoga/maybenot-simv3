@@ -7,7 +7,7 @@ use maybenot_simulatorv3::{
     event_schedule_print, 
     SimulEvent,
     network::{Network, NetworkTopology},
-    simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulQueue
+    simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulInfo, SimulQueue
 };
 use once_cell::sync::Lazy;
 
@@ -73,7 +73,7 @@ pub fn run_test_sim_toml(
     // The test cases assume the timing from netsimv1, where the client <--> relay/server <--> trafficserver
     // have two occurences of the link delay, so create that to apply when parsing the trace.
     let adjusted_delay =  propagation_delay * 2;
-    let mut sq = make_sq(input.to_string(), &topology, adjusted_delay, as_ms);
+    let (si,mut sq) = make_si_sq(input.to_string(), &topology, adjusted_delay, as_ms);
     // Check if the topology has a short-circuiting relay mbn tserver
     // If so, we need to adjust the delay for the trafficserver SimQ events
     // TODO: Should be generalized away by separating trace_ts_client_delay and sim_ts_client_delay
@@ -90,13 +90,13 @@ pub fn run_test_sim_toml(
             sq.heap.extend(events);
     }
 
-    let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &mut sq, &args);
+    let trace = simul_advanced(machines_client, machines_server, &topology, &mut linkstate, &si, &mut sq, &args);
     if *SHOW_EVENTS {
         for event in &trace {
-            println!("{}", event.display_full(&sq,&topology,&linkstate));
+            println!("{}", event.display_full(&si,&topology,&linkstate));
         }
     }
-    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &sq);
+    let mut fmt = fmt_trace(trace.as_slice(), client, only_packets, as_ms, topology, &si);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -222,7 +222,7 @@ trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#
 }
 
 
-fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology, sq: &SimulQueue) -> String {
+fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, topology: NetworkTopology, si: &SimulInfo) -> String {
     fn fmt_event(e: &SimulEvent, base: Instant, ms: bool) -> String {
         let time_value = if e.time >= base {
             // Event is at or after base time
@@ -242,7 +242,7 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, t
         format!("{},{}", time_value, e.event)
     }
 
-    let base = sq.zero_instant;
+    let base = si.zero_instant;
     let mut s: String = "".to_string();
     for s_event in trace {
         if only_packets && s_event.event != TriggerEvent::TunnelSent && s_event.event != TriggerEvent::TunnelRecv {
@@ -266,7 +266,8 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, t
 }
 
 
-pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bool) -> SimulQueue {
+pub fn make_si_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bool) -> (SimulInfo, SimulQueue) {
+    let mut si = SimulInfo::new();
     let mut sq = SimulQueue::new();
     let to_ns_factor = match as_ms {
         true => 1_000_000 ,
@@ -298,8 +299,8 @@ pub fn make_sq(s: String, topology: &NetworkTopology, delay: Duration, as_ms: bo
         print!("----------------------------------\n");
     }
 
-    fill_simq(&traffic_events, topology, &mut sq);        
-    sq
+    fill_simq(&traffic_events, topology, &mut si, &mut sq);
+    (si, sq)
 
 }
 

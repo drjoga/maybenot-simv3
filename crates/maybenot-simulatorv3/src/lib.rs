@@ -15,7 +15,7 @@ pub use traffic_parse::{
 };
 
 use std::{
-    collections::{HashMap,BinaryHeap},
+    collections::BinaryHeap,
     cmp::Ordering,
     time::{Duration, Instant},
 };
@@ -119,12 +119,12 @@ impl SimulEvent {
         }
     }
 
-    /// Display SimulEvent with time as microseconds since sq.zero_instant
-    pub fn display_relative(&self, sq: &SimulQueue) -> String {
-        let time_since_zero = if self.time >= sq.zero_instant {
-            self.time.duration_since(sq.zero_instant).as_micros() as i64
+    /// Display SimulEvent with time as microseconds since si.zero_instant
+    pub fn display_relative(&self, si: &SimulInfo) -> String {
+        let time_since_zero = if self.time >= si.zero_instant {
+            self.time.duration_since(si.zero_instant).as_micros() as i64
         } else {
-            -(sq.zero_instant.duration_since(self.time).as_micros() as i64)
+            -(si.zero_instant.duration_since(self.time).as_micros() as i64)
         };
         format!(
             "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
@@ -138,11 +138,11 @@ impl SimulEvent {
     }
     /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
     /// from - to nodeid for each link
-    pub fn display_full(&self, sq: &SimulQueue, topology: &NetworkTopology, linkstate: &NetworkLinkstate) -> String {
-        let time_since_zero = if self.time >= sq.zero_instant {
-            self.time.duration_since(sq.zero_instant).as_micros() as i64
+    pub fn display_full(&self, si: &SimulInfo, topology: &NetworkTopology, linkstate: &NetworkLinkstate) -> String {
+        let time_since_zero = if self.time >= si.zero_instant {
+            self.time.duration_since(si.zero_instant).as_micros() as i64
         } else {
-            -(sq.zero_instant.duration_since(self.time).as_micros() as i64)
+            -(si.zero_instant.duration_since(self.time).as_micros() as i64)
         };
         let link = linkstate.get_link(self.link_idx).unwrap();
         // Adjust formatting so field lengths are appropriate for example line below
@@ -201,15 +201,14 @@ impl PartialOrd for SimulEvent {
 
 
 #[derive(Clone, Debug)]
-pub struct SimulQueue {
+pub struct SimulInfo {
     pub zero_instant: Instant,
     pub earliest_event_instant: Instant,
-    pub heap: BinaryHeap<SimulEvent>,
-    pub(crate) dependent_tx: HashMap<usize, Vec<(usize, i64, EventKind)>>,
-    next_q_sequence_nr: u64,
+    pub(crate) dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 
-impl SimulQueue {
+
+impl SimulInfo {
     pub fn new() -> Self {
         let now_time = Instant::now();
         Self {
@@ -219,8 +218,22 @@ impl SimulQueue {
             // earliest_event_instant is the earliest event time in the queue, used to
             // calculate relative time in the trace. May be earlier than zero_instant.
             earliest_event_instant: now_time,
+            dependent_tx: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SimulQueue {
+    pub heap: BinaryHeap<SimulEvent>,
+    next_q_sequence_nr: u64,
+}
+
+
+impl SimulQueue {
+    pub fn new() -> Self {
+        Self {
             heap: BinaryHeap::new(),
-            dependent_tx: HashMap::new(),
             next_q_sequence_nr: 0,
         }
     }
@@ -414,6 +427,7 @@ where
 pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
+    si: &SimulInfo,
     sq: &mut SimulQueue,
     topology: &NetworkTopology,
     linkstate: &mut NetworkLinkstate,
@@ -421,7 +435,7 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimulEvent> {
     let args = SimulatorArgs::new(max_trace_length, only_network_activity);
-    simul_advanced(machines_client, machines_server, topology, linkstate, sq, &args)
+    simul_advanced(machines_client, machines_server, topology, linkstate, si, sq, &args)
 }
 
 
@@ -494,6 +508,7 @@ pub fn simul_advanced(
     machines_server: &[Machine],
     topology: &NetworkTopology,
     linkstate: &mut NetworkLinkstate,
+    si: &SimulInfo,
     sq: &mut SimulQueue,
     args: &SimulatorArgs,
 ) -> Vec<SimulEvent> {
@@ -507,7 +522,7 @@ pub fn simul_advanced(
     let mut trace: Vec<SimulEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
-    let mut current_time = sq.earliest_event_instant;
+    let mut current_time = si.earliest_event_instant;
 
     // Initialize MBN nodes with SimState if they exist
     if topology.has_mb {
@@ -522,7 +537,7 @@ pub fn simul_advanced(
     debug!("sim(): server machines {}", machines_server.len());
 
     let mut sim_iterations = 0;
-    while let Some(next) = pick_next(sq, topology, current_time) {
+    while let Some(next) = pick_next(si,sq, topology, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -544,22 +559,22 @@ pub fn simul_advanced(
         if client_mbn.is_some() && relay_mbn.is_some(){
             if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
                 debug!("sim(): client is blocked until time {:#?}",
-                    blocking_until.duration_since(sq.zero_instant)
+                    blocking_until.duration_since(si.zero_instant)
                 );
             }        
             if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
                 debug!("sim(): server is blocked until time {:#?}",
-                    blocking_until.duration_since(sq.zero_instant)
+                    blocking_until.duration_since(si.zero_instant)
                 );
             }
         }
 
 
-        debug!("sim(): next event: {}", next.display_relative(sq));
+        debug!("sim(): next event: {}", next.display_relative(si));
 
         // Handle event at node
         topology.nodes[next.node_idx]
-            .handle_event(&next, &topology, linkstate, sq);
+            .handle_event(&next, &topology, linkstate, si,sq);
 
         // Call trigger_update on MBN nodes after handling the event
         if topology.has_mb {
@@ -619,12 +634,13 @@ pub fn simul_advanced(
 
 
 fn pick_next(
+    si: &SimulInfo,
     sq: &mut SimulQueue,
     topology: &NetworkTopology,
     current_time: Instant,
 ) -> Option<SimulEvent> {
     if topology.has_mb {
-        pick_next_mbn(sq, topology, current_time)
+        pick_next_mbn(si, sq, topology, current_time)
     } else {
         sq.pop()
     }
@@ -633,6 +649,7 @@ fn pick_next(
 
 // MaybeNot node-based version of pick_next that queries nodes directly instead of using global SimState
 fn pick_next_mbn(
+    si: &SimulInfo,
     sq: &mut SimulQueue,
     topology: &NetworkTopology,
     current_time: Instant,
@@ -745,7 +762,7 @@ fn pick_next_mbn(
     if queue_duration == Duration::MAX {
         debug!("\tpick_next(): peek_queue = None");
     } else {
-        debug!("\tpick_next(): peek_queue = {}", queue_next.unwrap().display_relative(sq));
+        debug!("\tpick_next(): peek_queue = {}", queue_next.unwrap().display_relative(si));
     }
 
     // No next event?

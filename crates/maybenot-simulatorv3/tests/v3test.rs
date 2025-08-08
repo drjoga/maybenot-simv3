@@ -14,7 +14,7 @@ fn full_trace_compare() {
     
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let mut sq = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
     
     // 30097 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
@@ -22,18 +22,18 @@ fn full_trace_compare() {
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 56829, true);
     
 
-    let output_trace = sim(&[], &[], &mut sq, &topology, &mut linkstate, 20829, true);
+    let output_trace = sim(&[], &[], &si, &mut sq, &topology, &mut linkstate, 50000, true);
     // print length of output trace
     println!("Output trace length: {}", output_trace.len());
 
     // Print the first 15 events in output trace for debugging
     println!("First 15 events in output trace:");
     for event in output_trace.iter().take(15) {
-        println!("{}", event.display_full(&sq, &topology, &linkstate));
+        println!("{}", event.display_full(&si, &topology, &linkstate));
     }
 
     // Convert output trace to EARLY_TEST_TRACE format (time,direction) - ignoring size
-    let starting_time = sq.zero_instant;
+    let starting_time = si.zero_instant;
     let mut formatted_output = Vec::new();
     
     for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only
@@ -129,7 +129,7 @@ fn simulator_example_use() {
     // a way that the client is ensured to get the packets in the same order and
     // at the same time as in the raw trace.
     let trafserv_to_client_delay= Duration::from_millis(20);
-    let mut input_trace = parse_trace(raw_trace, &topology, trafserv_to_client_delay);
+    let (si, mut sq) = parse_trace(raw_trace, &topology, trafserv_to_client_delay);
 
     // A simple machine that sends one padding packet 20 milliseconds after the
     // first normal packet is sent.
@@ -138,7 +138,7 @@ fn simulator_example_use() {
 
     // Run the simulator with the machine at the client. Run the simulation up
     // until 100 packets have been recorded (total, client and server).
-    let trace = sim(&[m], &[], &mut input_trace, &topology, &mut linkstate, 100, true);
+    let trace = sim(&[m], &[], &si, &mut sq, &topology, &mut linkstate, 100, true);
 
     // print packets from the client's perspective
     println!("{:#?}",&trace.clone());
