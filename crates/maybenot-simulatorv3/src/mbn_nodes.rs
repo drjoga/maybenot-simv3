@@ -595,64 +595,8 @@ impl RelayMBNtserver {
                 timeadjusted_event.time += self.ts_prop_us; // Add delay to trafficserver
                 let outgoing_link = &linkstate.links[self.edgeside_out];
                 check_dependent_packets(&timeadjusted_event, si,sq, outgoing_link, self.ts_prop_us.as_micros()  as u64);
-               
-/* 
-                if let Some(dependencies) = sq.dependent_tx.remove(&s_event.packet_idx) {
-                    let link_id = outgoing_link.link_id();
-                    
-                    for (new_pktidx, delta, event_kind) in dependencies {
-                        debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?}", 
-                            new_pktidx, delta, event_kind);
-                        
-                        sq.push(SimulEvent {
-                            event: TriggerEvent::NormalSent,
-                            time: s_event.time + Duration::from_nanos(delta as u64),
-                            packet_idx: new_pktidx,
-                            node_idx: s_event.node_idx,
-                            link_idx: link_id,
-                            contains_padding: false,
-                            bypass: false,
-                            replace: false,
-                            q_sequence_nr: 0, // Will be overwritten by push()
-                            #[cfg(debug_assertions)]
-                            debug_note: None,
-                        });
-                    }
-                }
-                */
             }
 
-/*
-
-                // Collect dependent events first to avoid borrow conflicts
-                let dependent_events: Vec<_> = sq.dependent_tx.remove(&s_event.packet_idx)
-                    .map(|deps| deps.into_iter().collect())
-                    .unwrap_or_default();
-                
-                // Create NormalSent events for dependent packets with ts_prop_us delay
-                for (dep_packet_idx, delta_ns, event_kind) in dependent_events {
-                    if event_kind == crate::traffic_parse::EventKind::CliReceive {
-                        // Create edgeside NormalSent event with additional ts_prop_us delay
-                        let ts_delay = std::time::Duration::from_micros(2 * self.ts_prop_us);
-                        let new_s_event = SimulEvent {
-                            event: TriggerEvent::NormalSent,
-                            time: s_event.time + std::time::Duration::from_nanos(delta_ns as u64) + ts_delay,
-                            packet_idx: dep_packet_idx,
-                            node_idx: s_event.node_idx,
-                            link_idx: self.edgeside_link,
-                            contains_padding: false,
-                            bypass: false,
-                            replace: false,
-                            q_sequence_nr: 0, // Will be overwritten by push()
-                            #[cfg(debug_assertions)]
-                            debug_note: Some("Dependent packet from RelayMBNtserver".to_string()),
-                        };
-                        sq.push(new_s_event);
-                    }
-                }
-                // Ignore coreside NormalRecv (shouldn't happen in this topology)
-            }
-*/
             TriggerEvent::NormalSent => {
                 // Only handle edgeside NormalSent - convert to TunnelSent with blocking logic
                 if s_event.link_idx == self.edgeside_out {

@@ -244,17 +244,7 @@ pub fn check_dependent_packets(s_event: &SimulEvent, si: &SimulInfo, sq: &mut Si
     if  !si.dependent_tx[s_event.packet_idx].is_empty() {
         let link_id = outgoing_link.link_id();
         
-        
-        //for (new_pktidx, delta, event_kind) in &mut sq.dependent_tx[s_event.packet_idx].clone() {
-            // process each dependency
-        
         for (new_pktidx, delta, event_kind) in &si.dependent_tx[s_event.packet_idx] {
-        
-        
-        // Take the dependencies to avoid borrowing conflicts
-        /*let dependencies = std::mem::take(&mut sq.dependent_tx[s_event.packet_idx]);
-
-        for (new_pktidx, delta, event_kind) in dependencies {*/
             debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?}", 
                    new_pktidx, delta, event_kind);
             let additional_duration = Duration::from_nanos(*delta as u64 + ts_to_relay_extra_us * 1000);
