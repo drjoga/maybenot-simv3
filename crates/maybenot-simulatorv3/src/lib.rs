@@ -267,7 +267,6 @@ impl SimulQueue {
         if self.heap.iter().any(|e| {e.packet_idx < usize::MAX}) {
             return false;
         }
-        
         // Check MBN node blocking queues if they exist
         if topology.has_mb {
             let client_mbn = topology.get_mbn_client();
@@ -280,7 +279,6 @@ impl SimulQueue {
                 return false;
             }
         }
-        
         true
     }
 
@@ -625,9 +623,9 @@ pub fn simul_advanced(
         debug!("#########################################################");
     }
 
-    // sort the trace by time
-    // TIME-TEST: 3.6 -> 4.7 ms when sorting the trace
-    trace.sort_by(|a, b| a.time.cmp(&b.time));
+    // No need to sort the trace by time, as the events are already sorted
+    // by the pick_next function which picks based on time.
+    //trace.sort_by(|a, b| a.time.cmp(&b.time));
 
     trace
 }
