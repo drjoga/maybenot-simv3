@@ -123,7 +123,7 @@ pub fn create_node(
             let machines = params
                 .get("machines")
                 .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
                        
             let max_padding_frac = params
                 .get("max_padding_frac")
@@ -156,7 +156,7 @@ pub fn create_node(
             let machines = params
                 .get("machines")
                 .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             
             let max_padding_frac = params
                 .get("max_padding_frac")
@@ -188,7 +188,7 @@ pub fn create_node(
             let machines = params
                 .get("machines")
                 .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             
             let max_padding_frac = params
                 .get("max_padding_frac")
@@ -268,7 +268,7 @@ pub fn make_network_receive_from_sent (s_event: &SimulEvent, _topology: &Network
     //print s_event time and sq.earliest_event_instant
     //debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
     let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
-        .expect(&format!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_idx));
+        .unwrap_or_else(|| panic!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_idx));
     
     // Now we can safely do the mutable borrow for sampling
     let transmission_delay = linkstate.links[link_id].sample(current_duration);

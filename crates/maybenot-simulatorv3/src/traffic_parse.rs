@@ -46,7 +46,7 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
 
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
-    fill_simq(&traffic_events, &topology, &mut si, &mut sq);
+    fill_simq(&traffic_events, topology, &mut si, &mut sq);
     //let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
     //println!(" Online events: {:?}   SimQ length: {:?}   tx_dpend length: {:?} tx_dpend events: {:?}", oneline.split_whitespace().count(), sq.len(), traffic_events.dependent_tx.len(), total_dependent_events);
     (si, sq)
@@ -55,7 +55,7 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
 
 
 
-//// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue 
+/// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue 
 
 #[derive(Debug, Clone, Copy)]
 pub struct PacketEvent {
@@ -87,7 +87,7 @@ pub struct TrafficTraceData {
 /// - For each receive event, we search among client send events for the most recent candidate whose timestamp
 ///   is at or before (recv time - 4×delay). If found (and the time difference is at least 4×delay), that dependency
 ///   is recorded; otherwise, the receive event is treated as a webserver simQ_push event.
-pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
+pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
     let mut pkt_events: Vec<PacketEvent> = Vec::new();
 
     // Parse input string into ordered PacketEvents.
@@ -129,7 +129,7 @@ pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_ns: i64) -> Traffi
                 let delta = pkt_event.time_ns - prev_recv.time_ns;
                 dependent_tx[prev_recv.packet_idx].push((pkt_event.packet_idx, delta, pkt_event.kind));
             } else {
-                client_simq_push.push(pkt_event.clone());
+                client_simq_push.push(*pkt_event);
             }
         }
     }
@@ -151,13 +151,13 @@ pub fn traffic_trace_prepare(s: &String, ttrace_ts_to_c_delay_ns: i64) -> Traffi
                     let delta = (pkt_event.time_ns - client_send.time_ns) - 2 * ttrace_ts_to_c_delay_ns;
                     dependent_tx[client_send.packet_idx].push((pkt_event.packet_idx, delta, pkt_event.kind));
                 } else {
-                    let mut adjusted_event = pkt_event.clone();
+                    let mut adjusted_event = *pkt_event;
                     adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
                     trafficserver_simq_push.push(adjusted_event);
                 } 
             } else {
                 // Fix since some traces start with 0,r or time < which is messy, 
-                let mut adjusted_event = pkt_event.clone();
+                let mut adjusted_event = *pkt_event;
                 adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
                 trafficserver_simq_push.push(adjusted_event);
                 //panic!("Receive event {} is too early to be a server simQ push", event.packet_idx);
@@ -221,15 +221,15 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
         let mut made_progress = false;
         
         // Iterate through indices to avoid borrowing issues
-        for recv_idx in 0..remaining_dependencies.len() {
-            if remaining_dependencies[recv_idx].is_empty() {
+        for (recv_idx, dependency_vector) in remaining_dependencies.iter_mut().enumerate() {
+            if dependency_vector.is_empty() {
                 continue;
             }
             
             // Check if the receive event exists in events
             if let Some(recv_event) = pkt_events.clone().iter().find(|e| e.packet_idx == recv_idx) {
                 // We found the receive event, process its dependencies
-                let deps = std::mem::take(&mut remaining_dependencies[recv_idx]);
+                let deps = std::mem::take(dependency_vector);
                 made_progress = true;
                     
                 for (dep_idx, delta, event_kind) in deps {
@@ -407,7 +407,7 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
         // Parse line format: "SectionType:ID::param1:value1::param2:value2"
         let parts: Vec<&str> = line.split("::").collect();
         if parts.is_empty() {
-            return Err(format!("Empty modification line"));
+            return Err("Empty modification line".to_string());
         }
         
         // Parse section type and ID from first part
@@ -443,7 +443,7 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
             .ok_or(format!("Section {} with ID {} not found", section_type, section_id))?;
         
         let target_table = target_section.as_table_mut()
-            .ok_or(format!("Section entry is not a table"))?;
+            .ok_or("Section entry is not a table".to_string())?;
         
         // Apply parameter modifications from remaining parts
         for param_part in &parts[1..] {

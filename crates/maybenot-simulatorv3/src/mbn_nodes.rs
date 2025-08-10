@@ -53,16 +53,14 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
                 } else {
                     debug!("Sending bypass Normal packet");
                 }
-            } else {
-                if s_event.contains_padding {
+            } else if s_event.contains_padding {
                     node.get_queue_padding().borrow_mut().push_back(s_event);
                     debug!("Blocking Padding enqued");
                     return;
-                } else {
+            } else {
                     node.get_queue_normal().borrow_mut().push_back(s_event);
                     debug!("Blocking Normal enqued");
                     return;
-                }
             }
         }
     }
@@ -321,6 +319,7 @@ impl MBNNode for RelayMBN {
 }
 
 impl RelayMBN {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: usize, 
         coreside_out: usize, 
@@ -509,6 +508,7 @@ impl MBNNode for RelayMBNtserver {
 }
 
 impl RelayMBNtserver {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: usize, 
         edgeside_in: usize, 

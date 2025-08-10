@@ -207,6 +207,11 @@ pub struct SimulInfo {
     pub(crate) dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 
+impl Default for SimulInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SimulInfo {
     pub fn new() -> Self {
@@ -229,6 +234,11 @@ pub struct SimulQueue {
     next_q_sequence_nr: u64,
 }
 
+impl Default for SimulQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SimulQueue {
     pub fn new() -> Self {
@@ -422,7 +432,8 @@ where
 /// are related to network activity (i.e., packets sent and received) to the
 /// output trace. This is recommended if you want to use the output trace for
 /// traffic analysis without further (recursive) simulation.
-pub fn sim(
+ #[allow(clippy::too_many_arguments)]
+ pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
     si: &SimulInfo,
@@ -572,7 +583,7 @@ pub fn simul_advanced(
 
         // Handle event at node
         topology.nodes[next.node_idx]
-            .handle_event(&next, &topology, linkstate, si,sq);
+            .handle_event(&next, topology, linkstate, si,sq);
 
         // Call trigger_update on MBN nodes after handling the event
         if topology.has_mb {
@@ -661,8 +672,6 @@ fn pick_next_mbn(
     let mut action_node = client_mbn; 
     let mut min_internal_timer = Duration::MAX;
     let mut timer_node = client_mbn;
-    let client_blocking_until: Option<Instant>;
-    let server_blocking_until: Option<Instant>;
 
     // Check client MBN node
     let state = client_mbn.get_sim_state().borrow();
@@ -686,7 +695,7 @@ fn pick_next_mbn(
             }
         }
     }
-    client_blocking_until = state.blocking_until;
+    let client_blocking_until = state.blocking_until;
     drop(state);
 
     // Check server MBN node
@@ -713,7 +722,7 @@ fn pick_next_mbn(
             }
         }
     }    
-    server_blocking_until = state.blocking_until;
+    let server_blocking_until = state.blocking_until;
     drop(state);
     
 

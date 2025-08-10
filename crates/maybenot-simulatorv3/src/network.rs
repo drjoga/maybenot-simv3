@@ -59,6 +59,13 @@ pub struct NetworkLinkstate {
     pub links: Vec<LinkType>,
 }
 
+impl Default for NetworkLinkstate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+
 impl NetworkLinkstate {
     pub fn new() -> Self {
         Self {
@@ -80,11 +87,6 @@ impl NetworkLinkstate {
         self.links.get_mut(link_index)
     }
 
-    pub fn find_link(&self, from_node_id: usize, to_node_id: usize) -> Option<(usize, &LinkType)> {
-        self.links.iter().enumerate()
-            .find(|(_, link)| link.from_node() == from_node_id && link.to_node() == to_node_id)
-    }
-
     pub fn link_count(&self) -> usize {
         self.links.len()
     }
@@ -103,6 +105,12 @@ pub struct NetworkTopology {
     pub has_mb: bool,
     pub mb_client: usize,
     pub mb_server: usize,
+}
+
+impl Default for NetworkTopology {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NetworkTopology {
