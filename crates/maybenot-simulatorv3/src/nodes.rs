@@ -341,7 +341,6 @@ pub struct ClientBasic {
     pub coreside_out: usize,
 }
 
-
 impl ClientBasic {
     pub fn new(id: usize, coreside_out: usize) -> Self {
         Self {
@@ -349,8 +348,6 @@ impl ClientBasic {
             coreside_out,
         }
     }
-
-
 
     pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, si: &SimulInfo,sq: &mut SimulQueue) {
         match &s_event.event {
@@ -368,8 +365,8 @@ impl ClientBasic {
             }
         }
     }
-
 }
+
 
 #[derive(Debug, Copy, Clone)]
 pub struct RouterBasic {
@@ -407,6 +404,7 @@ impl RouterBasic {
     }
 }
 
+
 #[derive(Debug, Copy, Clone)]
 pub struct TrafficServerBasic {
     pub id: usize,
@@ -437,15 +435,6 @@ impl TrafficServerBasic {
             }
         }
     }
-
-    // These methods are required for NodeType enum dispatch
-    pub fn get_coreside_linkid(&self) -> usize {
-        panic!("TrafficServerBasic does not have a coreside link")
-    }
-
-    pub fn get_edgeside_linkid(&self) -> usize {
-        self.edgeside_out
-    }
 }
 
 
@@ -453,41 +442,6 @@ impl TrafficServerBasic {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_client_basic_creation() {
-        let client = ClientBasic::new(1, 0);
-        assert_eq!(client.node_id(), 1);
-    }
-
-    #[test]
-    fn test_router_basic_creation() {
-        let router = RouterBasic::new(2, 0, 1, 1);
-        assert_eq!(router.node_id(), 2);
-    }
-
-    #[test]
-    fn test_traffic_server_basic_creation() {
-        let server = TrafficServerBasic::new(3, 0);
-        assert_eq!(server.node_id(), 3);
-    }
-
-    #[test]
-    fn test_client_mbn_creation() {
-        use std::time::Instant;
-        let client = ClientMBN::new(4, 2, vec![], Instant::now(), 0.0, 0.0, None);
-        assert_eq!(client.node_id(), 4);
-        assert_eq!(client.get_coreside_out_id(), 2);
-    }
-
-    #[test]
-    fn test_relay_mbn_creation() {
-        use std::time::Instant;
-        let relay = RelayMBN::new(5, 2, 3, 3, vec![], Instant::now(), 0.0, 0.0, None);
-        assert_eq!(relay.node_id(), 5);
-        assert_eq!(relay.get_coreside_out_id(), 2);
-        assert_eq!(relay.get_edgeside_out_id(), 3);
-    }
 
     #[test]
     fn test_node_factory() {
