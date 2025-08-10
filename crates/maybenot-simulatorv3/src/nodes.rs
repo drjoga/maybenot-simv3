@@ -32,22 +32,22 @@ impl NodeType {
 
     pub fn node_id(&self) -> usize {
         match self {
-            NodeType::ClientBasic(node) => node.node_id(),
-            NodeType::RouterBasic(node) => node.node_id(),
-            NodeType::TrafficServerBasic(node) => node.node_id(),
-            NodeType::ClientMBN(node) => node.node_id(),
-            NodeType::RelayMBN(node) => node.node_id(),
-            NodeType::RelayMBNtserver(node) => node.node_id(),
+            NodeType::ClientBasic(node) => node.id,
+            NodeType::RouterBasic(node) => node.id,
+            NodeType::TrafficServerBasic(node) => node.id,
+            NodeType::ClientMBN(node) => node.id,
+            NodeType::RelayMBN(node) => node.id,
+            NodeType::RelayMBNtserver(node) => node.id,
         }
     }
 
     pub fn get_coreside_out_id(&self) -> usize {
         match self {
-            NodeType::ClientBasic(node) => node.get_coreside_out_id(),
-            NodeType::RouterBasic(node) => node.get_coreside_out_id(),
+            NodeType::ClientBasic(node) => node.coreside_out,
+            NodeType::RouterBasic(node) => node.coreside_out,
             NodeType::TrafficServerBasic(_) => panic!("TrafficServerBasic does not have a coreside link"),
-            NodeType::ClientMBN(node) => node.get_coreside_out_id(),
-            NodeType::RelayMBN(node) => node.get_coreside_out_id(),
+            NodeType::ClientMBN(node) => node.coreside_out,
+            NodeType::RelayMBN(node) => node.coreside_out,
             NodeType::RelayMBNtserver(_) => panic!("RelayMBNtserver does not have a coreside link"),
         }
     }
@@ -55,11 +55,11 @@ impl NodeType {
     pub fn get_edgeside_out_id(&self) -> usize {
         match self {
             NodeType::ClientBasic(_) => panic!("ClientBasic does not have an edgeside link"),
-            NodeType::RouterBasic(node) => node.get_edgeside_out_id(),
-            NodeType::TrafficServerBasic(node) => node.get_edgeside_out_id(),
+            NodeType::RouterBasic(node) => node.edgeside_out,
+            NodeType::TrafficServerBasic(node) => node.edgeside_out,
             NodeType::ClientMBN(_) => panic!("ClientMBN does not have an edgeside link"),
-            NodeType::RelayMBN(node) => node.get_edgeside_out_id(),
-            NodeType::RelayMBNtserver(node) => node.get_edgeside_out_id(),
+            NodeType::RelayMBN(node) => node.edgeside_out,
+            NodeType::RelayMBNtserver(node) => node.edgeside_out,
         }
     }
 
@@ -69,8 +69,8 @@ impl NodeType {
             NodeType::RouterBasic(_) => panic!("RouterBasic does not have edgeside_in"),
             NodeType::TrafficServerBasic(_) => panic!("TrafficServerBasic does not have edgeside_in"),
             NodeType::ClientMBN(_) => panic!("ClientMBN does not have an edgeside link"),
-            NodeType::RelayMBN(node) => node.get_edgeside_in_id(),
-            NodeType::RelayMBNtserver(node) => node.get_edgeside_in_id(),
+            NodeType::RelayMBN(node) => node.edgeside_in,
+            NodeType::RelayMBNtserver(node) => node.edgeside_in,
         }
     }
 
@@ -338,7 +338,7 @@ pub fn forward_network_receive_from_receive (s_event: &SimulEvent, topology: &Ne
 #[derive(Debug, Copy, Clone)]
 pub struct ClientBasic {
     pub id: usize,
-    coreside_out: usize,
+    pub coreside_out: usize,
 }
 
 
@@ -367,14 +367,6 @@ impl ClientBasic {
                 panic!("ClientBasic cannot handle s_event: {:?}", s_event.event);
             }
         }
-    }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_out_id(&self) -> usize {
-        self.coreside_out
     }
 
 }
@@ -413,22 +405,6 @@ impl RouterBasic {
             }
         }
     }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_out_id(&self) -> usize {
-        self.coreside_out
-    }
-
-    pub fn get_edgeside_out_id(&self) -> usize {
-        self.edgeside_out
-    }
-
-    pub fn get_edgeside_in_id(&self) -> usize {
-        self.edgeside_in
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -460,14 +436,6 @@ impl TrafficServerBasic {
                 panic!("TrafficServerBasic cannot handle s_event: {:?}", s_event.event);
             }
         }
-    }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_edgeside_out_id(&self) -> usize {
-        self.edgeside_out
     }
 
     // These methods are required for NodeType enum dispatch

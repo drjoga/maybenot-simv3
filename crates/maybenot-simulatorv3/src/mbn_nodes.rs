@@ -120,7 +120,7 @@ pub trait MBNNode {
 #[derive(Debug)]
 pub struct ClientMBN {
     pub id: usize,
-    coreside_out: usize,
+    pub coreside_out: usize,
     pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
@@ -272,14 +272,6 @@ impl ClientMBN {
             }
             _ => {}
         }
-    }
-
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_out_id(&self) -> usize {
-        self.coreside_out
     }
 }
 
@@ -469,21 +461,6 @@ impl RelayMBN {
         }
     }
 
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_coreside_out_id(&self) -> usize {
-        self.coreside_out
-    }
-
-    pub fn get_edgeside_out_id(&self) -> usize {
-        self.edgeside_out
-    }
-
-    pub fn get_edgeside_in_id(&self) -> usize {
-        self.edgeside_in
-    }
 }
 
 #[derive(Debug)]
@@ -654,15 +631,4 @@ impl RelayMBNtserver {
         }
     }
 
-    pub fn node_id(&self) -> usize {
-        self.id
-    }
-
-    pub fn get_edgeside_in_id(&self) -> usize {
-        self.edgeside_in
-    }
-
-    pub fn get_edgeside_out_id(&self) -> usize {
-        self.edgeside_out
-    }
 }
