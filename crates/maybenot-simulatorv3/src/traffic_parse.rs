@@ -376,5 +376,105 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
     si.dependent_tx = traffic_events.dependent_tx.clone();
 }
 
+/// Modify TOML configuration by applying parameter changes specified in modifier string.
+/// 
+/// # Arguments
+/// * `toml_in` - Input TOML configuration string
+/// * `modifier_string` - Modifications in format: "SectionType:ID::param1:value1::param2:value2\n..."
+///                      Supported SectionTypes: "Node", "Link"
+/// 
+/// # Example
+/// ```
+/// let modifications = "Link:0::prop_us:5000::tput_bps:50000000\nNode:1::ts_prop_us:10000";
+/// let modified_toml = modify_toml(&original_toml, modifications)?;
+/// ```
+pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, String> {
+    // Parse input TOML into a mutable value
+    let mut toml_value: toml::Value = toml::from_str(toml_in)
+        .map_err(|e| format!("Failed to parse input TOML: {}", e))?;
+    
+    // Get the root table
+    let root_table = toml_value.as_table_mut()
+        .ok_or("TOML root is not a table")?;
+    
+    // Process each modification line
+    for line in modifier_string.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        
+        // Parse line format: "SectionType:ID::param1:value1::param2:value2"
+        let parts: Vec<&str> = line.split("::").collect();
+        if parts.is_empty() {
+            return Err(format!("Empty modification line"));
+        }
+        
+        // Parse section type and ID from first part
+        let section_parts: Vec<&str> = parts[0].split(':').collect();
+        if section_parts.len() != 2 {
+            return Err(format!("Invalid section format in line: {}", line));
+        }
+        
+        let section_type = section_parts[0];
+        let section_id: usize = section_parts[1].parse()
+            .map_err(|_| format!("Invalid section ID in line: {}", line))?;
+        
+        // Find the appropriate section array
+        let section_array = match section_type {
+            "Node" => root_table.get_mut("Node"),
+            "Link" => root_table.get_mut("Link"),
+            _ => return Err(format!("Unsupported section type: {}", section_type)),
+        };
+        
+        let section_array = section_array
+            .and_then(|v| v.as_array_mut())
+            .ok_or(format!("Section {} is not an array", section_type))?;
+        
+        // Find the specific section by ID
+        let target_section = section_array.iter_mut()
+            .find(|entry| {
+                entry.as_table()
+                    .and_then(|table| table.get("id"))
+                    .and_then(|id| id.as_integer())
+                    .map(|id| id == section_id as i64)
+                    .unwrap_or(false)
+            })
+            .ok_or(format!("Section {} with ID {} not found", section_type, section_id))?;
+        
+        let target_table = target_section.as_table_mut()
+            .ok_or(format!("Section entry is not a table"))?;
+        
+        // Apply parameter modifications from remaining parts
+        for param_part in &parts[1..] {
+            let param_kv: Vec<&str> = param_part.split(':').collect();
+            if param_kv.len() != 2 {
+                return Err(format!("Invalid parameter format in: {}", param_part));
+            }
+            
+            let param_name = param_kv[0];
+            let param_value_str = param_kv[1];
+            
+            // Convert value to appropriate TOML type
+            let param_value = if let Ok(int_val) = param_value_str.parse::<i64>() {
+                toml::Value::Integer(int_val)
+            } else if let Ok(float_val) = param_value_str.parse::<f64>() {
+                toml::Value::Float(float_val)
+            } else if let Ok(bool_val) = param_value_str.parse::<bool>() {
+                toml::Value::Boolean(bool_val)
+            } else {
+                toml::Value::String(param_value_str.to_string())
+            };
+            
+            // Update the parameter in the target section
+            target_table.insert(param_name.to_string(), param_value);
+        }
+    }
+    
+    // Serialize back to TOML string
+    toml::to_string_pretty(&toml_value)
+        .map_err(|e| format!("Failed to serialize TOML: {}", e))
+}
+
 
 

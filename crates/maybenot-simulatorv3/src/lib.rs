@@ -10,7 +10,7 @@ pub mod traffic_parse;
 
 // Re-export traffic parsing types and functions for backward compatibility
 pub use traffic_parse::{
-    parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print,
+    parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print, modify_toml,
     PacketEvent, EventKind, TrafficTraceData
 };
 
