@@ -1,5 +1,5 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{network::NetworkTopology, parse_trace, sim};
+use maybenot_simulatorv3::{parse_trace, sim, load_topology_from_file};
 use std::{str::FromStr, time::Duration};
 
 
@@ -10,7 +10,7 @@ fn full_trace_compare() {
     
     // Use the same network configuration as the bench
     //let (topology, mut linkstate) = Network::from_toml_file("basic_test.toml").unwrap();
-    let (topology, mut linkstate) = NetworkTopology::from_toml_file("mbn_test.toml").unwrap();
+    let (topology, mut linkstate) = load_topology_from_file("mbn_test.toml").unwrap();
     
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
@@ -120,7 +120,7 @@ fn simulator_example_use() {
 
     // The network model for simulating the network between the client and the
     // server. Currently just a delay.
-    let (topology, mut linkstate) = NetworkTopology::from_toml_file("basic_test.toml").unwrap();
+    let (topology, mut linkstate) = load_topology_from_file("basic_test.toml").unwrap();
 
     //let network = Network::new(Duration::from_millis(10), None);
 
@@ -143,7 +143,11 @@ fn simulator_example_use() {
     // print packets from the client's perspective
     println!("{:#?}",&trace.clone());
 
-    let starting_time = trace[0].time;
+    let starting_time = if !trace.is_empty() {
+        trace[0].time
+    } else {
+        si.zero_instant
+    };
     trace
         .into_iter()
         .filter(|p| p.node_id==0)

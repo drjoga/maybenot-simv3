@@ -7,10 +7,17 @@ pub mod linktrace;
 pub mod linkbundle;
 pub mod integration;
 pub mod traffic_parse;
+pub mod topology_parse;
+
+// Re-export topology parsing types and functions
+pub use topology_parse::{
+    load_topology_from_file, load_topology_from_str, build_topology_from_config, modify_toml,
+    NetworkConfig, NodeConfig, LinkConfig, RouteConfig, ForwardingRule
+};
 
 // Re-export traffic parsing types and functions for backward compatibility
 pub use traffic_parse::{
-    parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print, modify_toml,
+    parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print,
     PacketEvent, EventKind, TrafficTraceData
 };
 

@@ -7,7 +7,8 @@ use maybenot_simulatorv3::{
     event_schedule_print, 
     SimulEvent,
     network::{NetworkTopology},
-    simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulInfo, SimulQueue
+    simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulInfo, SimulQueue,
+    load_topology_from_str
 };
 use once_cell::sync::Lazy;
 
@@ -64,7 +65,7 @@ pub fn run_test_sim_toml(
     let toml_str = std::fs::read_to_string(config_file)
         .expect("Failed to read TOML configuration file");
     // Create Topology and linkstate from the TOML string   
-    let (topology, mut linkstate) = NetworkTopology::from_toml_str(&toml_str)
+    let (topology, mut linkstate) = load_topology_from_str(&toml_str)
         .expect("Failed to parse the network configuration from TOML string");
     // The additional events in more complex topologies require increasing the max length compared to what is specced in old tests
     let max_trace_length = 3 * max_trace_length;

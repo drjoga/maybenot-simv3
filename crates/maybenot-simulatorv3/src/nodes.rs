@@ -3,7 +3,7 @@ use crate::{SimulEvent, SimulInfo, SimulQueue};
 use crate::network::{NetworkTopology, NetworkLinkstate};
 use crate::links::LinkType;
 use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use log::debug;
 
 
@@ -85,141 +85,6 @@ impl NodeType {
         }
     }
 }
-
-// Factory function for creating nodes from TOML configuration
-pub fn create_node(
-    node_type: &str,
-    id: usize,
-    coreside_out: Option<usize>,
-    edgeside_in: Option<usize>,
-    edgeside_out: Option<usize>,
-    params: &std::collections::HashMap<String, String>,
-) -> Result<NodeType, String> {
-    match node_type {
-        "ClientBasic" => {
-            let coreside = coreside_out
-                .ok_or("ClientBasic requires coreside_out")?;
-            Ok(NodeType::ClientBasic(ClientBasic::new(id, coreside)))
-        },
-        "RouterBasic" => {
-            let coreside_out_val = coreside_out
-                .ok_or("RouterBasic requires coreside_out")?;
-            let edgeside_in_val = edgeside_in
-                .ok_or("RouterBasic requires edgeside_in")?;
-            let edgeside_out_val = edgeside_out
-                .ok_or("RouterBasic requires edgeside_out")?;
-            Ok(NodeType::RouterBasic(RouterBasic::new(id, coreside_out_val, edgeside_in_val, edgeside_out_val)))
-        },
-        "TrafficServerBasic" => {
-            let edgeside = edgeside_out
-                .ok_or("TrafficServerBasic requires edgeside_out")?;
-            Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(id, edgeside)))
-        },
-        "ClientMBN" => {
-            let coreside = coreside_out
-                .ok_or("ClientMBN requires coreside_out")?;
-            
-            // Parse MBN-specific parameters from params HashMap
-            let machines = params
-                .get("machines")
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default();
-                       
-            let max_padding_frac = params
-                .get("max_padding_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let max_blocking_frac = params
-                .get("max_blocking_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let insecure_rng_seed = params
-                .get("insecure_rng_seed")
-                .and_then(|s| s.parse::<u64>().ok());
-            
-            Ok(NodeType::ClientMBN(ClientMBN::new(
-                id, coreside, machines, Instant::now(), 
-                max_padding_frac, max_blocking_frac, insecure_rng_seed
-            )))
-        },
-        "RelayMBN" => {
-            let coreside_out_val = coreside_out
-                .ok_or("RelayMBN requires coreside_out")?;
-            let edgeside_in_val = edgeside_in
-                .ok_or("RelayMBN requires edgeside_in")?;
-            let edgeside_out_val = edgeside_out
-                .ok_or("RelayMBN requires edgeside_out")?;
-            
-            // Parse MBN-specific parameters from params HashMap
-            let machines = params
-                .get("machines")
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default();
-            
-            let max_padding_frac = params
-                .get("max_padding_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let max_blocking_frac = params
-                .get("max_blocking_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let insecure_rng_seed = params
-                .get("insecure_rng_seed")
-                .and_then(|s| s.parse::<u64>().ok());
-            
-            Ok(NodeType::RelayMBN(RelayMBN::new(
-                id, coreside_out_val, edgeside_in_val, edgeside_out_val, machines, Instant::now(),
-                max_padding_frac, max_blocking_frac, insecure_rng_seed
-            )))
-        },
-        "RelayMBNtserver" => {
-            // RelayMBNtserver uses edgeside_in and edgeside_out
-            let edgeside_out_val = edgeside_out
-                .ok_or("RelayMBNtserver requires edgeside_out")?;
-            let edgeside_in_val = edgeside_in
-                .ok_or("RelayMBNtserver requires edgeside_in")?;
-            
-            // Parse MBN-specific parameters from params HashMap
-            let machines = params
-                .get("machines")
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default();
-            
-            let max_padding_frac = params
-                .get("max_padding_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let max_blocking_frac = params
-                .get("max_blocking_frac")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            
-            let insecure_rng_seed = params
-                .get("insecure_rng_seed")
-                .and_then(|s| s.parse::<u64>().ok());
-                
-            // Parse ts_prop_us parameter specific to RelayMBNtserver
-            let ts_prop_us = params
-                .get("ts_prop_us")
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(Duration::from_micros)
-                .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
-            
-            Ok(NodeType::RelayMBNtserver(RelayMBNtserver::new(
-                id, edgeside_in_val, edgeside_out_val, machines, Instant::now(),
-                max_padding_frac, max_blocking_frac, insecure_rng_seed, ts_prop_us
-            )))
-        },
-        _ => Err(format!("Unknown node type: {}", node_type)),
-    }
-}
-
 
 
 pub fn check_dependent_packets(s_event: &SimulEvent, si: &SimulInfo, sq: &mut SimulQueue, outgoing_link: &LinkType, ts_to_relay_extra_us: u64) {
@@ -446,6 +311,7 @@ mod tests {
     #[test]
     fn test_node_factory() {
         use std::collections::HashMap;
+        use crate::topology_parse::create_node;
         
         let empty_params = HashMap::new();
         

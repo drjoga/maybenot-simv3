@@ -7,7 +7,7 @@ use std::{
 
 
 use crate::{
-    linktrace::{mk_start_instant, LinkTrace, load_linktrace_from_file},
+    linktrace::{mk_start_instant, LinkTrace},
 };
 
 
@@ -370,68 +370,8 @@ impl StdTraceTputLink {
     }
 }
 
-// Factory function for creating links from TOML configuration
-pub fn create_link(
-    link_type: &str,
-    id: usize,
-    from: usize,
-    to: usize,
-    params: &std::collections::HashMap<String, String>,
-) -> Result<LinkType, String> {
-    // Parse prop_us parameter (required for all link types)
-    let prop_us = params
-        .get("prop_us")
-        .and_then(|s| s.parse::<u64>().ok())
-        .map(Duration::from_micros)
-        .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
-
-    match link_type {
-        "BottleneckTput" => {
-            let window = params
-                .get("window_ms")
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(Duration::from_millis)
-                .unwrap_or(Duration::from_secs(1));
-            
-            let queue_pps = params
-                .get("queue_pps")
-                .and_then(|s| s.parse::<usize>().ok());
-            
-            Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, prop_us, window, queue_pps)))
-        }
-        "FixedTput" => {
-            // Simplex link - requires tput_bps parameter
-            let tput = params
-                .get("tput_bps")
-                .ok_or("FixedTput requires tput_bps parameter")?
-                .parse::<u64>()
-                .map_err(|_| "Invalid tput_bps value - must be a valid u64")?;
-            
-            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_us, tput)))
-        }
-        "HiTraceTput" => {
-            let trace_file = params
-                .get("trace_file")
-                .ok_or("HiTraceTput requires trace_file parameter")?;
-            
-            let linktrace = load_linktrace_from_file(trace_file)
-                .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
-            
-            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_us, linktrace)))
-        }
-        "StdTraceTput" => {
-            let trace_file = params
-                .get("trace_file")
-                .ok_or("StdTraceTput requires trace_file parameter")?;
-            
-            let linktrace = load_linktrace_from_file(trace_file)
-                .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
-            
-            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_us, linktrace)))
-        }
-        _ => Err(format!("Unknown link type: {}", link_type)),
-    }
-}
+// Factory function moved to topology_parse.rs
+// Use crate::topology_parse::create_link instead
 
 
 /// NOTE: NOT WORKING CURRENTLY, needs to be adapted to v3 or removed
