@@ -225,20 +225,20 @@ pub fn create_node(
 pub fn check_dependent_packets(s_event: &SimulEvent, si: &SimulInfo, sq: &mut SimulQueue, outgoing_link: &LinkType, ts_to_relay_extra_us: u64) {
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
     
-    if  !si.dependent_tx[s_event.packet_idx].is_empty() {
+    if  !si.dependent_tx[s_event.packet_id].is_empty() {
         let link_id = outgoing_link.link_id();
         
-        for (new_pktidx, delta, event_kind) in &si.dependent_tx[s_event.packet_idx] {
-            debug!("\tqueue tx_depend new_idx: {:#?}   delta: {:#?}   kind: {:#?}", 
+        for (new_pktidx, delta, event_kind) in &si.dependent_tx[s_event.packet_id] {
+            debug!("\tqueue tx_depend new_id: {:#?}   delta: {:#?}   kind: {:#?}", 
                    new_pktidx, delta, event_kind);
             let additional_duration = Duration::from_nanos(*delta as u64 + ts_to_relay_extra_us * 1000);
             
             sq.push(SimulEvent {
                 event: TriggerEvent::NormalSent,
                 time: s_event.time + additional_duration,
-                packet_idx: *new_pktidx,
-                node_idx: s_event.node_idx,
-                link_idx: link_id,
+                packet_id: *new_pktidx,
+                node_id: s_event.node_id,
+                link_id: link_id,
                 contains_padding: false,
                 bypass: false,
                 replace: false,
@@ -257,18 +257,18 @@ pub fn make_network_receive_from_sent (s_event: &SimulEvent, _topology: &Network
         TriggerEvent::TunnelSent => TriggerEvent::TunnelRecv,
         _ => panic!("Unexpected event type: {:?}", s_event.event),
     };
-    let link_id = s_event.link_idx;
+    let link_id = s_event.link_id;
     
     // Get values we need before mutable borrow
     let to_node = linkstate.links[link_id].to_node();
     let prop_us = linkstate.links[link_id].prop_us();
     
     debug!("\tNode {} sending xxSent -> creating xxRecv at node via link {}", 
-            s_event.node_idx, link_id);
+            s_event.node_id, link_id);
     //print s_event time and sq.earliest_event_instant
     //debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
     let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
-        .unwrap_or_else(|| panic!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_idx));
+        .unwrap_or_else(|| panic!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_id));
     
     // Now we can safely do the mutable borrow for sampling
     let transmission_delay = linkstate.links[link_id].sample(current_duration);
@@ -276,9 +276,9 @@ pub fn make_network_receive_from_sent (s_event: &SimulEvent, _topology: &Network
     let recv_s_event = SimulEvent {
         event: new_t_event,
         time: s_event.time + transmission_delay + prop_us,
-        packet_idx: s_event.packet_idx,
-        node_idx: to_node,
-        link_idx: link_id,
+        packet_id: s_event.packet_id,
+        node_id: to_node,
+        link_id: link_id,
         contains_padding: s_event.contains_padding,
         bypass: false,
         replace: false,
@@ -298,31 +298,31 @@ pub fn forward_network_receive_from_receive (s_event: &SimulEvent, topology: &Ne
         _ => panic!("Unexpected event type: {:?}", s_event.event),
     };
 
-    let outgoing_link_idx = topology.routes[s_event.node_idx][s_event.link_idx].unwrap_or_else(|| {
-        panic!("No outgoing link found for node {} with link index {}", s_event.node_idx, s_event.link_idx);
+    let outgoing_link_id = topology.routes[s_event.node_id][s_event.link_id].unwrap_or_else(|| {
+        panic!("No outgoing link found for node {} with link index {}", s_event.node_id, s_event.link_id);
     });
     
     // Get immutable data first
-    let to_node = linkstate.links[outgoing_link_idx].to_node();
-    let link_id = linkstate.links[outgoing_link_idx].link_id();
-    let prop_us = linkstate.links[outgoing_link_idx].prop_us();
+    let to_node = linkstate.links[outgoing_link_id].to_node();
+    let link_id = linkstate.links[outgoing_link_id].link_id();
+    let prop_us = linkstate.links[outgoing_link_id].prop_us();
     
     // Calculate timing
     let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
         .expect("s_event.time must not be earlier than sq.earliest_event_instant");
     
     // Now do the mutable borrow for sampling
-    let transmission_delay = linkstate.links[outgoing_link_idx].sample(current_duration);
+    let transmission_delay = linkstate.links[outgoing_link_id].sample(current_duration);
     
     debug!("\tForwarding from node {} via link {} to node {}", 
-           s_event.node_idx, link_id, to_node);
+           s_event.node_id, link_id, to_node);
     
     let recv_s_event = SimulEvent {
         event: new_t_event,
         time: s_event.time + transmission_delay + prop_us,
-        packet_idx: s_event.packet_idx,
-        node_idx: to_node,
-        link_idx: outgoing_link_idx,
+        packet_id: s_event.packet_id,
+        node_id: to_node,
+        link_id: outgoing_link_id,
         contains_padding: s_event.contains_padding,
         bypass: false,
         replace: false,
@@ -355,7 +355,7 @@ impl ClientBasic {
                 make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
             }
             TriggerEvent::NormalRecv => {
-                let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_out_id();
+                let outgoing_link_id = topology.nodes[s_event.node_id].get_coreside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
                 check_dependent_packets(s_event, si, sq, outgoing_link, 0);
@@ -422,7 +422,7 @@ impl TrafficServerBasic {
     pub fn handle_event(&self, s_event: &SimulEvent, topology: &NetworkTopology, linkstate: &mut NetworkLinkstate, si: &SimulInfo, sq: &mut SimulQueue) {
         match &s_event.event {
             TriggerEvent::NormalRecv => {
-                let outgoing_link_id = topology.nodes[s_event.node_idx].get_edgeside_out_id();
+                let outgoing_link_id = topology.nodes[s_event.node_id].get_edgeside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
                 check_dependent_packets(s_event, si, sq, outgoing_link, 0);

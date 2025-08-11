@@ -84,10 +84,10 @@ pub struct SimulEvent {
     /// the time of the event taking place
     pub time: Instant,
     /// Packet ID for triggering dependent tx events
-    pub packet_idx: usize,
+    pub packet_id: usize,
     /// Node index and link index for the event
-    pub node_idx: usize,
-    pub link_idx: usize,
+    pub node_id: usize,
+    pub link_id: usize,
     /// sequence number for deterministic insertion ordering when timestamp is identical
     pub q_sequence_nr: u64,
     // Start of MaybeNot specific fields
@@ -128,9 +128,9 @@ impl SimulEvent {
         };
         format!(
             "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, time_since_zero, self.packet_idx, 
-            if self.packet_idx == usize::MAX { "MAX".to_string() } else {self.packet_idx.to_string() },
-            self.link_idx,
+            self.event, time_since_zero, self.packet_id, 
+            if self.packet_id == usize::MAX { "MAX".to_string() } else {self.packet_id.to_string() },
+            self.link_id,
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
@@ -144,17 +144,17 @@ impl SimulEvent {
         } else {
             -(si.zero_instant.duration_since(self.time).as_micros() as i64)
         };
-        let link = linkstate.get_link(self.link_idx).unwrap();
+        let link = linkstate.get_link(self.link_id).unwrap();
         // Adjust formatting so field lengths are appropriate for example line below
         // NormalSent at 25 μs (pkt 5, node 2 TrafficServerBasic, link 0 n2->n1) P:F B:F R:F
         format!(
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
             self.format_event_compact(),
             time_since_zero,
-            if self.packet_idx == usize::MAX { "MAX".to_string() } else {self.packet_idx.to_string() },
-            self.node_idx,
-            topology.nodes[self.node_idx].type_name(),
-            self.link_idx,
+            if self.packet_id == usize::MAX { "MAX".to_string() } else {self.packet_id.to_string() },
+            self.node_id,
+            topology.nodes[self.node_id].type_name(),
+            self.link_id,
             link.from_node(),
             link.to_node(),
             if self.contains_padding { "T" } else { "F" },
@@ -171,7 +171,7 @@ impl std::fmt::Display for SimulEvent {
         write!(
             f,
             "{:?} at {:?} (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, self.time, self.packet_idx, self.node_idx, self.link_idx,
+            self.event, self.time, self.packet_id, self.node_id, self.link_id,
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
@@ -274,7 +274,7 @@ impl SimulQueue {
     // Although 
     pub fn no_normal_packets(&self, topology: &network::NetworkTopology) -> bool {
         // Check main simulation queue, see if any of traffic trace packer are in it. 
-        if self.heap.iter().any(|e| {e.packet_idx < usize::MAX}) {
+        if self.heap.iter().any(|e| {e.packet_id < usize::MAX}) {
             return false;
         }
         // Check MBN node blocking queues if they exist
@@ -582,15 +582,15 @@ pub fn simul_advanced(
         debug!("sim(): next event: {}", next.display_relative(si));
 
         // Handle event at node
-        topology.nodes[next.node_idx]
+        topology.nodes[next.node_id]
             .handle_event(&next, topology, linkstate, si,sq);
 
         // Call trigger_update on MBN nodes after handling the event
         if topology.has_mb {
-            if next.node_idx == topology.mb_client {
+            if next.node_id == topology.mb_client {
                 debug!("sim(): trigger @client framework {:?}", next.event);
                 client_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
-            } else if next.node_idx == topology.mb_server {
+            } else if next.node_id == topology.mb_server {
                 debug!("sim(): trigger @server framework {:?}", next.event);
                 relay_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
             }
@@ -598,7 +598,7 @@ pub fn simul_advanced(
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if (!args.only_client_events || next.node_idx == topology.client) &&
+        if (!args.only_client_events || next.node_id == topology.client) &&
             (!args.only_network_activity || next.event == TriggerEvent::TunnelRecv ||
              next.event == TriggerEvent::TunnelSent) 
         {
@@ -797,13 +797,13 @@ fn pick_next_mbn(
         let e = SimulEvent {
             event: TriggerEvent::BlockingEnd,
             time: current_time + min_blocking,
-            packet_idx: usize::MAX,
-            node_idx: if blocking_is_client {
+            packet_id: usize::MAX,
+            node_id: if blocking_is_client {
                 topology.mb_client
             } else {
                 topology.mb_server
             },
-            link_idx: if blocking_is_client {
+            link_id: if blocking_is_client {
                 topology.nodes[topology.mb_client].get_coreside_out_id()
             } else {
                 topology.nodes[topology.mb_server].get_edgeside_out_id()

@@ -36,7 +36,7 @@ fn full_trace_compare() {
     let starting_time = si.zero_instant;
     let mut formatted_output = Vec::new();
     
-    for event in output_trace.iter().filter(|e| e.node_idx == 0) { // Client perspective only
+    for event in output_trace.iter().filter(|e| e.node_id == 0) { // Client perspective only
         let relative_time = (event.time - starting_time).as_nanos();
         let direction = match event.event {
             //TriggerEvent::NormalSent | TriggerEvent::PaddingSent { .. } | TriggerEvent::TunnelSent => "s",
@@ -146,7 +146,7 @@ fn simulator_example_use() {
     let starting_time = trace[0].time;
     trace
         .into_iter()
-        .filter(|p| p.node_idx==0)
+        .filter(|p| p.node_id==0)
         .for_each(|p| match p.event {
             TriggerEvent::NormalSent => {
                 if p.contains_padding {

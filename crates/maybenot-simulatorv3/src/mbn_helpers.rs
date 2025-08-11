@@ -115,8 +115,8 @@ pub fn mbn_trigger_update<T: MBNNode>(
     sq: &mut SimulQueue,
     _topology: &NetworkTopology
 ) {
-    let node_idx = node.node_id();
-    let link_idx = node.get_action_link_id();
+    let node_id = node.node_id();
+    let link_id = node.get_action_link_id();
 
     // Clone the actions to avoid borrowing issues
     let actions: Vec<_> = {
@@ -204,9 +204,9 @@ pub fn mbn_trigger_update<T: MBNNode>(
                     sq.push(SimulEvent {
                         event: TriggerEvent::TimerBegin { machine },
                         time: *current_time,
-                        packet_idx: usize::MAX,
-                        node_idx,
-                        link_idx,
+                        packet_id: usize::MAX,
+                        node_id,
+                        link_id,
                         bypass: false,
                         replace: false,
                         contains_padding: false,
@@ -240,9 +240,9 @@ pub fn mbn_do_internal_timer<T: MBNNode>(
     machine.map(|machine| SimulEvent {
         event: TriggerEvent::TimerEnd { machine },
         time: target,
-        packet_idx: usize::MAX,
-        node_idx: node.node_id(),
-        link_idx: node.get_action_link_id(),
+        packet_id: usize::MAX,
+        node_id: node.node_id(),
+        link_id: node.get_action_link_id(),
         bypass: false,
         replace: false,
         contains_padding: false,
@@ -287,9 +287,9 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
             Some(SimulEvent {
                 event: TriggerEvent::PaddingSent { machine },
                 time: a.time,
-                packet_idx: usize::MAX,
-                node_idx: node.node_id(),
-                link_idx: node.get_action_link_id(),
+                packet_id: usize::MAX,
+                node_id: node.node_id(),
+                link_id: node.get_action_link_id(),
                 bypass,
                 replace,
                 contains_padding: true,
@@ -318,9 +318,9 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
             Some(SimulEvent {
                 event: TriggerEvent::BlockingBegin { machine },
                 time: a.time,
-                packet_idx: usize::MAX,
-                node_idx: node.node_id(),
-                link_idx: node.get_action_link_id(),
+                packet_id: usize::MAX,
+                node_id: node.node_id(),
+                link_id: node.get_action_link_id(),
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,

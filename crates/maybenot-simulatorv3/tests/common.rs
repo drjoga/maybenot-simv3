@@ -82,7 +82,7 @@ pub fn run_test_sim_toml(
             // Iterate over the SimulEvents in the queue and adjust the time for trafficserver events
             let mut events: Vec<_> = sq.heap.drain().collect();
             for event in events.iter_mut() {
-                if event.node_idx == topology.mb_server && event.event == TriggerEvent::NormalSent {
+                if event.node_id == topology.mb_server && event.event == TriggerEvent::NormalSent {
                     // Adjust the time by adding the propagation delay trafserv <--> relay/server
                     event.time += propagation_delay;
                 }
@@ -249,15 +249,15 @@ fn fmt_trace(trace: &[SimulEvent], client: bool, only_packets: bool, ms: bool, t
             continue; // Skip non-tunnel events
         }
         if client {
-            if s_event.node_idx == topology.client {
+            if s_event.node_id == topology.client {
                 s = format!("{} {}", s, fmt_event(s_event, base, ms));
             }
         } else {
             // Only show events on the servers "interface" towards client
             let edgeside_out  = topology.nodes[topology.mb_server].get_edgeside_out_id();
             let edgeside_in = topology.nodes[topology.mb_server].get_edgeside_in_id();
-            if s_event.node_idx == topology.mb_server && 
-            (s_event.link_idx == edgeside_out  || s_event.link_idx == edgeside_in) {
+            if s_event.node_id == topology.mb_server && 
+            (s_event.link_id == edgeside_out  || s_event.link_id == edgeside_in) {
                 s = format!("{} {}", s, fmt_event(s_event, base, ms));
             }
         }

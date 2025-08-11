@@ -191,9 +191,9 @@ impl ClientMBN {
                 let forward_s_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id, 
+                    link_id: s_event.link_id, 
                     contains_padding: false,
                     bypass: s_event.bypass,
                     replace: s_event.replace,
@@ -209,9 +209,9 @@ impl ClientMBN {
                 let forward_s_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id, 
+                    link_id: s_event.link_id, 
                     contains_padding: true,
                     bypass: s_event.bypass,
                     replace: s_event.replace,
@@ -239,9 +239,9 @@ impl ClientMBN {
                 let forward_s_event = SimulEvent {
                     event: new_t_event,
                     time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id, 
+                    link_id: s_event.link_id, 
                     contains_padding: s_event.contains_padding,
                     bypass: s_event.bypass,
                     replace: s_event.replace,
@@ -253,7 +253,7 @@ impl ClientMBN {
             }
 
             TriggerEvent::NormalRecv => {
-                let outgoing_link_id = topology.nodes[s_event.node_idx].get_coreside_out_id();
+                let outgoing_link_id = topology.nodes[s_event.node_id].get_coreside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
                 crate::nodes::check_dependent_packets(s_event, si,sq, outgoing_link, 0);
@@ -364,9 +364,9 @@ impl RelayMBN {
                 let forward_event = SimulEvent {
                     event: new_event,
                     time: s_event.time,
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx,
-                    link_idx: s_event.link_idx,
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id,
+                    link_id: s_event.link_id,
                     contains_padding: false,
                     bypass: false,
                     replace: false,
@@ -378,16 +378,16 @@ impl RelayMBN {
             }
 
             TriggerEvent::NormalRecv => {
-                let outlink = topology.get_outlink(s_event.node_idx, s_event.link_idx).unwrap();
+                let outlink = topology.get_outlink(s_event.node_id, s_event.link_id).unwrap();
                 if  outlink == self.coreside_out {
                     crate::nodes::forward_network_receive_from_receive(s_event, topology, linkstate, si, sq);
                 } else if outlink == self.edgeside_out {
                     let new_s_event = SimulEvent {
                         event: TriggerEvent::NormalSent,
                         time: s_event.time,
-                        packet_idx: s_event.packet_idx,
-                        node_idx: s_event.node_idx,
-                        link_idx: outlink,
+                        packet_id: s_event.packet_id,
+                        node_id: s_event.node_id,
+                        link_id: outlink,
                         contains_padding: false,
                         bypass: false,
                         replace: false,
@@ -397,20 +397,20 @@ impl RelayMBN {
                     };
                     sq.push(new_s_event);
                 } else {
-                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
+                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_id);
                 }
             }
 
             TriggerEvent::NormalSent => {
-                if  s_event.link_idx == self.coreside_out {
+                if  s_event.link_id == self.coreside_out {
                     crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
-                } else if s_event.link_idx == self.edgeside_out {
+                } else if s_event.link_id == self.edgeside_out {
                     let forward_s_event = SimulEvent {
                         event: TriggerEvent::TunnelSent,
                         time: s_event.time, 
-                        packet_idx: s_event.packet_idx,
-                        node_idx: s_event.node_idx, 
-                        link_idx: s_event.link_idx, 
+                        packet_id: s_event.packet_id,
+                        node_id: s_event.node_id, 
+                        link_id: s_event.link_id, 
                         contains_padding: false,
                         bypass: s_event.bypass,
                         replace: s_event.replace,
@@ -421,7 +421,7 @@ impl RelayMBN {
                     // Use blocking-aware logic to decide whether to queue immediately or block
                     mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
                 } else {
-                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_idx);
+                    panic!("RelayMBN received NormalRecv on unexpected link index: {}", s_event.link_id);
                 }
             }
 
@@ -429,9 +429,9 @@ impl RelayMBN {
                 let forward_s_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id, 
+                    link_id: s_event.link_id, 
                     contains_padding: true,
                     bypass: s_event.bypass,
                     replace: s_event.replace,
@@ -553,9 +553,9 @@ impl RelayMBNtserver {
                 let forward_event = SimulEvent {
                     event: new_event,
                     time: s_event.time,
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx,
-                    link_idx: s_event.link_idx,
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id,
+                    link_id: s_event.link_id,
                     contains_padding: false,
                     bypass: false,
                     replace: false,
@@ -576,13 +576,13 @@ impl RelayMBNtserver {
 
             TriggerEvent::NormalSent => {
                 // Only handle edgeside NormalSent - convert to TunnelSent with blocking logic
-                if s_event.link_idx == self.edgeside_out {
+                if s_event.link_id == self.edgeside_out {
                     let forward_s_event = SimulEvent {
                         event: TriggerEvent::TunnelSent,
                         time: s_event.time, 
-                        packet_idx: s_event.packet_idx,
-                        node_idx: s_event.node_idx, 
-                        link_idx: s_event.link_idx, 
+                        packet_id: s_event.packet_id,
+                        node_id: s_event.node_id, 
+                        link_id: s_event.link_id, 
                         contains_padding: false,
                         bypass: s_event.bypass,
                         replace: s_event.replace,
@@ -600,9 +600,9 @@ impl RelayMBNtserver {
                 let forward_s_event = SimulEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time, 
-                    packet_idx: s_event.packet_idx,
-                    node_idx: s_event.node_idx, 
-                    link_idx: s_event.link_idx, 
+                    packet_id: s_event.packet_id,
+                    node_id: s_event.node_id, 
+                    link_id: s_event.link_id, 
                     contains_padding: true,
                     bypass: s_event.bypass,
                     replace: s_event.replace,
