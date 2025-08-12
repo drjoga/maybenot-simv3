@@ -1,35 +1,35 @@
-# Complex test configuration for maybenot-simulatorv3
-# Client -> WLAN -> Starlink -> Relay -> TrafficServer
+# Complex test configuration for simulatorv3
+# Client -> WLAN -> Slink -> Relay -> TrafficSrvr
 
 # Node definitions
 [[Node]]
 id = 0
 type = "ClientMBN"
-coreside_out = 0  # Client sends via link 0 to WLAN
+coreside_out = 0  # Client sends via 0 to WLAN
 
 #WLAN
 [[Node]]
 id = 1
 type = "RouterBasic"
-coreside_out = 1   # WLAN sends via link 1 to Starlink
-edgeside_out = 4   # WLAN sends via link 4 to Client
-edgeside_in = 0    # WLAN receives via link 0 from Client
+coreside_out = 1   # WLAN sends via 1 to Slink
+edgeside_out = 4   # WLAN sends via 4 to Client
+edgeside_in = 0    # WLAN recvs via 0 from Client
 
 #Starlink
 [[Node]]
 id = 2
 type = "RouterBasic"
-coreside_out = 2   # Starlink sends via link 2 to Relay
-edgeside_out = 5   # Starlink sends via link 5 to WLAN
-edgeside_in = 1    # Starlink receives via link 1 from WLAN
+coreside_out = 2   # Slink sends via 2 to Relay
+edgeside_out = 5   # Slink sends via 5 to WLAN
+edgeside_in = 1    # Slink recvs via 1 from WLAN
 
 #VPN Relay
 [[Node]]
 id = 3
 type = "RelayMBN"
-coreside_out = 3   # sends via link 3 to TrafficServer
-edgeside_out = 6   # sends via link 6 to Starlink
-edgeside_in = 2    # receives via link 2 from Starlink
+coreside_out = 3   # sends via 3 to TrafficServer
+edgeside_out = 6   # sends via 6 to Slink
+edgeside_in = 2    # recvs via 2 from Slink
 
 [[Node]]
 id = 4
@@ -47,7 +47,7 @@ type = "FixedTput"
 tput_bps = 100_000_000_000_000
 prop_us = 2_000
 
-# Link 1: from WLAN to Starlink
+# Link 1: from WLAN to Slink
 [[Link]]
 id = 1
 from = 1  # WLAN

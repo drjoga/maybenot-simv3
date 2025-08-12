@@ -1,5 +1,5 @@
-# Test for faster configuration for maybenot-simulatorv3
-# Network topology: Client -> Relay with inbuilt TrafficServer
+# Faster configuration for simulatorv3
+# Client -> Relay with inbuilt TrafficServer
 
 # Node definitions
 [[Node]]
