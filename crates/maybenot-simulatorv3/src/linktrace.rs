@@ -1,5 +1,4 @@
 use bincode;
-use chrono::Utc;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -9,7 +8,6 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
 
 /// Link trace
 /// that represent the throughput evolution for a simplex link.
@@ -245,7 +243,7 @@ impl fmt::Display for LinkTrace {
         }
     }
 }
-
+/* 
 pub fn mk_start_instant() -> Instant {
     // Create an arbitary point in time to use as a common time for simulation and link trace handling
     let start_instant_dt = chrono::DateTime::<Utc>::from_timestamp_millis(1722543211000).unwrap();
@@ -273,7 +271,7 @@ pub fn mk_start_instant() -> Instant {
     // return a "static" Instant by fiddling with the durations, as its the only way for Instant manipulation...
     now_instant - now_duration_epoch + start_duration_epoch
 }
-
+*/
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SizebinLookupTable {
     boundaries: Vec<i32>,

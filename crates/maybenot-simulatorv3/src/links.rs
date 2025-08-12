@@ -1,20 +1,18 @@
 use std::{
     cmp::max,
-    collections::VecDeque,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 
 use crate::{
-    linktrace::{mk_start_instant, LinkTrace},
+    linktrace::LinkTrace,
 };
 
 
 /////// High-performance enum-based link dispatch
 #[derive(Debug, Clone)]
 pub enum LinkType {
-    BottleneckTput(BottleneckTputLink),
     FixedTput(FixedTputLink),
     HiTraceTput(HiTraceTputLink),
     StdTraceTput(StdTraceTputLink),
@@ -24,7 +22,6 @@ pub enum LinkType {
 impl LinkType {
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
         match self {
-            LinkType::BottleneckTput(link) => link.sample(current_duration),
             LinkType::FixedTput(link) => link.sample(current_duration),
             LinkType::HiTraceTput(link) => link.sample(current_duration),
             LinkType::StdTraceTput(link) => link.sample(current_duration),
@@ -33,7 +30,6 @@ impl LinkType {
 
     pub fn link_id(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.id,
             LinkType::FixedTput(link) => link.id,
             LinkType::HiTraceTput(link) => link.id,
             LinkType::StdTraceTput(link) => link.id,
@@ -42,7 +38,6 @@ impl LinkType {
 
     pub fn from_node(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.from,
             LinkType::FixedTput(link) => link.from,
             LinkType::HiTraceTput(link) => link.from,
             LinkType::StdTraceTput(link) => link.from,
@@ -51,7 +46,6 @@ impl LinkType {
 
     pub fn to_node(&self) -> usize {
         match self {
-            LinkType::BottleneckTput(link) => link.to,
             LinkType::FixedTput(link) => link.to,
             LinkType::HiTraceTput(link) => link.to,
             LinkType::StdTraceTput(link) => link.to,
@@ -60,7 +54,6 @@ impl LinkType {
 
     pub fn type_name(&self) -> &'static str {
         match self {
-            LinkType::BottleneckTput(_) => "BottleneckTput",
             LinkType::FixedTput(_) => "FixedTput",
             LinkType::HiTraceTput(_) => "HiTraceTput",
             LinkType::StdTraceTput(_) => "StdTraceTput",
@@ -69,7 +62,6 @@ impl LinkType {
 
     pub fn prop_us(&self) -> Duration {
         match self {
-            LinkType::BottleneckTput(link) => link.prop_us,
             LinkType::FixedTput(link) => link.prop_us,
             LinkType::HiTraceTput(link) => link.prop_us,
             LinkType::StdTraceTput(link) => link.prop_us,
@@ -77,33 +69,6 @@ impl LinkType {
     }
 }
 
-
-
-
-#[derive(Debug, Clone)]
-pub struct BottleneckTputLink {
-    pub id: usize,
-    pub from: usize,
-    pub to: usize,
-    pub prop_us: Duration,
-    _network_bottleneck: NetworkBottleneck,
-}
-
-impl BottleneckTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, window: Duration, queue_pps: Option<usize>) -> Self {
-        Self {
-            id,
-            from,
-            to,
-            prop_us,
-            _network_bottleneck: NetworkBottleneck::new(window, queue_pps),
-        }
-    }
-    pub fn sample(&self, _current_duration: Duration,) -> Duration {
-        // Simplified for immutable access - returns a basic transmission delay
-        Duration::from_millis(10)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct FixedTputLink {
@@ -158,12 +123,6 @@ impl FixedTputLink {
 
         queueing_delay_duration + this_packet_duration
     }
-
-
-    pub fn sample2(&self, _current_duration: Duration) -> Duration {
-        // Simplified for immutable access - returns a basic transmission delay
-        Duration::from_millis(0)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -174,7 +133,6 @@ pub struct HiTraceTputLink {
     pub prop_us: Duration,
     // High resolution sampling state (simplex only)
     next_busy_to: usize,
-    sim_trace_startinstant: Instant,
     linktrace: Arc<LinkTrace>,
 }
 
@@ -186,21 +144,16 @@ impl HiTraceTputLink {
             to,
             prop_us,
             next_busy_to: 0,
-            sim_trace_startinstant: mk_start_instant(),
             linktrace,
         }
     }
     
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
-        // Convert Duration to Instant for compatibility with existing algorithm
-        let current_time = self.sim_trace_startinstant + current_duration;
-        
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
 
-        // Compute the simulation relative duration and determine the current time slot.
-        let sim_relative_duration = current_time.duration_since(self.sim_trace_startinstant);
-        let current_time_slot = sim_relative_duration.as_micros() as usize;
+        // Determine the current time slot.
+        let current_time_slot = current_duration.as_micros() as usize;
 
         let busy_to;
         let mut queueing_delay_duration = Duration::default();
@@ -251,7 +204,6 @@ pub struct StdTraceTputLink {
     // Standard resolution sampling state (simplex only)
     next_busy_to: usize,
     busy_ns_in_slot: u64,
-    sim_trace_startinstant: Instant,
     bw_trace: Vec<i32>,
 }
 
@@ -267,22 +219,17 @@ impl StdTraceTputLink {
             prop_us,
             next_busy_to: 0,
             busy_ns_in_slot: 0,
-            sim_trace_startinstant: mk_start_instant(),
             bw_trace,
         }
     }
     
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
-        // Convert Duration to Instant for compatibility with existing algorithm
-        let current_time = self.sim_trace_startinstant + current_duration;
-        
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
 
-        // Compute the simulation relative duration and determine the current time slot.
-        let sim_relative_duration = current_time.duration_since(self.sim_trace_startinstant);
-        let current_time_slot = sim_relative_duration.as_millis() as usize;
-        let current_slot_ns_position: u64 = (sim_relative_duration.as_nanos() % 1_000_000) as u64;
+        // Determine the current time slot.
+        let current_time_slot = current_duration.as_millis() as usize;
+        let current_slot_ns_position: u64 = (current_duration.as_nanos() % 1_000_000) as u64;
 
         // Note: Timing calculation code below is intricate, order between statements can matter.
         // Establish if the packet will have to queue, or can start sending immediately
@@ -370,105 +317,5 @@ impl StdTraceTputLink {
     }
 }
 
-// Factory function moved to topology_parse.rs
-// Use crate::topology_parse::create_link instead
 
-
-/// NOTE: NOT WORKING CURRENTLY, needs to be adapted to v3 or removed
-/// a network bottleneck that adds delay to packets above a certain packets per
-/// window limit (default 1s window, so pps), and keeps track of the aggregate
-/// delay to add to packets due to the bottleneck or accumulated blocking by
-/// machines: used to shift the baseline trace time at both client and server
-#[derive(Debug, Clone)]
-pub struct NetworkBottleneck {
-    // the aggregate delay for the client
-    pub client_aggregate_base_delay: Duration,
-    // the aggregate delay for the server
-    pub server_aggregate_base_delay: Duration,
-    // the pending aggregate delays to add to packets due to the bottleneck
-    //aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
-    // window counts for the client and server
-    client_window: WindowCount,
-    server_window: WindowCount,
-    // delay added to packets above the limit
-    pps_added_delay: Duration,
-    // packets per second limit
-    pps_limit: usize,
-}
-
-impl NetworkBottleneck {
-    pub fn new(window: Duration, queue_pps: Option<usize>) -> Self {
-        let pps = queue_pps.unwrap_or(usize::MAX);
-        // average delay, based on window and limit
-        let added_delay = window / pps as u32;
-
-        Self {
-            client_window: WindowCount::new(window),
-            server_window: WindowCount::new(window),
-            pps_added_delay: added_delay,
-            client_aggregate_base_delay: Duration::default(),
-            server_aggregate_base_delay: Duration::default(),
-            //aggregate_delay_queue: BinaryHeap::new(),
-            pps_limit: pps,
-        }
-    }
-
-    pub fn sample(
-        &mut self,
-        current_time: &Instant,
-        is_client: bool,
-    ) -> (Duration, Option<Duration>) {
-        let window = if is_client {
-            &mut self.client_window
-        } else {
-            &mut self.server_window
-        };
-
-        let count = window.add(current_time);
-        let delay = if count > self.pps_limit {
-            self.pps_added_delay * (count - self.pps_limit) as u32
-        } else {
-            Duration::default()
-        };
-        // Previosuly the propagation delay was added here, was in network.delay
-        if delay > Duration::default() {
-            (delay, Some(delay))
-        } else {
-            (Duration::default(), None)
-        }
-    }
-
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct WindowCount {
-    window: Duration,
-    timestamps: VecDeque<Instant>,
-}
-
-impl WindowCount {
-    pub fn new(window: Duration) -> Self {
-        WindowCount {
-            window,
-            timestamps: VecDeque::with_capacity(512),
-        }
-    }
-
-    pub fn add(&mut self, current_time: &Instant) -> usize {
-        // add the current time of the event
-        self.timestamps.push_back(*current_time);
-
-        // prune old timestamps
-        while let Some(&oldest) = self.timestamps.front() {
-            if current_time.duration_since(oldest) > self.window {
-                self.timestamps.pop_front();
-            } else {
-                break;
-            }
-        }
-
-        // return the number of events in the window
-        self.timestamps.len()
-    }
-}
 

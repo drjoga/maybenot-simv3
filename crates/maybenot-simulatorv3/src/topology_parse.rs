@@ -367,7 +367,7 @@ pub fn create_link(
     to: usize,
     params: &HashMap<String, String>,
 ) -> Result<LinkType, String> {
-    use crate::links::{BottleneckTputLink, FixedTputLink, HiTraceTputLink, StdTraceTputLink};
+    use crate::links::{FixedTputLink, HiTraceTputLink, StdTraceTputLink};
     
     // Parse prop_us parameter (required for all link types)
     let prop_us = params
@@ -377,19 +377,6 @@ pub fn create_link(
         .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
 
     match link_type {
-        "BottleneckTput" => {
-            let window = params
-                .get("window_ms")
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(Duration::from_millis)
-                .unwrap_or(Duration::from_secs(1));
-            
-            let queue_pps = params
-                .get("queue_pps")
-                .and_then(|s| s.parse::<usize>().ok());
-            
-            Ok(LinkType::BottleneckTput(BottleneckTputLink::new(id, from, to, prop_us, window, queue_pps)))
-        }
         "FixedTput" => {
             // Simplex link - requires tput_bps parameter
             let tput = params
