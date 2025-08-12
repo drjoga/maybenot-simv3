@@ -14,7 +14,6 @@ impl Default for NetworkLinkstate {
     }
 }
 
-
 impl NetworkLinkstate {
     pub fn new() -> Self {
         Self {
@@ -84,18 +83,6 @@ impl NetworkTopology {
         assert_eq!(id, self.nodes.len(), "Node ID must match vector index");
         self.nodes.push(node);
         self.nodes.len() - 1
-    }
-
-    pub fn get_node(&self, node_index: usize) -> Option<&NodeType> {
-        self.nodes.get(node_index)
-    }
-
-    pub fn node_count(&self) -> usize {
-        self.nodes.len()
-    }
-
-    pub fn nodes(&self) -> &[NodeType] {
-        &self.nodes
     }
 
     pub fn get_mbn_client(&self) -> &dyn MBNNode {
