@@ -190,19 +190,26 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
                             debug!("No normal to replace with, sending bypass padding");
                         }
                     } else {
-                        debug!("Sending bypass padding");  
+                        debug!("Sending bypass padding, Replace not set");  
                     }
                 } else {
                     debug!("Sending bypass Normal packet");
                 }
+            // Below here we could not bypass 
             } else if s_event.contains_padding {
+                if s_event.replace && node.get_queue_normal().borrow().len() != 0 {
+                    // If padding_replace and there is a blocked normal packet the padding is replaced, i.e. not enqueued
+                    debug!("Padding replaced by blocked normal packet, nothing enqueued");
+                    return;
+                } else  {
                     node.get_queue_padding().borrow_mut().push_back(s_event);
-                    debug!("Blocking Padding enqued");
+                    debug!("Blocked Padding enqueued");
                     return;
+                }
             } else {
-                    node.get_queue_normal().borrow_mut().push_back(s_event);
-                    debug!("Blocking Normal enqued");
-                    return;
+                node.get_queue_normal().borrow_mut().push_back(s_event);
+                debug!("Blocking Normal enqued");
+                return;
             }
         }
     }
