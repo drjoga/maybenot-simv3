@@ -307,6 +307,7 @@ impl MBNNode for ClientMBN {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 impl ClientMBN {
     pub fn new(
         id: usize, 
