@@ -1,6 +1,6 @@
 use maybenot::{TriggerEvent, Machine, TriggerAction, Timer, MachineId};
 use crate::{SimulEvent, SimulQueue, SimState, ScheduledAction, SimulatorArgs};
-use crate::network::NetworkTopology;
+use crate::topology::NetworkTopology;
 use crate::mbn_nodes::MBNNode;
 use std::time::{Duration, Instant};
 use log::debug;

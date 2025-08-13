@@ -1,7 +1,7 @@
 use maybenot::{TriggerEvent, Machine};
 use crate::nodes::check_dependent_packets;
 use crate::{SimulEvent, SimulInfo, SimulQueue, SimState, RngSource};
-use crate::network::{NetworkTopology, NetworkLinkstate};
+use crate::topology::{NetworkTopology, NetworkLinkstate};
 use crate::mbn_helpers::{mbn_trigger_update, mbn_do_internal_timer, mbn_do_scheduled_action};
 use std::time::{Instant, Duration};
 use std::cell::RefCell;

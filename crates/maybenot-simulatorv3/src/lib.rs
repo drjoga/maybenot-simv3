@@ -2,7 +2,7 @@ pub mod nodes;
 pub mod mbn_nodes;
 pub mod mbn_helpers;
 pub mod links;
-pub mod network;
+pub mod topology;
 pub mod linktrace;
 pub mod linkbundle;
 pub mod integration;
@@ -29,7 +29,7 @@ use std::{
 
 
 use log::debug;
-use network::{NetworkTopology, NetworkLinkstate};
+use topology::{NetworkTopology, NetworkLinkstate};
 
 use maybenot::{Framework, Machine,  TriggerAction, TriggerEvent};
 use rand::{rngs::ThreadRng, RngCore};
@@ -279,7 +279,7 @@ impl SimulQueue {
 
     // This function is called for every processed event if continue_after_all_normal_packets_processed is false
     // Although 
-    pub fn no_normal_packets(&self, topology: &network::NetworkTopology) -> bool {
+    pub fn no_normal_packets(&self, topology: &topology::NetworkTopology) -> bool {
         // Check main simulation queue, see if any of traffic trace packer are in it. 
         if self.heap.iter().any(|e| {e.packet_id < usize::MAX}) {
             return false;

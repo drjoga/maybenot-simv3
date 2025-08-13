@@ -1,4 +1,4 @@
-use crate::network::{NetworkTopology, NetworkLinkstate};
+use crate::topology::{NetworkTopology, NetworkLinkstate};
 use crate::nodes::NodeType;
 use crate::links::LinkType;
 use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};

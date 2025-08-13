@@ -6,7 +6,7 @@ use maybenot::{action::Action, state::State, Machine, TriggerEvent};
 use maybenot_simulatorv3::{
     event_schedule_print, 
     SimulEvent,
-    network::{NetworkTopology},
+    topology::{NetworkTopology},
     simul_advanced, traffic_trace_prepare, fill_simq, SimulatorArgs, SimulInfo, SimulQueue,
     load_topology_from_str
 };

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use log::{debug, warn};
 
 use crate::{SimulEvent, SimulInfo, SimulQueue};
-use crate::network::NetworkTopology;
+use crate::topology::NetworkTopology;
 use maybenot::TriggerEvent;
 
 /// Parse a trace into a [`SimQueue`] for use with [`sim`].
@@ -16,7 +16,7 @@ use maybenot::TriggerEvent;
 /// the trace for use with [`sim`].
 pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay: Duration) -> (SimulInfo, SimulQueue) {
     let mut si = SimulInfo::new();
-    let mut sq = SimulQueue::new();    
+    let mut sq = SimulQueue::new();
 
     let mut oneline = String::new();
 
