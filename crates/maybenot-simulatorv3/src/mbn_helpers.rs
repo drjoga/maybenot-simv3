@@ -83,27 +83,29 @@ pub fn initialize_mbn_sim_states(
     current_time: Instant,
     args: &SimulatorArgs,
 ) {
-    // Initialize client MBN node using trait abstraction
-    let client_mbn = topology.get_mbn_client();
+      // Initialize client MBN node using trait abstraction
+    let client_mbn: &dyn MBNNode = topology.get_mbn_client();
     let new_state = MbnState::new(
         machines_client.to_vec(),
         current_time,
         args.max_padding_frac_client,
         args.max_blocking_frac_client,
+        args.drain_blocked_by_time,
         args.client_integration.clone(),
         args.insecure_rng_seed,
     );
     *client_mbn.get_sim_state().borrow_mut() = new_state;
 
-    // Initialize server MBN node using trait abstraction
-    let relay_mbn = topology.get_mbn_server();
+    // Initialize relay MBN node using trait abstraction
+    let relay_mbn: &dyn MBNNode = topology.get_mbn_server();
     let new_state = MbnState::new(
         machines_server.to_vec(),
         current_time,
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
+        args.drain_blocked_by_time,
         args.server_integration.clone(),
-        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
+        args.insecure_rng_seed,
     );
     *relay_mbn.get_sim_state().borrow_mut() = new_state;
 }

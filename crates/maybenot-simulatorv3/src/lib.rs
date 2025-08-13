@@ -346,6 +346,9 @@ pub struct SimulatorArgs {
     /// The maximum fraction of blocking for the server's instance of the
     /// Maybenot framework.
     pub max_blocking_frac_server: f64,
+    /// If true, blocked events will be drained based on their original timestamps.
+    /// If false, all normal will be drained first, and then padding.
+    pub drain_blocked_by_time: bool,
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
@@ -369,6 +372,7 @@ impl SimulatorArgs {
             max_blocking_frac_client: 0.0,
             max_padding_frac_server: 0.0,
             max_blocking_frac_server: 0.0,
+            drain_blocked_by_time: false,
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,

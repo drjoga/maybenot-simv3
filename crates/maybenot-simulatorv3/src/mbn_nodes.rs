@@ -83,7 +83,9 @@ pub struct MbnState<M, R> {
     pub blocking_until: Option<Instant>,
     /// whether the active blocking bypassable or not
     pub blocking_bypassable: bool,
-    //// integration aspects for this state
+    /// whether to drain blocked packets by time or first all normal then padding
+    pub drain_blocked_by_time: bool,
+    /// integration aspects for this state
     pub integration: Option<Integration>,
 }
 
@@ -96,6 +98,7 @@ where
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
@@ -121,6 +124,7 @@ where
             scheduled_internal_timer: vec![None; num_machines],
             blocking_until: None,
             blocking_bypassable: false,
+            drain_blocked_by_time,
             integration,
         }
     }
@@ -223,6 +227,7 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
     node: &T,
     sq: &mut SimulQueue,
     current_time: Instant,
+    drain_blocked_by_time: bool,
 ) {
     // Release all events from both queues
     let mut padding_events = node.get_queue_padding().borrow_mut();
@@ -231,20 +236,55 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
     debug!("Releasing {} padding events and {} normal events", 
            padding_events.len(), normal_events.len());
     
-    // Move all padding queue events to simulation queue with updated time
-    for mut event in padding_events.drain(..) {
-        debug!("Releasing padding event: {:?} originally at {:?}, now at {:?}", 
-               event.event, event.time, current_time);
-        event.time = current_time;
-        sq.push(event);
-    }
-    
-    // Move all normal queue events to simulation queue with updated time
-    for mut event in normal_events.drain(..) {
-        debug!("Releasing normal event: {:?} originally at {:?}, now at {:?}", 
-               event.event, event.time, current_time);
-        event.time = current_time;
-        sq.push(event);
+
+    if drain_blocked_by_time {
+        // Time-wise draining: release packets in chronological order based on their original timestamps
+        loop {
+            // Check the earliest event from each queue
+            let earliest_padding = padding_events.front().map(|e| e.time);
+            let earliest_normal = normal_events.front().map(|e| e.time);
+            
+            // Determine which queue has the earliest event
+            let drain_padding = match (earliest_padding, earliest_normal) {
+                (Some(p_time), Some(n_time)) => p_time <= n_time,
+                (Some(_), None) => true,
+                (None, Some(_)) => false,
+                (None, None) => break, // Both queues are empty
+            };
+            
+            // Drain the earliest event and add it to simulation queue
+            if drain_padding {
+                if let Some(mut event) = padding_events.pop_front() {
+                    debug!("Releasing padding event (time-wise): {:?} originally at {:?}, now at {:?}", 
+                           event.event, event.time, current_time);
+                    event.time = current_time;
+                    sq.push(event);
+                }
+            } else {
+                if let Some(mut event) = normal_events.pop_front() {
+                    debug!("Releasing normal event (time-wise): {:?} originally at {:?}, now at {:?}", 
+                           event.event, event.time, current_time);
+                    event.time = current_time;
+                    sq.push(event);
+                }
+            }
+        }
+    } else {
+        // Move all normal queue events to simulation queue with updated time
+        for mut event in normal_events.drain(..) {
+            debug!("Releasing normal event: {:?} originally at {:?}, now at {:?}", 
+                event.event, event.time, current_time);
+            event.time = current_time;
+            sq.push(event);
+        }
+
+        // Move all padding queue events to simulation queue with updated time
+        for mut event in padding_events.drain(..) {
+            debug!("Releasing padding event: {:?} originally at {:?}, now at {:?}", 
+                event.event, event.time, current_time);
+            event.time = current_time;
+            sq.push(event);
+        }
     }
 }
 
@@ -293,7 +333,7 @@ impl MBNNode for ClientMBN {
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
         &self.queue_normal
     }
-    
+
     fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology) {
         mbn_trigger_update(self, s_event, current_time, sq, topology)
     }
@@ -316,6 +356,7 @@ impl ClientMBN {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>
     ) -> Self {
@@ -324,6 +365,7 @@ impl ClientMBN {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            drain_blocked_by_time,
             integration,
             insecure_rng_seed
         ));
@@ -412,11 +454,11 @@ impl ClientMBN {
             }
 
             TriggerEvent::BlockingEnd => {
+                let mut state = self.sim_state.borrow_mut();
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time);
+                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
                 
                 // Clear blocking state
-                let mut state = self.sim_state.borrow_mut();
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
@@ -481,6 +523,7 @@ impl RelayMBN {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>
     ) -> Self {
@@ -489,6 +532,7 @@ impl RelayMBN {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            drain_blocked_by_time,
             integration,
             insecure_rng_seed
         ));
@@ -602,11 +646,11 @@ impl RelayMBN {
             }
 
             TriggerEvent::BlockingEnd => {
+                let mut state = self.sim_state.borrow_mut();
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time);
+                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
                 
                 // Clear blocking state
-                let mut state = self.sim_state.borrow_mut();
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
@@ -647,7 +691,7 @@ impl MBNNode for RelayMBNtserver {
     fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
         &self.queue_normal
     }
-    
+
     fn trigger_update(&self, s_event: &SimulEvent, current_time: &Instant, sq: &mut SimulQueue, topology: &NetworkTopology) {
         mbn_trigger_update(self, s_event, current_time, sq, topology)
     }
@@ -671,6 +715,7 @@ impl RelayMBNtserver {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
         ts_prop_us: Duration,
@@ -680,6 +725,7 @@ impl RelayMBNtserver {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            drain_blocked_by_time,
             integration,
             insecure_rng_seed
         ));
@@ -775,11 +821,11 @@ impl RelayMBNtserver {
             }
 
             TriggerEvent::BlockingEnd => {
-                // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time);
-                
-                // Clear blocking state
                 let mut state = self.sim_state.borrow_mut();
+                // Release any queued events with current time
+                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
+
+                // Clear blocking state
                 state.blocking_until = None;
                 state.blocking_bypassable = false;
             }
