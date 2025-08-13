@@ -1,5 +1,6 @@
 use maybenot::{TriggerEvent, Machine, TriggerAction, Timer, MachineId};
-use crate::{SimulEvent, SimulQueue, SimState, ScheduledAction, SimulatorArgs};
+use crate::{SimulEvent, SimulQueue, SimulatorArgs};
+use crate::mbn_nodes::{MbnState, ScheduledAction};
 use crate::topology::NetworkTopology;
 use crate::mbn_nodes::MBNNode;
 use std::time::{Duration, Instant};
@@ -74,7 +75,7 @@ pub fn peek_blocked_exp(
 }
 
 
-/// Initialize MBN nodes with SimState for simulation
+/// Initialize MBN nodes with MbnState for simulation
 pub fn initialize_mbn_sim_states(
     topology: &NetworkTopology,
     machines_client: &[Machine],
@@ -84,7 +85,7 @@ pub fn initialize_mbn_sim_states(
 ) {
     // Initialize client MBN node using trait abstraction
     let client_mbn = topology.get_mbn_client();
-    let new_state = SimState::new(
+    let new_state = MbnState::new(
         machines_client.to_vec(),
         current_time,
         args.max_padding_frac_client,
@@ -95,7 +96,7 @@ pub fn initialize_mbn_sim_states(
 
     // Initialize server MBN node using trait abstraction
     let relay_mbn = topology.get_mbn_server();
-    let new_state = SimState::new(
+    let new_state = MbnState::new(
         machines_server.to_vec(),
         current_time,
         args.max_padding_frac_server,

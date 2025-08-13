@@ -9,16 +9,14 @@ pub mod integration;
 pub mod traffic_parse;
 pub mod topology_parse;
 
-// Re-export topology parsing types and functions
+// Re-export topology parsing functions
 pub use topology_parse::{
     load_topology_from_file, load_topology_from_str, build_topology_from_config, modify_toml,
-    NetworkConfig, NodeConfig, LinkConfig, RouteConfig, ForwardingRule
 };
 
-// Re-export traffic parsing types and functions for backward compatibility
+// Re-export traffic parsing functions 
 pub use traffic_parse::{
     parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print,
-    PacketEvent, EventKind, TrafficTraceData
 };
 
 use std::{
@@ -30,54 +28,12 @@ use std::{
 
 use log::debug;
 use topology::{NetworkTopology, NetworkLinkstate};
+use traffic_parse::EventKind;
 
-use maybenot::{Framework, Machine,  TriggerAction, TriggerEvent};
-use rand::{rngs::ThreadRng, RngCore};
-use rand_xoshiro::rand_core::SeedableRng;
-use rand_xoshiro::Xoshiro256StarStar;
+use maybenot::{Machine, TriggerEvent};
 use mbn_helpers::initialize_mbn_sim_states;
 
 
-
-// Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
-// RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
-// have to work around this by using an enum to support selecting rng source as
-// a simulation option.
-#[derive(Debug)]
-pub enum RngSource {
-    Thread(ThreadRng),
-    Xoshiro(Xoshiro256StarStar),
-}
-
-impl RngCore for RngSource {
-    fn next_u32(&mut self) -> u32 {
-        match self {
-            RngSource::Thread(rng) => rng.next_u32(),
-            RngSource::Xoshiro(rng) => rng.next_u32(),
-        }
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        match self {
-            RngSource::Thread(rng) => rng.next_u64(),
-            RngSource::Xoshiro(rng) => rng.next_u64(),
-        }
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        match self {
-            RngSource::Thread(rng) => rng.fill_bytes(dest),
-            RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            RngSource::Thread(rng) => rng.try_fill_bytes(dest),
-            RngSource::Xoshiro(rng) => rng.try_fill_bytes(dest),
-        }
-    }
-}
 
 
 
@@ -278,7 +234,6 @@ impl SimulQueue {
     }
 
     // This function is called for every processed event if continue_after_all_normal_packets_processed is false
-    // Although 
     pub fn no_normal_packets(&self, topology: &topology::NetworkTopology) -> bool {
         // Check main simulation queue, see if any of traffic trace packer are in it. 
         if self.heap.iter().any(|e| {e.packet_id < usize::MAX}) {
@@ -321,100 +276,6 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
         TriggerEvent::TimerEnd { .. } => 9,
     }
 }
-
-
-
-
-
-/// ScheduledAction represents an action that is scheduled to be executed at a
-/// certain time.
-#[derive(PartialEq, Clone, Debug)]
-pub struct ScheduledAction {
-    action: TriggerAction,
-    time: Instant,
-}
-
-/// The state of the client, or relay in the simulator.
-#[derive(Debug)]
-pub struct SimState<M, R> {
-    /// an instance of the Maybenot framework
-    framework: Framework<M, R>,
-    /// scheduled action timers
-    scheduled_action: Vec<Option<ScheduledAction>>,
-    /// scheduled internal timers
-    scheduled_internal_timer: Vec<Option<Instant>>,
-    /// blocking until time, active is set
-    blocking_until: Option<Instant>,
-    /// whether the active blocking bypassable or not
-    blocking_bypassable: bool,
-    //// integration aspects for this state
-    //integration: Option<Integration>,
-}
-
-impl<M> SimState<M, RngSource>
-where
-    M: AsRef<[Machine]>,
-{
-    pub fn new(
-        machines: M,
-        current_time: Instant,
-        max_padding_frac: f64,
-        max_blocking_frac: f64,
-        //integration: Option<Integration>,
-        insecure_rng_seed: Option<u64>,
-    ) -> Self {
-        let rng = match insecure_rng_seed {
-            // deterministic, insecure RNG
-            Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
-            // secure RNG, default
-            None => RngSource::Thread(rand::thread_rng()),
-        };
-
-        let num_machines = machines.as_ref().len();
-
-        Self {
-            framework: Framework::new(
-                machines,
-                max_padding_frac,
-                max_blocking_frac,
-                current_time,
-                rng,
-            )
-            .unwrap(),
-            scheduled_action: vec![None; num_machines],
-            scheduled_internal_timer: vec![None; num_machines],
-            blocking_until: None,
-            blocking_bypassable: false,
-            //integration,
-        }
-    }
-
-    /* 
-    pub fn reporting_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(|i| i.reporting_delay())
-            .unwrap_or(Duration::from_micros(0))
-    }
-
-    pub fn action_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(|i| i.action_delay())
-            .unwrap_or(Duration::from_micros(0))
-    }
-
-    pub fn trigger_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(|i| i.trigger_delay())
-            .unwrap_or(Duration::from_micros(0))
-    }
-    */
-}
-
-
-
 
 
 
@@ -540,7 +401,7 @@ pub fn simul_advanced(
     // put the mocked current time at the first event
     let mut current_time = si.earliest_event_instant;
 
-    // Initialize MBN nodes with SimState if they exist
+    // Initialize MBN nodes with MbnState if they exist
     if topology.has_mb {
         initialize_mbn_sim_states(topology, machines_client, machines_server, current_time, args);
     }
@@ -663,7 +524,7 @@ fn pick_next(
 }
 
 
-// MaybeNot node-based version of pick_next that queries nodes directly instead of using global SimState
+// MaybeNot node-based version of pick_next that queries nodes directly instead of using global MbnState
 fn pick_next_mbn(
     si: &SimulInfo,
     sq: &mut SimulQueue,

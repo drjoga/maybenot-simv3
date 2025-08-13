@@ -1,12 +1,153 @@
-use maybenot::{TriggerEvent, Machine};
+use maybenot::{TriggerEvent, Machine, Framework, TriggerAction};
 use crate::nodes::check_dependent_packets;
-use crate::{SimulEvent, SimulInfo, SimulQueue, SimState, RngSource};
+use crate::{SimulEvent, SimulInfo, SimulQueue};
 use crate::topology::{NetworkTopology, NetworkLinkstate};
 use crate::mbn_helpers::{mbn_trigger_update, mbn_do_internal_timer, mbn_do_scheduled_action};
 use std::time::{Instant, Duration};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use log::debug;
+
+use rand::{rngs::ThreadRng, RngCore};
+use rand_xoshiro::rand_core::SeedableRng;
+use rand_xoshiro::Xoshiro256StarStar;
+
+
+
+
+
+// Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
+// RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
+// have to work around this by using an enum to support selecting rng source as
+// a simulation option.
+#[derive(Debug)]
+pub enum RngSource {
+    Thread(ThreadRng),
+    Xoshiro(Xoshiro256StarStar),
+}
+
+impl RngCore for RngSource {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            RngSource::Thread(rng) => rng.next_u32(),
+            RngSource::Xoshiro(rng) => rng.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            RngSource::Thread(rng) => rng.next_u64(),
+            RngSource::Xoshiro(rng) => rng.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            RngSource::Thread(rng) => rng.fill_bytes(dest),
+            RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            RngSource::Thread(rng) => rng.try_fill_bytes(dest),
+            RngSource::Xoshiro(rng) => rng.try_fill_bytes(dest),
+        }
+    }
+}
+
+
+
+
+
+
+/// ScheduledAction represents an action that is scheduled to be executed at a
+/// certain time.
+#[derive(PartialEq, Clone, Debug)]
+pub struct ScheduledAction {
+    pub action: TriggerAction,
+    pub time: Instant,
+}
+
+/// The state of the client, or relay in the simulator.
+#[derive(Debug)]
+pub struct MbnState<M, R> {
+    /// an instance of the Maybenot framework
+    pub framework: Framework<M, R>,
+    /// scheduled action timers
+    pub scheduled_action: Vec<Option<ScheduledAction>>,
+    /// scheduled internal timers
+    pub scheduled_internal_timer: Vec<Option<Instant>>,
+    /// blocking until time, active is set
+    pub blocking_until: Option<Instant>,
+    /// whether the active blocking bypassable or not
+    pub blocking_bypassable: bool,
+    //// integration aspects for this state
+    //integration: Option<Integration>,
+}
+
+impl<M> MbnState<M, RngSource>
+where
+    M: AsRef<[Machine]>,
+{
+    pub fn new(
+        machines: M,
+        current_time: Instant,
+        max_padding_frac: f64,
+        max_blocking_frac: f64,
+        //integration: Option<Integration>,
+        insecure_rng_seed: Option<u64>,
+    ) -> Self {
+        let rng = match insecure_rng_seed {
+            // deterministic, insecure RNG
+            Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
+            // secure RNG, default
+            None => RngSource::Thread(rand::thread_rng()),
+        };
+
+        let num_machines = machines.as_ref().len();
+
+        Self {
+            framework: Framework::new(
+                machines,
+                max_padding_frac,
+                max_blocking_frac,
+                current_time,
+                rng,
+            )
+            .unwrap(),
+            scheduled_action: vec![None; num_machines],
+            scheduled_internal_timer: vec![None; num_machines],
+            blocking_until: None,
+            blocking_bypassable: false,
+            //integration,
+        }
+    }
+
+    /* 
+    pub fn reporting_delay(&self) -> Duration {
+        self.integration
+            .as_ref()
+            .map(|i| i.reporting_delay())
+            .unwrap_or(Duration::from_micros(0))
+    }
+
+    pub fn action_delay(&self) -> Duration {
+        self.integration
+            .as_ref()
+            .map(|i| i.action_delay())
+            .unwrap_or(Duration::from_micros(0))
+    }
+
+    pub fn trigger_delay(&self) -> Duration {
+        self.integration
+            .as_ref()
+            .map(|i| i.trigger_delay())
+            .unwrap_or(Duration::from_micros(0))
+    }
+    */
+}
+
 
 
 
@@ -102,7 +243,7 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
 
 // Trait for MBN nodes to enable generic implementations
 pub trait MBNNode {
-    fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>>;
+    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>>;
     fn node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>>;
@@ -119,13 +260,13 @@ pub trait MBNNode {
 pub struct ClientMBN {
     pub id: usize,
     pub coreside_out: usize,
-    pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
 }
 
 impl MBNNode for ClientMBN {
-    fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>> {
+    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
     
@@ -168,7 +309,7 @@ impl ClientMBN {
         max_blocking_frac: f64,
         insecure_rng_seed: Option<u64>
     ) -> Self {
-        let sim_state = RefCell::new(SimState::new(
+        let sim_state = RefCell::new(MbnState::new(
             machines,
             current_time,
             max_padding_frac,
@@ -279,13 +420,13 @@ pub struct RelayMBN {
     pub coreside_out: usize,
     pub edgeside_in: usize,
     pub edgeside_out: usize,
-    pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
 }
 
 impl MBNNode for RelayMBN {
-    fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>> {
+    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
     
@@ -331,7 +472,7 @@ impl RelayMBN {
         max_blocking_frac: f64,
         insecure_rng_seed: Option<u64>
     ) -> Self {
-        let sim_state = RefCell::new(SimState::new(
+        let sim_state = RefCell::new(MbnState::new(
             machines,
             current_time,
             max_padding_frac,
@@ -467,14 +608,14 @@ pub struct RelayMBNtserver {
     pub id: usize,
     pub edgeside_in: usize,
     pub edgeside_out: usize,
-    pub sim_state: RefCell<SimState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimulEvent>>,
     pub queue_normal: RefCell<VecDeque<SimulEvent>>,
     pub ts_prop_us: Duration,
 }
 
 impl MBNNode for RelayMBNtserver {
-    fn get_sim_state(&self) -> &RefCell<SimState<Vec<Machine>, RngSource>> {
+    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
     
@@ -520,7 +661,7 @@ impl RelayMBNtserver {
         insecure_rng_seed: Option<u64>,
         ts_prop_us: Duration,
     ) -> Self {
-        let sim_state = RefCell::new(SimState::new(
+        let sim_state = RefCell::new(MbnState::new(
             machines,
             current_time,
             max_padding_frac,
