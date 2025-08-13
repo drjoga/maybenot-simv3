@@ -518,3 +518,32 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
     toml::to_string_pretty(&toml_value)
         .map_err(|e| format!("Failed to serialize TOML: {}", e))
 }
+
+// Modifies the prop_us parameter for all Link instances in a TOML string.
+pub fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
+    // Parse input TOML into a mutable value
+    let mut toml_value: toml::Value = toml::from_str(toml_in)
+        .unwrap_or_else(|e| panic!("Failed to parse input TOML: {}", e));
+    
+    // Get the root table
+    let root_table = toml_value.as_table_mut()
+        .unwrap_or_else(|| panic!("TOML root is not a table"));
+    
+    // Find the Link section array
+    let link_array = root_table.get_mut("Link")
+        .and_then(|v| v.as_array_mut())
+        .unwrap_or_else(|| panic!("Link section is not an array or doesn't exist"));
+    
+    // Update prop_us for all Link instances
+    for link_entry in link_array.iter_mut() {
+        let link_table = link_entry.as_table_mut()
+            .unwrap_or_else(|| panic!("Link entry is not a table"));
+        
+        // Set the prop_us parameter to the specified value
+        link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
+    }
+    
+    // Serialize back to TOML string
+    toml::to_string_pretty(&toml_value)
+        .unwrap_or_else(|e| panic!("Failed to serialize TOML: {}", e))
+}

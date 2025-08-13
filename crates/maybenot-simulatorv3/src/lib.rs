@@ -11,7 +11,7 @@ pub mod topology_parse;
 
 // Re-export topology parsing functions
 pub use topology_parse::{
-    load_topology_from_file, load_topology_from_str, build_topology_from_config, modify_toml,
+    load_topology_from_file, load_topology_from_str, build_topology_from_config, modify_toml, set_toml_propagation_us,
 };
 
 // Re-export traffic parsing functions 
@@ -456,10 +456,12 @@ pub fn simul_advanced(
         if topology.has_mb {
             if next.node_id == topology.mb_client {
                 debug!("sim(): trigger @client framework {:?}", next.event);
-                client_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
+                let reporting_delay = client_mbn.unwrap().get_sim_state().borrow().reporting_delay();
+                client_mbn.unwrap().trigger_update(&next, &(current_time + reporting_delay), sq, topology);
             } else if next.node_id == topology.mb_server {
                 debug!("sim(): trigger @server framework {:?}", next.event);
-                relay_mbn.unwrap().trigger_update(&next, &current_time, sq, topology);
+                let reporting_delay = relay_mbn.unwrap().get_sim_state().borrow().reporting_delay();
+                relay_mbn.unwrap().trigger_update(&next, &(current_time + reporting_delay), sq, topology);
             }
         }
 

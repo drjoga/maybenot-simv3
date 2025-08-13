@@ -43,7 +43,6 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
             }
         }
     }
-
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
     fill_simq(&traffic_events, topology, &mut si, &mut sq);

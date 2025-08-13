@@ -84,7 +84,7 @@ pub struct MbnState<M, R> {
     /// whether the active blocking bypassable or not
     pub blocking_bypassable: bool,
     //// integration aspects for this state
-    integration: Option<Integration>,
+    pub integration: Option<Integration>,
 }
 
 impl<M> MbnState<M, RngSource>

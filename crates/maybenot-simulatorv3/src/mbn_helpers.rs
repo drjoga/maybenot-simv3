@@ -134,6 +134,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
     // Now process actions with a fresh borrow
     for action in actions {
         let mut state = node.get_sim_state().borrow_mut();
+        let trigger_delay = state.trigger_delay();
         match action {
             TriggerAction::Cancel { machine, timer } => {
                 debug!(
@@ -167,7 +168,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
                 );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
-                    time: *current_time + timeout,
+                    time: *current_time + timeout + trigger_delay,
                 });
             }
             TriggerAction::BlockOutgoing {
@@ -183,7 +184,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
                 );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
-                    time: *current_time + timeout,
+                    time: *current_time + timeout + trigger_delay,
                 });
             }
             TriggerAction::UpdateTimer {
@@ -287,9 +288,10 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
             replace,
             machine,
         } => {
+
             Some(SimulEvent {
                 event: TriggerEvent::PaddingSent { machine },
-                time: a.time,
+                time: a.time + state.action_delay(),
                 packet_id: usize::MAX,
                 node_id: node.node_id(),
                 link_id: node.get_action_link_id(),
@@ -320,7 +322,7 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
 
             Some(SimulEvent {
                 event: TriggerEvent::BlockingBegin { machine },
-                time: a.time,
+                time: a.time + state.action_delay() + state.reporting_delay(),
                 packet_id: usize::MAX,
                 node_id: node.node_id(),
                 link_id: node.get_action_link_id(),
