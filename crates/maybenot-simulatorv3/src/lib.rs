@@ -29,11 +29,10 @@ use std::{
 use log::debug;
 use topology::{NetworkTopology, NetworkLinkstate};
 use traffic_parse::EventKind;
+use integration::Integration;
 
 use maybenot::{Machine, TriggerEvent};
 use mbn_helpers::initialize_mbn_sim_states;
-
-
 
 
 
@@ -351,9 +350,9 @@ pub struct SimulatorArgs {
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
     ///// Optional client integration delays.
-    //pub client_integration: Option<Integration>,
+    pub client_integration: Option<Integration>,
     ///// Optional server integration delays.
-    //pub server_integration: Option<Integration>,
+    pub server_integration: Option<Integration>,
 }
 
 
@@ -371,8 +370,8 @@ impl SimulatorArgs {
             max_padding_frac_server: 0.0,
             max_blocking_frac_server: 0.0,
             insecure_rng_seed: None,
-            //client_integration: None,
-            //server_integration: None,
+            client_integration: None,
+            server_integration: None,
         }
     }
 }

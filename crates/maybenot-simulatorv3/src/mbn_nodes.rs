@@ -3,6 +3,7 @@ use crate::nodes::check_dependent_packets;
 use crate::{SimulEvent, SimulInfo, SimulQueue};
 use crate::topology::{NetworkTopology, NetworkLinkstate};
 use crate::mbn_helpers::{mbn_trigger_update, mbn_do_internal_timer, mbn_do_scheduled_action};
+use crate::integration::Integration;
 use std::time::{Instant, Duration};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -83,7 +84,7 @@ pub struct MbnState<M, R> {
     /// whether the active blocking bypassable or not
     pub blocking_bypassable: bool,
     //// integration aspects for this state
-    //integration: Option<Integration>,
+    integration: Option<Integration>,
 }
 
 impl<M> MbnState<M, RngSource>
@@ -95,7 +96,7 @@ where
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
-        //integration: Option<Integration>,
+        integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
         let rng = match insecure_rng_seed {
@@ -120,11 +121,11 @@ where
             scheduled_internal_timer: vec![None; num_machines],
             blocking_until: None,
             blocking_bypassable: false,
-            //integration,
+            integration,
         }
     }
 
-    /* 
+    
     pub fn reporting_delay(&self) -> Duration {
         self.integration
             .as_ref()
@@ -145,7 +146,7 @@ where
             .map(|i| i.trigger_delay())
             .unwrap_or(Duration::from_micros(0))
     }
-    */
+    
 }
 
 
@@ -307,6 +308,7 @@ impl ClientMBN {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        integration: Option<Integration>,
         insecure_rng_seed: Option<u64>
     ) -> Self {
         let sim_state = RefCell::new(MbnState::new(
@@ -314,6 +316,7 @@ impl ClientMBN {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            integration,
             insecure_rng_seed
         ));
         
@@ -470,6 +473,7 @@ impl RelayMBN {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        integration: Option<Integration>,
         insecure_rng_seed: Option<u64>
     ) -> Self {
         let sim_state = RefCell::new(MbnState::new(
@@ -477,6 +481,7 @@ impl RelayMBN {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            integration,
             insecure_rng_seed
         ));
         
@@ -658,6 +663,7 @@ impl RelayMBNtserver {
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
+        integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
         ts_prop_us: Duration,
     ) -> Self {
@@ -666,6 +672,7 @@ impl RelayMBNtserver {
             current_time,
             max_padding_frac,
             max_blocking_frac,
+            integration,
             insecure_rng_seed
         ));
         

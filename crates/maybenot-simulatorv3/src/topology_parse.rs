@@ -280,7 +280,7 @@ pub fn create_node(
             
             Ok(NodeType::ClientMBN(ClientMBN::new(
                 id, coreside, machines, Instant::now(), 
-                max_padding_frac, max_blocking_frac, insecure_rng_seed
+                max_padding_frac, max_blocking_frac, None, insecure_rng_seed
             )))
         },
         "RelayMBN" => {
@@ -313,7 +313,7 @@ pub fn create_node(
             
             Ok(NodeType::RelayMBN(RelayMBN::new(
                 id, coreside_out_val, edgeside_in_val, edgeside_out_val, machines, Instant::now(),
-                max_padding_frac, max_blocking_frac, insecure_rng_seed
+                max_padding_frac, max_blocking_frac, None, insecure_rng_seed
             )))
         },
         "RelayMBNtserver" => {
@@ -352,7 +352,7 @@ pub fn create_node(
             
             Ok(NodeType::RelayMBNtserver(RelayMBNtserver::new(
                 id, edgeside_in_val, edgeside_out_val, machines, Instant::now(),
-                max_padding_frac, max_blocking_frac, insecure_rng_seed, ts_prop_us
+                max_padding_frac, max_blocking_frac, None, insecure_rng_seed, ts_prop_us
             )))
         },
         _ => Err(format!("Unknown node type: {}", node_type)),

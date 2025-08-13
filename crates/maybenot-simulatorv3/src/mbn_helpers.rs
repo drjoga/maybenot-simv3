@@ -90,6 +90,7 @@ pub fn initialize_mbn_sim_states(
         current_time,
         args.max_padding_frac_client,
         args.max_blocking_frac_client,
+        args.client_integration.clone(),
         args.insecure_rng_seed,
     );
     *client_mbn.get_sim_state().borrow_mut() = new_state;
@@ -101,6 +102,7 @@ pub fn initialize_mbn_sim_states(
         current_time,
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
+        args.server_integration.clone(),
         args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
     *relay_mbn.get_sim_state().borrow_mut() = new_state;
