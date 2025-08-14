@@ -353,7 +353,6 @@ impl ClientMBN {
         id: usize, 
         coreside_out: usize,
         machines: Vec<Machine>,
-        current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
         drain_blocked_by_time: bool,
@@ -362,7 +361,7 @@ impl ClientMBN {
     ) -> Self {
         let sim_state = RefCell::new(MbnState::new(
             machines,
-            current_time,
+            Instant::now(),
             max_padding_frac,
             max_blocking_frac,
             drain_blocked_by_time,
@@ -520,7 +519,6 @@ impl RelayMBN {
         edgeside_in: usize,
         edgeside_out: usize,
         machines: Vec<Machine>,
-        current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
         drain_blocked_by_time: bool,
@@ -529,7 +527,7 @@ impl RelayMBN {
     ) -> Self {
         let sim_state = RefCell::new(MbnState::new(
             machines,
-            current_time,
+            Instant::now(),
             max_padding_frac,
             max_blocking_frac,
             drain_blocked_by_time,
@@ -712,7 +710,6 @@ impl RelayMBNtserver {
         edgeside_in: usize, 
         edgeside_out: usize,
         machines: Vec<Machine>,
-        current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
         drain_blocked_by_time: bool,
@@ -722,7 +719,7 @@ impl RelayMBNtserver {
     ) -> Self {
         let sim_state = RefCell::new(MbnState::new(
             machines,
-            current_time,
+            Instant::now(),
             max_padding_frac,
             max_blocking_frac,
             drain_blocked_by_time,

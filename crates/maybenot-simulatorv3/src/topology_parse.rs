@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 // TOML configuration structures 
 #[derive(Debug, Deserialize)]
@@ -259,7 +259,7 @@ pub fn create_node(
                 .ok_or("ClientMBN requires coreside_out")?;
                         
             Ok(NodeType::ClientMBN(ClientMBN::new(
-                id, coreside, Vec::new(), Instant::now(), 
+                id, coreside, Vec::new(),  
                 0.0,0.0, false, None, None
             )))
         },
@@ -272,7 +272,7 @@ pub fn create_node(
                 .ok_or("RelayMBN requires edgeside_out")?;
             
             Ok(NodeType::RelayMBN(RelayMBN::new(
-                id, coreside_out_val, edgeside_in_val, edgeside_out_val, Vec::new(), Instant::now(),
+                id, coreside_out_val, edgeside_in_val, edgeside_out_val, Vec::new(), 
                 0.0, 0.0, false, None, None
             )))
         },
@@ -291,7 +291,7 @@ pub fn create_node(
                 .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
             
             Ok(NodeType::RelayMBNtserver(RelayMBNtserver::new(
-                id, edgeside_in_val, edgeside_out_val, Vec::new(), Instant::now(),
+                id, edgeside_in_val, edgeside_out_val, Vec::new(),
                 0.0, 0.0, false, None, None, ts_prop_us
             )))
         },
