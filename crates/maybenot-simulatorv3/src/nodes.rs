@@ -126,14 +126,19 @@ pub fn make_network_receive_from_sent (s_event: &SimulEvent, _topology: &Network
     
     // Get values we need before mutable borrow
     let to_node = linkstate.links[link_id].to_node();
-    let prop_us = linkstate.links[link_id].prop_us();
+    let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
+        .unwrap_or_else(|| panic!("s_event.time must not be earlier than si.earliest_event_instant for pkt {:?}", s_event.packet_id));
+    let prop_us = if linkstate.links[link_id].fixed_propagation() {
+        linkstate.links[link_id].get_prop_us_fixed()
+    } else {
+        let current_time_ms = current_duration.as_millis() as usize;
+        linkstate.links[link_id].get_prop_us_variable(current_time_ms)
+    };
     
     debug!("\tNode {} sending xxSent -> creating xxRecv at node via link {}", 
             s_event.node_id, link_id);
     //print s_event time and sq.earliest_event_instant
     //debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
-    let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
-        .unwrap_or_else(|| panic!("s_event.time must not be earlier than sq.earliest_event_instant for pkt {:?}", s_event.packet_id));
     
     // Now we can safely do the mutable borrow for sampling
     let transmission_delay = linkstate.links[link_id].sample(current_duration);
@@ -169,18 +174,22 @@ pub fn forward_network_receive_from_receive (s_event: &SimulEvent, topology: &Ne
     
     // Get immutable data first
     let to_node = linkstate.links[outgoing_link_id].to_node();
-    let link_id = linkstate.links[outgoing_link_id].link_id();
-    let prop_us = linkstate.links[outgoing_link_id].prop_us();
-    
-    // Calculate timing
+    // Calculate timing for propagation and transmission delay
     let current_duration = s_event.time.checked_duration_since(si.earliest_event_instant)
         .expect("s_event.time must not be earlier than sq.earliest_event_instant");
-    
+
+    let prop_us = if linkstate.links[outgoing_link_id].fixed_propagation() {
+        linkstate.links[outgoing_link_id].get_prop_us_fixed()
+    } else {
+        let current_time_ms = current_duration.as_millis() as usize;
+        linkstate.links[outgoing_link_id].get_prop_us_variable(current_time_ms)
+    };
+        
     // Now do the mutable borrow for sampling
     let transmission_delay = linkstate.links[outgoing_link_id].sample(current_duration);
     
     debug!("\tForwarding from node {} via link {} to node {}", 
-           s_event.node_id, link_id, to_node);
+           s_event.node_id, outgoing_link_id, to_node);
     
     let recv_s_event = SimulEvent {
         event: new_t_event,

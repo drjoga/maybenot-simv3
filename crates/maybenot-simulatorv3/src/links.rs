@@ -60,11 +60,36 @@ impl LinkType {
         }
     }
 
-    pub fn prop_us(&self) -> Duration {
+    pub fn get_prop_us_fixed(&self) -> Duration {
         match self {
             LinkType::FixedTput(link) => link.prop_us,
             LinkType::HiTraceTput(link) => link.prop_us,
             LinkType::StdTraceTput(link) => link.prop_us,
+        }
+    }
+
+    pub fn get_prop_us_variable(&self, current_time_ms: usize) -> Duration {
+        let prop_us_vec = match self {
+            LinkType::FixedTput(link) => &link.prop_us_vec,
+            LinkType::HiTraceTput(link) => &link.prop_us_vec,
+            LinkType::StdTraceTput(link) => &link.prop_us_vec,
+        };
+        
+        // Use time-dependent propagation with bounds checking
+        let index = if current_time_ms >= prop_us_vec.len() {
+            // If beyond the end of the vector, use the last available value
+            prop_us_vec.len() - 1
+        } else {
+            current_time_ms
+        };
+        Duration::from_micros(prop_us_vec[index])
+    }
+
+    pub fn fixed_propagation(&self) -> bool {
+        match self {
+            LinkType::FixedTput(link) => link.fixed_propagation,
+            LinkType::HiTraceTput(link) => link.fixed_propagation,
+            LinkType::StdTraceTput(link) => link.fixed_propagation,
         }
     }
 }
@@ -78,10 +103,12 @@ pub struct FixedTputLink {
     pub prop_us: Duration,
     pub tput_bps: u64,
     pub next_busy_to_duration: Duration,
+    pub fixed_propagation: bool,
+    pub prop_us_vec: Vec<u64>,
 }
 
 impl FixedTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, tput_bps: u64) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, tput_bps: u64, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
         Self {
             id,
             from,
@@ -89,7 +116,8 @@ impl FixedTputLink {
             prop_us,
             tput_bps,
             next_busy_to_duration: Duration::default(),
-
+            fixed_propagation,
+            prop_us_vec,
         }
     }
 
@@ -134,10 +162,12 @@ pub struct HiTraceTputLink {
     // High resolution sampling state (simplex only)
     next_busy_to: usize,
     linktrace: Arc<LinkTrace>,
+    pub fixed_propagation: bool,
+    pub prop_us_vec: Vec<u64>,
 }
 
 impl HiTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
         Self {
             id,
             from,
@@ -145,6 +175,8 @@ impl HiTraceTputLink {
             prop_us,
             next_busy_to: 0,
             linktrace,
+            fixed_propagation,
+            prop_us_vec,
         }
     }
     
@@ -205,10 +237,12 @@ pub struct StdTraceTputLink {
     next_busy_to: usize,
     busy_ns_in_slot: u64,
     bw_trace: Vec<i32>,
+    pub fixed_propagation: bool,
+    pub prop_us_vec: Vec<u64>,
 }
 
 impl StdTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>) -> Self {
+    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
         // For simplex operation, use the single trace
         let bw_trace = linktrace.bw_trace.clone();
         
@@ -220,6 +254,8 @@ impl StdTraceTputLink {
             next_busy_to: 0,
             busy_ns_in_slot: 0,
             bw_trace,
+            fixed_propagation,
+            prop_us_vec,
         }
     }
     

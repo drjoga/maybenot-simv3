@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
+use std::io::{BufRead, BufReader};
 
 // TOML configuration structures 
 #[derive(Debug, Deserialize)]
@@ -221,6 +222,40 @@ fn convert_toml_params(params: &HashMap<String, toml::Value>) -> HashMap<String,
     result
 }
 
+/// Load propagation delays from a text file
+/// File format: one integer per line representing microseconds of propagation delay
+/// Line number corresponds to millisecond of simulation time (starting from 0)
+pub fn load_propagation_file<P: AsRef<Path>>(path: P) -> Result<Vec<u64>, String> {
+    let file = fs::File::open(&path)
+        .map_err(|e| format!("Failed to open propagation file '{}': {}", path.as_ref().display(), e))?;
+    
+    let reader = BufReader::new(file);
+    let mut propagation_values = Vec::new();
+    
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = line_result
+            .map_err(|e| format!("Failed to read line {} from propagation file '{}': {}", 
+                               line_num + 1, path.as_ref().display(), e))?;
+        
+        let line = line.trim();
+        if line.is_empty() {
+            continue; // Skip empty lines
+        }
+        
+        let value = line.parse::<u64>()
+            .map_err(|e| format!("Invalid propagation value '{}' on line {} in file '{}': {}", 
+                               line, line_num + 1, path.as_ref().display(), e))?;
+        
+        propagation_values.push(value);
+    }
+    
+    if propagation_values.is_empty() {
+        return Err(format!("Propagation file '{}' contains no valid values", path.as_ref().display()));
+    }
+    
+    Ok(propagation_values)
+}
+
 // Factory functions 
 
 // Factory function for creating nodes from TOML configuration 
@@ -309,12 +344,32 @@ pub fn create_link(
 ) -> Result<LinkType, String> {
     use crate::links::{FixedTputLink, HiTraceTputLink, StdTraceTputLink};
     
-    // Parse prop_us parameter (required for all link types)
-    let prop_us = params
-        .get("prop_us")
-        .and_then(|s| s.parse::<u64>().ok())
-        .map(Duration::from_micros)
-        .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
+    // Check for propagation parameters - exactly one must be present
+    let has_prop_us = params.contains_key("prop_us");
+    let has_prop_us_file = params.contains_key("prop_us_file");
+    
+    if !has_prop_us && !has_prop_us_file {
+        return Err("Link must have either 'prop_us' or 'prop_us_file' parameter".to_string());
+    }
+    
+    if has_prop_us && has_prop_us_file {
+        return Err("Link cannot have both 'prop_us' and 'prop_us_file' parameters".to_string());
+    }
+    
+    // Parse propagation configuration
+    let (fixed_prop_us, prop_us_vec) = if has_prop_us {
+        let prop_us = params
+            .get("prop_us")
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(Duration::from_micros)
+            .ok_or("Invalid prop_us value - must be a valid integer")?;
+        (prop_us, Vec::new())
+    } else {
+        let prop_us_file = params.get("prop_us_file").unwrap();
+        let prop_us_vec = load_propagation_file(prop_us_file)
+            .map_err(|e| format!("Failed to load propagation file: {}", e))?;
+        (Duration::default(), prop_us_vec)
+    };
 
     match link_type {
         "FixedTput" => {
@@ -325,7 +380,8 @@ pub fn create_link(
                 .parse::<u64>()
                 .map_err(|_| "Invalid tput_bps value - must be a valid u64")?;
             
-            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, prop_us, tput)))
+            let fixed_propagation = prop_us_vec.is_empty();
+            Ok(LinkType::FixedTput(FixedTputLink::new(id, from, to, fixed_prop_us, tput, fixed_propagation, prop_us_vec)))
         }
         "HiTraceTput" => {
             let trace_file = params
@@ -335,7 +391,8 @@ pub fn create_link(
             let linktrace = load_linktrace_from_file(trace_file)
                 .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
-            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, prop_us, linktrace)))
+            let fixed_propagation = prop_us_vec.is_empty();
+            Ok(LinkType::HiTraceTput(HiTraceTputLink::new(id, from, to, fixed_prop_us, linktrace, fixed_propagation, prop_us_vec)))
         }
         "StdTraceTput" => {
             let trace_file = params
@@ -345,7 +402,8 @@ pub fn create_link(
             let linktrace = load_linktrace_from_file(trace_file)
                 .map_err(|e| format!("Failed to load trace file '{}': {}", trace_file, e))?;
             
-            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, prop_us, linktrace)))
+            let fixed_propagation = prop_us_vec.is_empty();
+            Ok(LinkType::StdTraceTput(StdTraceTputLink::new(id, from, to, fixed_prop_us, linktrace, fixed_propagation, prop_us_vec)))
         }
         _ => Err(format!("Unknown link type: {}", link_type)),
     }
@@ -459,7 +517,8 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
         .map_err(|e| format!("Failed to serialize TOML: {}", e))
 }
 
-// Modifies the prop_us parameter for all Link instances in a TOML string.
+// Modifies the prop_us parameter for Link instances that use fixed propagation in a TOML string.
+// Links with prop_us_file (time-dependent propagation) are left unchanged.
 pub fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
     // Parse input TOML into a mutable value
     let mut toml_value: toml::Value = toml::from_str(toml_in)
@@ -474,13 +533,16 @@ pub fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
         .and_then(|v| v.as_array_mut())
         .unwrap_or_else(|| panic!("Link section is not an array or doesn't exist"));
     
-    // Update prop_us for all Link instances
+    // Update prop_us for Link instances that use fixed propagation
     for link_entry in link_array.iter_mut() {
         let link_table = link_entry.as_table_mut()
             .unwrap_or_else(|| panic!("Link entry is not a table"));
         
-        // Set the prop_us parameter to the specified value
-        link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
+        // Only modify links that have prop_us (fixed propagation)
+        // Skip links that have prop_us_file (time-dependent propagation)
+        if link_table.contains_key("prop_us") && !link_table.contains_key("prop_us_file") {
+            link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
+        }
     }
     
     // Serialize back to TOML string
