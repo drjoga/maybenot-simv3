@@ -414,7 +414,7 @@ pub fn create_link(
 /// # Arguments
 /// * `toml_in` - Input TOML configuration string
 /// * `modifier_string` - Modifications in format: "SectionType:ID::param1:value1::param2:value2\n..."
-///                      Supported SectionTypes: "Node", "Link"
+///   Supported SectionTypes: "Node", "Link"
 /// 
 /// # Example
 /// ```

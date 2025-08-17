@@ -435,18 +435,15 @@ pub fn simul_advanced(
             _ => {}
         }
 
-        // Debug blocking status from nodes
-        if client_mbn.is_some() && relay_mbn.is_some(){
-            if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
-                debug!("sim(): client is blocked until time {:#?}",
-                    blocking_until.duration_since(si.zero_instant)
-                );
-            }        
-            if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
-                debug!("sim(): server is blocked until time {:#?}",
-                    blocking_until.duration_since(si.zero_instant)
-                );
-            }
+        if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
+            debug!("sim(): client is blocked until time {:#?}",
+                blocking_until.duration_since(si.zero_instant)
+            );
+        }        
+        if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
+            debug!("sim(): server is blocked until time {:#?}",
+                blocking_until.duration_since(si.zero_instant)
+            );
         }
 
 

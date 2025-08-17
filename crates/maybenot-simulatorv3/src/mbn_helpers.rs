@@ -128,7 +128,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
         let mut state = node.get_sim_state().borrow_mut();
         state
             .framework
-            .trigger_events(&[s_event.event.clone()], *current_time)
+            .trigger_events(std::slice::from_ref(&s_event.event), *current_time)
             .cloned()
             .collect()
     };

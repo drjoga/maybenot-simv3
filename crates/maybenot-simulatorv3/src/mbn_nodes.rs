@@ -201,7 +201,7 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
                 }
             // Below here we could not bypass 
             } else if s_event.contains_padding {
-                if s_event.replace && node.get_queue_normal().borrow().len() != 0 {
+                if s_event.replace && !node.get_queue_normal().borrow().is_empty() {
                     // If padding_replace and there is a blocked normal packet the padding is replaced, i.e. not enqueued
                     debug!("Padding replaced by blocked normal packet, nothing enqueued");
                     return;
@@ -260,13 +260,11 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
                     event.time = current_time;
                     sq.push(event);
                 }
-            } else {
-                if let Some(mut event) = normal_events.pop_front() {
-                    debug!("Releasing normal event (time-wise): {:?} originally at {:?}, now at {:?}", 
-                           event.event, event.time, current_time);
-                    event.time = current_time;
-                    sq.push(event);
-                }
+            } else if let Some(mut event) = normal_events.pop_front() {
+                debug!("Releasing normal event (time-wise): {:?} originally at {:?}, now at {:?}", 
+                       event.event, event.time, current_time);
+                event.time = current_time;
+                sq.push(event);
             }
         }
     } else {
