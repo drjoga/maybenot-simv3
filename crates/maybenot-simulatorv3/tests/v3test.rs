@@ -130,7 +130,7 @@ fn simulator_example_use() {
     // direction is either "s" (sent) or "r" (received). The time is in
     // nanoseconds since the start of the trace.
     let raw_trace = "0,s
-    49714282,r
+    19714282,r
     183976147,s
     243699564,r
     1696037773,s
@@ -142,7 +142,7 @@ fn simulator_example_use() {
 
     // The network model for simulating the network between the client and the
     // server. Currently just a delay.
-    let (topology, mut linkstate) = load_topology_from_file("basic_test.toml").unwrap();
+    let (topology, mut linkstate) = load_topology_from_file("mbn_test.toml").unwrap();
 
     //let network = Network::new(Duration::from_millis(10), None);
 
@@ -171,47 +171,14 @@ fn simulator_example_use() {
         true,
     );
 
-    // print packets from the client's perspective
-    println!("{:#?}", &trace.clone());
 
-    let starting_time = if !trace.is_empty() {
-        trace[0].time
-    } else {
-        si.zero_instant
-    };
-    trace
-        .into_iter()
-        .filter(|p| p.node_id == 0)
-        .for_each(|p| match p.event {
-            TriggerEvent::NormalSent => {
-                if p.contains_padding {
-                    println!(
-                        "sent a padding packet at {} ms",
-                        (p.time - starting_time).as_millis()
-                    );
-                } else {
-                    println!(
-                        "sent a normal packet at {} ms",
-                        (p.time - starting_time).as_millis()
-                    );
-                }
-            }
-            TriggerEvent::NormalRecv => {
-                if p.contains_padding {
-                    println!(
-                        "received a padding packet at {} ms",
-                        (p.time - starting_time).as_millis()
-                    );
-                } else {
-                    println!(
-                        "received a normal packet at {} ms",
-                        (p.time - starting_time).as_millis()
-                    );
-                }
-            }
-            _ => {}
-        });
-    //Force error
+    // print packets from the client's perspective
+    for event in trace.iter().filter(|p| p.node_id == 0) {
+        println!("{}", event.display_full(&si, &topology, &linkstate));
+    }
+
+
+    //Force error to be able to get debug output
     //assert_eq!(10, 1000);
 
     // Output:
