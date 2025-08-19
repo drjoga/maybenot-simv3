@@ -1,7 +1,6 @@
 use crate::links::LinkType;
-use crate::nodes::NodeType;
 use crate::mbn_nodes::MBNNode;
-
+use crate::nodes::NodeType;
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkstate {
@@ -16,9 +15,7 @@ impl Default for NetworkLinkstate {
 
 impl NetworkLinkstate {
     pub fn new() -> Self {
-        Self {
-            links: Vec::new(),
-        }
+        Self { links: Vec::new() }
     }
 
     pub fn add_link(&mut self, link: LinkType, id: usize) -> usize {
@@ -99,5 +96,4 @@ impl NetworkTopology {
             _ => panic!("MBN server node not found or wrong type"),
         }
     }
-
 }

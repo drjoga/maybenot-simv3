@@ -1,28 +1,35 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{parse_trace, sim, load_topology_from_file};
+use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim};
 use std::{str::FromStr, time::Duration};
-
 
 #[test_log::test]
 fn full_trace_compare() {
     // Load the EARLY_TEST_TRACE file
     const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
-    
+
     // Use the same network configuration as the bench
     //let (topology, mut linkstate) = Network::from_toml_file("basic_test.toml").unwrap();
     let (topology, mut linkstate) = load_topology_from_file("mbn_test.toml").unwrap();
-    
+
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
     let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
-    
+
     // 30097 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
     // 56829 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 56829, true);
-    
 
-    let output_trace = sim(&[], &[], &si, &mut sq, &topology, &mut linkstate, 50000, true);
+    let output_trace = sim(
+        &[],
+        &[],
+        &si,
+        &mut sq,
+        &topology,
+        &mut linkstate,
+        50000,
+        true,
+    );
     // print length of output trace
     println!("Output trace length: {}", output_trace.len());
 
@@ -35,8 +42,9 @@ fn full_trace_compare() {
     // Convert output trace to EARLY_TEST_TRACE format (time,direction) - ignoring size
     let starting_time = si.zero_instant;
     let mut formatted_output = Vec::new();
-    
-    for event in output_trace.iter().filter(|e| e.node_id == 0) { // Client perspective only
+
+    for event in output_trace.iter().filter(|e| e.node_id == 0) {
+        // Client perspective only
         let relative_time = (event.time - starting_time).as_nanos();
         let direction = match event.event {
             //TriggerEvent::NormalSent | TriggerEvent::PaddingSent { .. } | TriggerEvent::TunnelSent => "s",
@@ -48,9 +56,11 @@ fn full_trace_compare() {
         // Only compare time and direction, ignore packet size
         formatted_output.push(format!("{},{}", relative_time, direction));
     }
-    
+
     // Parse the expected trace and extract only time and direction
-    let expected_lines: Vec<String> = EARLY_TRACE.trim().lines()
+    let expected_lines: Vec<String> = EARLY_TRACE
+        .trim()
+        .lines()
         .map(|line| {
             let parts: Vec<&str> = line.trim().split(',').collect();
             if parts.len() >= 2 {
@@ -60,41 +70,53 @@ fn full_trace_compare() {
             }
         })
         .collect();
-    
+
     // Compare line by line
-    println!("Comparing {} expected lines with {} output lines", expected_lines.len(), formatted_output.len());
-    
+    println!(
+        "Comparing {} expected lines with {} output lines",
+        expected_lines.len(),
+        formatted_output.len()
+    );
+
     let max_lines = std::cmp::min(expected_lines.len(), formatted_output.len());
     let mut differences = 0;
-    
+
     for i in 0..max_lines {
         let expected = &expected_lines[i];
         let actual = &formatted_output[i];
-        
+
         if expected != actual {
             differences += 1;
-            if differences <= 10 { // Only show first 10 differences
+            if differences <= 10 {
+                // Only show first 10 differences
                 println!("Line {}: Expected '{}', Got '{}'", i + 1, expected, actual);
             }
         }
     }
-    
+
     if expected_lines.len() != formatted_output.len() {
-        println!("Length mismatch: Expected {} lines, got {}", expected_lines.len(), formatted_output.len());
+        println!(
+            "Length mismatch: Expected {} lines, got {}",
+            expected_lines.len(),
+            formatted_output.len()
+        );
     }
-    
+
     if differences == 0 && expected_lines.len() == formatted_output.len() {
         println!("✓ All lines match perfectly!");
     } else {
-        println!("✗ Found {} differences out of {} lines", differences, max_lines);
+        println!(
+            "✗ Found {} differences out of {} lines",
+            differences, max_lines
+        );
     }
-    
+
     // For debugging, print first few lines of each
     println!("\nFirst 5 expected lines (time,direction only):");
     for (i, line) in expected_lines.iter().take(5).enumerate() {
         println!("  {}: {}", i + 1, line);
     }
-    
+
     println!("\nFirst 5 output lines (time,direction only):");
     for (i, line) in formatted_output.iter().take(5).enumerate() {
         println!("  {}: {}", i + 1, line);
@@ -128,7 +150,7 @@ fn simulator_example_use() {
     // the delay to generate a queue of events at the client and server in such
     // a way that the client is ensured to get the packets in the same order and
     // at the same time as in the raw trace.
-    let trafserv_to_client_delay= Duration::from_millis(20);
+    let trafserv_to_client_delay = Duration::from_millis(20);
     let (si, mut sq) = parse_trace(raw_trace, &topology, trafserv_to_client_delay);
 
     // A simple machine that sends one padding packet 20 milliseconds after the
@@ -138,10 +160,19 @@ fn simulator_example_use() {
 
     // Run the simulator with the machine at the client. Run the simulation up
     // until 100 packets have been recorded (total, client and server).
-    let trace = sim(&[m], &[], &si, &mut sq, &topology, &mut linkstate, 100, true);
+    let trace = sim(
+        &[m],
+        &[],
+        &si,
+        &mut sq,
+        &topology,
+        &mut linkstate,
+        100,
+        true,
+    );
 
     // print packets from the client's perspective
-    println!("{:#?}",&trace.clone());
+    println!("{:#?}", &trace.clone());
 
     let starting_time = if !trace.is_empty() {
         trace[0].time
@@ -150,7 +181,7 @@ fn simulator_example_use() {
     };
     trace
         .into_iter()
-        .filter(|p| p.node_id==0)
+        .filter(|p| p.node_id == 0)
         .for_each(|p| match p.event {
             TriggerEvent::NormalSent => {
                 if p.contains_padding {

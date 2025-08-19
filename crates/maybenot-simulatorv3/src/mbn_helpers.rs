@@ -1,12 +1,10 @@
-use maybenot::{TriggerEvent, Machine, TriggerAction, Timer, MachineId};
-use crate::{SimulEvent, SimulQueue, SimulatorArgs};
+use crate::mbn_nodes::MBNNode;
 use crate::mbn_nodes::{MbnState, ScheduledAction};
 use crate::topology::NetworkTopology;
-use crate::mbn_nodes::MBNNode;
-use std::time::{Duration, Instant};
+use crate::{SimulEvent, SimulQueue, SimulatorArgs};
 use log::debug;
-
-
+use maybenot::{Machine, MachineId, Timer, TriggerAction, TriggerEvent};
+use std::time::{Duration, Instant};
 
 pub fn peek_scheduled_action(
     scheduled_c: &[Option<ScheduledAction>],
@@ -30,7 +28,6 @@ pub fn peek_scheduled_action(
 
     earliest
 }
-
 
 pub fn peek_scheduled_internal_timer(
     internal_c: &[Option<Instant>],
@@ -74,7 +71,6 @@ pub fn peek_blocked_exp(
     }
 }
 
-
 /// Initialize MBN nodes with MbnState for simulation
 pub fn initialize_mbn_sim_states(
     topology: &NetworkTopology,
@@ -83,7 +79,7 @@ pub fn initialize_mbn_sim_states(
     current_time: Instant,
     args: &SimulatorArgs,
 ) {
-      // Initialize client MBN node using trait abstraction
+    // Initialize client MBN node using trait abstraction
     let client_mbn: &dyn MBNNode = topology.get_mbn_client();
     let new_state = MbnState::new(
         machines_client.to_vec(),
@@ -110,15 +106,13 @@ pub fn initialize_mbn_sim_states(
     *relay_mbn.get_sim_state().borrow_mut() = new_state;
 }
 
-
-
 // Generic helper functions for MBN operations
 pub fn mbn_trigger_update<T: MBNNode>(
     node: &T,
     s_event: &SimulEvent,
     current_time: &Instant,
     sq: &mut SimulQueue,
-    _topology: &NetworkTopology
+    _topology: &NetworkTopology,
 ) {
     let node_id = node.node_id();
     let link_id = node.get_action_link_id();
@@ -132,7 +126,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
             .cloned()
             .collect()
     };
-    
+
     // Now process actions with a fresh borrow
     for action in actions {
         let mut state = node.get_sim_state().borrow_mut();
@@ -226,10 +220,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
     }
 }
 
-pub fn mbn_do_internal_timer<T: MBNNode>(
-    node: &T,
-    target: Instant
-) -> Option<SimulEvent> {
+pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<SimulEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut machine: Option<MachineId> = None;
 
@@ -258,10 +249,7 @@ pub fn mbn_do_internal_timer<T: MBNNode>(
     })
 }
 
-pub fn mbn_do_scheduled_action<T: MBNNode>(
-    node: &T,
-    target: Instant
-) -> Option<SimulEvent> {
+pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<SimulEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut a: Option<ScheduledAction> = None;
 
@@ -289,22 +277,19 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(
             bypass,
             replace,
             machine,
-        } => {
-
-            Some(SimulEvent {
-                event: TriggerEvent::PaddingSent { machine },
-                time: a.time + state.action_delay(),
-                packet_id: usize::MAX,
-                node_id: node.node_id(),
-                link_id: node.get_action_link_id(),
-                bypass,
-                replace,
-                contains_padding: true,
-                q_sequence_nr: 0,
-                #[cfg(debug_assertions)]
-                debug_note: None,
-            })
-        }
+        } => Some(SimulEvent {
+            event: TriggerEvent::PaddingSent { machine },
+            time: a.time + state.action_delay(),
+            packet_id: usize::MAX,
+            node_id: node.node_id(),
+            link_id: node.get_action_link_id(),
+            bypass,
+            replace,
+            contains_padding: true,
+            q_sequence_nr: 0,
+            #[cfg(debug_assertions)]
+            debug_note: None,
+        }),
         TriggerAction::BlockOutgoing {
             timeout: _,
             duration,

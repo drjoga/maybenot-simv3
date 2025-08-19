@@ -31,10 +31,7 @@ pub struct LinkTrace {
 }
 
 impl LinkTrace {
-    pub fn new_hi_res(
-        traceinput: &str,
-        sizebin_lookuptable: SizebinLookupTable,
-    ) -> Self {
+    pub fn new_hi_res(traceinput: &str, sizebin_lookuptable: SizebinLookupTable) -> Self {
         Self::new(traceinput, sizebin_lookuptable, true)
     }
 
@@ -201,19 +198,11 @@ impl fmt::Display for LinkTrace {
         // Print out the duration and average throughput
         writeln!(f, "\nLink trace details:")?;
         writeln!(f, "  Duration (seconds): {:.3}", duration_sec)?;
-        writeln!(
-            f,
-            "  Average throughput (Mbps): {:.3}",
-            avg_throughput_mbps
-        )?;
+        writeln!(f, "  Average throughput (Mbps): {:.3}", avg_throughput_mbps)?;
 
         // Print the trace input file (or lack thereof)
         if !self.traceinput.is_empty() {
-            writeln!(
-                f,
-                "\nTracefile: {:?}",
-                self.traceinput
-            )?;
+            writeln!(f, "\nTracefile: {:?}", self.traceinput)?;
         } else {
             writeln!(f, "No trace-file found")?;
         }
@@ -233,17 +222,13 @@ impl fmt::Display for LinkTrace {
             )?;
 
             // Print the shape of the lookup matrix
-            writeln!(
-                f,
-                "Shape of lookup matrix: {:?}",
-                self.busy_to_mtx.shape()
-            )
+            writeln!(f, "Shape of lookup matrix: {:?}", self.busy_to_mtx.shape())
         } else {
             writeln!(f, "\nStandard resolution trace (1 ms)")
         }
     }
 }
-/* 
+/*
 pub fn mk_start_instant() -> Instant {
     // Create an arbitary point in time to use as a common time for simulation and link trace handling
     let start_instant_dt = chrono::DateTime::<Utc>::from_timestamp_millis(1722543211000).unwrap();
@@ -487,10 +472,7 @@ mod tests {
     fn save_load_linktrace() {
         let traceinput = "tests/ether100M_synth5K.tr";
         let sizebin_lookuptable = mk_sizebin_lookuptable();
-        let link_trace = Arc::new(LinkTrace::new_hi_res(
-            traceinput,
-            sizebin_lookuptable,
-        ));
+        let link_trace = Arc::new(LinkTrace::new_hi_res(traceinput, sizebin_lookuptable));
 
         // Save the instance to a file
         let _ = save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)

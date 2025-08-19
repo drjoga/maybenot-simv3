@@ -9,7 +9,10 @@ use maybenot::{
     Machine,
 };
 use maybenot_simulatorv3::{
-    integration::{BinDist, Integration}, load_topology_from_str, set_toml_propagation_us, simul_advanced, traffic_parse::parse_trace, SimulEvent, SimulatorArgs
+    integration::{BinDist, Integration},
+    load_topology_from_str, set_toml_propagation_us, simul_advanced,
+    traffic_parse::parse_trace,
+    SimulEvent, SimulatorArgs,
 };
 
 use enum_map::enum_map;
@@ -55,40 +58,39 @@ fn run_sim(
         32000000,r,100
         56000000,s,100
         100000000,s,100";
-    
+
     let config_file = "tests/mbn_baseline_test.toml";
     let delay = Duration::from_millis(5);
 
-
     //Read in config path to toml_str
-    let mut toml_str = std::fs::read_to_string(config_file)
-        .expect("Failed to read TOML configuration file");
+    let mut toml_str =
+        std::fs::read_to_string(config_file).expect("Failed to read TOML configuration file");
 
     toml_str = set_toml_propagation_us(&toml_str, delay.as_micros() as u64);
-       
 
-    // Create Topology and linkstate from the TOML string   
+    // Create Topology and linkstate from the TOML string
     let (topology, mut linkstate) = load_topology_from_str(&toml_str)
         .expect("Failed to parse the network configuration from TOML string");
 
     // Parse trace into simulation queue
-    let (si, mut sq) = parse_trace(raw_trace, &topology, 2* delay);
+    let (si, mut sq) = parse_trace(raw_trace, &topology, 2 * delay);
 
     let mut args = SimulatorArgs::new(100, true);
     args.client_integration = client.cloned();
     args.server_integration = server.cloned();
     args.only_client_events = only_client;
-    
+
     let mut trace = simul_advanced(&[m], &[], &topology, &mut linkstate, &si, &mut sq, &args);
 
     if !only_client {
-        trace = trace.into_iter()
+        trace = trace
+            .into_iter()
             .filter(|e| e.node_id == topology.get_mbn_server().node_id())
             .collect();
     }
 
     for event in &trace {
-        println!("{}", event.display_full(&si,&topology,&linkstate));
+        println!("{}", event.display_full(&si, &topology, &linkstate));
     }
 
     trace
@@ -132,7 +134,10 @@ fn test_action_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(matches!(base_trace[1].event, maybenot::TriggerEvent::TunnelSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::TunnelSent
+    ));
     assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -141,7 +146,10 @@ fn test_action_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(matches!(delayed_trace_server[2].event, maybenot::TriggerEvent::TunnelRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::TunnelRecv
+    ));
     assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -184,7 +192,10 @@ fn test_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(matches!(base_trace[1].event, maybenot::TriggerEvent::TunnelSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::TunnelSent
+    ));
     assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -193,7 +204,10 @@ fn test_reporting_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(matches!(delayed_trace_server[2].event, maybenot::TriggerEvent::TunnelRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::TunnelRecv
+    ));
     assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -236,7 +250,10 @@ fn test_trigger_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(matches!(base_trace[1].event, maybenot::TriggerEvent::TunnelSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::TunnelSent
+    ));
     assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -245,7 +262,10 @@ fn test_trigger_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(matches!(delayed_trace_server[2].event, maybenot::TriggerEvent::TunnelRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::TunnelRecv
+    ));
     assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -284,7 +304,10 @@ fn test_action_and_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(matches!(base_trace[1].event, maybenot::TriggerEvent::TunnelSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::TunnelSent
+    ));
     assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -331,7 +354,10 @@ fn test_action_reporting_and_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(matches!(base_trace[1].event, maybenot::TriggerEvent::TunnelSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::TunnelSent
+    ));
     assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -363,5 +389,3 @@ fn test_action_reporting_and_delay() {
         );
     }
 }
-
-

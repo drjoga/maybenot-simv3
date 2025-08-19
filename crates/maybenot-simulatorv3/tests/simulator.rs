@@ -30,7 +30,7 @@ fn test_no_machine() {
         true,
         false,
     ); //assert!(1==0,"dummyt");
-    // server
+       // server
     run_test_sim(
         input,
         "5,rt 20,st 20,st 23,rt 30,st 35,rt",

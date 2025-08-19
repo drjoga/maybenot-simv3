@@ -1,40 +1,36 @@
-pub mod nodes;
-pub mod mbn_nodes;
-pub mod mbn_helpers;
-pub mod links;
-pub mod topology;
-pub mod linktrace;
-pub mod linkbundle;
 pub mod integration;
-pub mod traffic_parse;
+pub mod linkbundle;
+pub mod links;
+pub mod linktrace;
+pub mod mbn_helpers;
+pub mod mbn_nodes;
+pub mod nodes;
+pub mod topology;
 pub mod topology_parse;
+pub mod traffic_parse;
 
 // Re-export topology parsing functions
 pub use topology_parse::{
-    load_topology_from_file, load_topology_from_str, build_topology_from_config, modify_toml, set_toml_propagation_us,
+    build_topology_from_config, load_topology_from_file, load_topology_from_str, modify_toml,
+    set_toml_propagation_us,
 };
 
-// Re-export traffic parsing functions 
-pub use traffic_parse::{
-    parse_trace, traffic_trace_prepare, fill_simq, event_schedule_print,
-};
+// Re-export traffic parsing functions
+pub use traffic_parse::{event_schedule_print, fill_simq, parse_trace, traffic_trace_prepare};
 
 use std::{
-    collections::BinaryHeap,
     cmp::Ordering,
+    collections::BinaryHeap,
     time::{Duration, Instant},
 };
 
-
-use log::debug;
-use topology::{NetworkTopology, NetworkLinkstate};
-use traffic_parse::EventKind;
 use integration::Integration;
+use log::debug;
+use topology::{NetworkLinkstate, NetworkTopology};
+use traffic_parse::EventKind;
 
 use maybenot::{Machine, TriggerEvent};
 use mbn_helpers::initialize_mbn_sim_states;
-
-
 
 /// Represents a single network event in the Maybenot simulation.
 ///
@@ -92,8 +88,14 @@ impl SimulEvent {
         };
         format!(
             "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, time_since_zero, self.packet_id, 
-            if self.packet_id == usize::MAX { "MAX".to_string() } else {self.packet_id.to_string() },
+            self.event,
+            time_since_zero,
+            self.packet_id,
+            if self.packet_id == usize::MAX {
+                "MAX".to_string()
+            } else {
+                self.packet_id.to_string()
+            },
             self.link_id,
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
@@ -102,7 +104,12 @@ impl SimulEvent {
     }
     /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
     /// from - to nodeid for each link
-    pub fn display_full(&self, si: &SimulInfo, topology: &NetworkTopology, linkstate: &NetworkLinkstate) -> String {
+    pub fn display_full(
+        &self,
+        si: &SimulInfo,
+        topology: &NetworkTopology,
+        linkstate: &NetworkLinkstate,
+    ) -> String {
         let time_since_zero = if self.time >= si.zero_instant {
             self.time.duration_since(si.zero_instant).as_micros() as i64
         } else {
@@ -124,25 +131,28 @@ impl SimulEvent {
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
-        ) }
+        )
+    }
 }
 
-
 // A display fmt for SimulEvent that shows the event type, time, and packet index as one line
-// and has P:T B:F R:T according to the booleans 
+// and has P:T B:F R:T according to the booleans
 impl std::fmt::Display for SimulEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{:?} at {:?} (pkt {}, node {}, link {}) P:{} B:{} R:{}",
-            self.event, self.time, self.packet_id, self.node_id, self.link_id,
+            self.event,
+            self.time,
+            self.packet_id,
+            self.node_id,
+            self.link_id,
             if self.contains_padding { "T" } else { "F" },
             if self.bypass { "T" } else { "F" },
             if self.replace { "T" } else { "F" }
         )
     }
 }
-
 
 // for SimulEvent, implement Ord and PartialOrd to allow for sorting by time
 impl Ord for SimulEvent {
@@ -161,8 +171,6 @@ impl PartialOrd for SimulEvent {
         Some(self.cmp(other))
     }
 }
-
-
 
 #[derive(Clone, Debug)]
 pub struct SimulInfo {
@@ -236,8 +244,8 @@ impl SimulQueue {
 
     // This function is called for every processed event if continue_after_all_normal_packets_processed is false
     pub fn no_normal_packets(&self, topology: &topology::NetworkTopology) -> bool {
-        // Check main simulation queue, see if any of traffic trace packer are in it. 
-        if self.heap.iter().any(|e| {e.packet_id < usize::MAX}) {
+        // Check main simulation queue, see if any of traffic trace packer are in it.
+        if self.heap.iter().any(|e| e.packet_id < usize::MAX) {
             return false;
         }
         // Check MBN node blocking queues if they exist
@@ -246,7 +254,7 @@ impl SimulQueue {
             if !client_mbn.get_queue_normal().borrow().is_empty() {
                 return false;
             }
-            
+
             let relay_mbn = topology.get_mbn_server();
             if !relay_mbn.get_queue_normal().borrow().is_empty() {
                 return false;
@@ -254,17 +262,13 @@ impl SimulQueue {
         }
         true
     }
-
 }
-
-
-
 
 /// Converts TriggerEvents to numeric priorities for deterministic event ordering.
 ///
 /// When multiple events occur at the same timestamp, this function provides
 /// tie-breaking rules to ensure consistent simulation results:
-/// 
+///
 /// - Tunnel events (0-2) process before application events (3-5)  
 /// - Within each category: Sent → Recv → Padding
 /// - Control events (blocking/timers) process last (6-9)
@@ -288,15 +292,13 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
     }
 }
 
-
-
 /// Runs the Maybenot network traffic simulation.
 ///
 /// This is the main simulation function that processes network events through a topology
 /// with optional Maybenot defense machines running on client and server nodes.
 ///
 /// # Arguments
-/// 
+///
 /// * `machines_client` - Slice of Maybenot [`Machine`]s to run on the client side
 /// * `machines_server` - Slice of Maybenot [`Machine`]s to run on the server side  
 /// * `si` - Simulation info containing timing baselines and packet dependencies
@@ -307,22 +309,22 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
 /// * `only_network_activity` - If true, only return tunnel sent/received events
 ///
 /// # Returns
-/// 
+///
 /// A `Vec<SimulEvent>` representing the simulated network trace with defense modifications.
 ///
 /// # Important Notes
-/// 
-/// - The simulation queue `sq` **must** be created by [`parse_trace`]. 
+///
+/// - The simulation queue `sq` **must** be created by [`parse_trace`].
 /// - The queue is consumed during simulation - clone it if you need to reuse it
 /// - Some defense machines may generate infinite padding, use `max_trace_length` to limit output
 /// - For traffic analysis, set `only_network_activity = true` to filter internal events
 ///
 /// # See Also
-/// 
+///
 /// - [`simul_advanced`] for advanced configuration options
 /// - [`parse_trace`] for creating the simulation queue from traffic traces
- #[allow(clippy::too_many_arguments)]
- pub fn sim(
+#[allow(clippy::too_many_arguments)]
+pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
     si: &SimulInfo,
@@ -333,12 +335,16 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
     only_network_activity: bool,
 ) -> Vec<SimulEvent> {
     let args = SimulatorArgs::new(max_trace_length, only_network_activity);
-    simul_advanced(machines_client, machines_server, topology, linkstate, si, sq, &args)
+    simul_advanced(
+        machines_client,
+        machines_server,
+        topology,
+        linkstate,
+        si,
+        sq,
+        &args,
+    )
 }
-
-
-
-
 
 /// Configuration parameters for advanced network simulation.
 ///
@@ -404,7 +410,6 @@ pub struct SimulatorArgs {
     /// Optional server integration delays.
     pub server_integration: Option<Integration>,
 }
-
 
 impl SimulatorArgs {
     pub fn new(max_trace_length: usize, only_network_activity: bool) -> Self {
@@ -481,18 +486,31 @@ pub fn simul_advanced(
 
     // Initialize MBN nodes with MbnState if they exist
     if topology.has_mb {
-        initialize_mbn_sim_states(topology, machines_client, machines_server, current_time, args);
+        initialize_mbn_sim_states(
+            topology,
+            machines_client,
+            machines_server,
+            current_time,
+            args,
+        );
     }
 
-    let client_mbn = if topology.has_mb { Some(topology.get_mbn_client()) } else { None };
-    let relay_mbn = if topology.has_mb { Some(topology.get_mbn_server()) } else { None };
-
+    let client_mbn = if topology.has_mb {
+        Some(topology.get_mbn_client())
+    } else {
+        None
+    };
+    let relay_mbn = if topology.has_mb {
+        Some(topology.get_mbn_server())
+    } else {
+        None
+    };
 
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
     let mut sim_iterations = 0;
-    while let Some(next) = pick_next(si,sq, topology, current_time) {
+    while let Some(next) = pick_next(si, sq, topology, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -511,43 +529,62 @@ pub fn simul_advanced(
         }
 
         if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
-            debug!("sim(): client is blocked until time {:#?}",
+            debug!(
+                "sim(): client is blocked until time {:#?}",
                 blocking_until.duration_since(si.zero_instant)
             );
-        }        
+        }
         if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
-            debug!("sim(): server is blocked until time {:#?}",
+            debug!(
+                "sim(): server is blocked until time {:#?}",
                 blocking_until.duration_since(si.zero_instant)
             );
         }
 
-
         debug!("sim(): next event: {}", next.display_relative(si));
 
         // Handle event at node
-        topology.nodes[next.node_id]
-            .handle_event(&next, topology, linkstate, si,sq);
+        topology.nodes[next.node_id].handle_event(&next, topology, linkstate, si, sq);
 
         // Call trigger_update on MBN nodes after handling the event
         if topology.has_mb {
             if next.node_id == topology.mb_client {
                 debug!("sim(): trigger @client framework {:?}", next.event);
-                let reporting_delay = client_mbn.unwrap().get_sim_state().borrow().reporting_delay();
-                client_mbn.unwrap().trigger_update(&next, &(current_time + reporting_delay), sq, topology);
+                let reporting_delay = client_mbn
+                    .unwrap()
+                    .get_sim_state()
+                    .borrow()
+                    .reporting_delay();
+                client_mbn.unwrap().trigger_update(
+                    &next,
+                    &(current_time + reporting_delay),
+                    sq,
+                    topology,
+                );
             } else if next.node_id == topology.mb_server {
                 debug!("sim(): trigger @server framework {:?}", next.event);
-                let reporting_delay = relay_mbn.unwrap().get_sim_state().borrow().reporting_delay();
-                relay_mbn.unwrap().trigger_update(&next, &(current_time + reporting_delay), sq, topology);
+                let reporting_delay = relay_mbn
+                    .unwrap()
+                    .get_sim_state()
+                    .borrow()
+                    .reporting_delay();
+                relay_mbn.unwrap().trigger_update(
+                    &next,
+                    &(current_time + reporting_delay),
+                    sq,
+                    topology,
+                );
             }
         }
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if (!args.only_client_events || next.node_id == topology.client) &&
-            (!args.only_network_activity || next.event == TriggerEvent::TunnelRecv ||
-             next.event == TriggerEvent::TunnelSent) 
+        if (!args.only_client_events || next.node_id == topology.client)
+            && (!args.only_network_activity
+                || next.event == TriggerEvent::TunnelRecv
+                || next.event == TriggerEvent::TunnelSent)
         {
-            trace.push(next);            
+            trace.push(next);
         }
 
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
@@ -586,7 +623,6 @@ pub fn simul_advanced(
     trace
 }
 
-
 // Selects the next event to process from multiple concurrent sources.
 // This is the core scheduling logic that determines simulation event ordering.
 fn pick_next(
@@ -604,11 +640,10 @@ fn pick_next(
     }
 }
 
-
 // Advanced event scheduling for Maybenot defense simulation.
-// 
+//
 // This function implements the core scheduling algorithm that coordinates:
-// 1. Network packet events from the simulation queue  
+// 1. Network packet events from the simulation queue
 // 2. Defense machine scheduled actions (padding/blocking)
 // 3. Defense machine internal timers
 // 4. Blocking period expiry events
@@ -618,19 +653,18 @@ fn pick_next_mbn(
     topology: &NetworkTopology,
     current_time: Instant,
 ) -> Option<SimulEvent> {
-
     let client_mbn = topology.get_mbn_client();
     let relay_mbn = topology.get_mbn_server();
 
     // Collect scheduled actions and internal timers from MBN nodes
     let mut min_scheduled_action = Duration::MAX;
-    let mut action_node = client_mbn; 
+    let mut action_node = client_mbn;
     let mut min_internal_timer = Duration::MAX;
     let mut timer_node = client_mbn;
 
     // Check client MBN node
     let state = client_mbn.get_sim_state().borrow();
-    
+
     // Check scheduled actions
     for action in state.scheduled_action.iter().flatten() {
         if action.time >= current_time {
@@ -640,7 +674,7 @@ fn pick_next_mbn(
             }
         }
     }
-    
+
     // Check internal timers
     for timer in state.scheduled_internal_timer.iter().flatten() {
         if *timer >= current_time {
@@ -655,7 +689,7 @@ fn pick_next_mbn(
 
     // Check server MBN node
     let state = relay_mbn.get_sim_state().borrow();
-    
+
     // Check scheduled actions
     for action in state.scheduled_action.iter().flatten() {
         if action.time >= current_time {
@@ -666,7 +700,7 @@ fn pick_next_mbn(
             }
         }
     }
-    
+
     // Check internal timers
     for timer in state.scheduled_internal_timer.iter().flatten() {
         if *timer >= current_time {
@@ -676,10 +710,9 @@ fn pick_next_mbn(
                 timer_node = relay_mbn;
             }
         }
-    }    
+    }
     let server_blocking_until = state.blocking_until;
     drop(state);
-    
 
     // Check blocking expiry
     let (min_blocking, blocking_is_client) = match (client_blocking_until, server_blocking_until) {
@@ -706,13 +739,19 @@ fn pick_next_mbn(
     if min_scheduled_action == Duration::MAX {
         debug!("\tpick_next(): peek_scheduled_action = None");
     } else {
-        debug!("\tpick_next(): peek_scheduled_action = {:?}", min_scheduled_action);
+        debug!(
+            "\tpick_next(): peek_scheduled_action = {:?}",
+            min_scheduled_action
+        );
     }
 
     if min_internal_timer == Duration::MAX {
         debug!("\tpick_next(): peek_scheduled_internal_timer = None");
     } else {
-        debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", min_internal_timer);
+        debug!(
+            "\tpick_next(): peek_scheduled_internal_timer = {:?}",
+            min_internal_timer
+        );
     }
 
     if min_blocking == Duration::MAX {
@@ -724,7 +763,10 @@ fn pick_next_mbn(
     if queue_duration == Duration::MAX {
         debug!("\tpick_next(): peek_queue = None");
     } else {
-        debug!("\tpick_next(): peek_queue = {}", queue_next.unwrap().display_relative(si));
+        debug!(
+            "\tpick_next(): peek_queue = {}",
+            queue_next.unwrap().display_relative(si)
+        );
     }
 
     // No next event?
@@ -737,11 +779,14 @@ fn pick_next_mbn(
     }
 
     // Pick the earliest event
-    
+
     // Blocking expiry is earliest
-    if min_blocking <= min_scheduled_action && min_blocking <= min_internal_timer && min_blocking <= queue_duration {
+    if min_blocking <= min_scheduled_action
+        && min_blocking <= min_internal_timer
+        && min_blocking <= queue_duration
+    {
         debug!("\tpick_next(): picked blocking");
-        
+
         // Clear blocking state from the appropriate node
         if blocking_is_client {
             client_mbn.get_sim_state().borrow_mut().blocking_until = None;
@@ -780,10 +825,10 @@ fn pick_next_mbn(
     }
 
     // Internal timer is next
-    if min_internal_timer <= min_scheduled_action  {
+    if min_internal_timer <= min_scheduled_action {
         debug!("\tpick_next(): picked internal timer");
         let target_time = current_time + min_internal_timer;
-        
+
         if let Some(event) = timer_node.do_internal_timer(target_time) {
             return Some(event);
         }
@@ -792,16 +837,9 @@ fn pick_next_mbn(
     // Scheduled action is last
     debug!("\tpick_next(): picked scheduled action");
     let target_time = current_time + min_scheduled_action;
-    
+
     if let Some(event) = action_node.do_scheduled_action(target_time) {
         return Some(event);
     }
     None
-
 }
-
-
-
-
-
-

@@ -1,14 +1,6 @@
-use std::{
-    cmp::max,
-    sync::Arc,
-    time::Duration,
-};
+use std::{cmp::max, sync::Arc, time::Duration};
 
-
-use crate::{
-    linktrace::LinkTrace,
-};
-
+use crate::linktrace::LinkTrace;
 
 /////// High-performance enum-based link dispatch
 #[derive(Debug, Clone)]
@@ -17,7 +9,6 @@ pub enum LinkType {
     HiTraceTput(HiTraceTputLink),
     StdTraceTput(StdTraceTputLink),
 }
-
 
 impl LinkType {
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
@@ -74,7 +65,7 @@ impl LinkType {
             LinkType::HiTraceTput(link) => &link.prop_us_vec,
             LinkType::StdTraceTput(link) => &link.prop_us_vec,
         };
-        
+
         // Use time-dependent propagation with bounds checking
         let index = if current_time_ms >= prop_us_vec.len() {
             // If beyond the end of the vector, use the last available value
@@ -94,7 +85,6 @@ impl LinkType {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct FixedTputLink {
     pub id: usize,
@@ -108,7 +98,15 @@ pub struct FixedTputLink {
 }
 
 impl FixedTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, tput_bps: u64, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
+    pub fn new(
+        id: usize,
+        from: usize,
+        to: usize,
+        prop_us: Duration,
+        tput_bps: u64,
+        fixed_propagation: bool,
+        prop_us_vec: Vec<u64>,
+    ) -> Self {
         Self {
             id,
             from,
@@ -121,13 +119,9 @@ impl FixedTputLink {
         }
     }
 
-    pub fn sample(
-        &mut self,
-        current_duration: Duration,
-    ) -> Duration {
+    pub fn sample(&mut self, current_duration: Duration) -> Duration {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
-
 
         // Calculate the transmission delay for a packet with a given size:
         // this_packet_duration (ns) = (pkt_size * 8 * 1e9) / throughput (bits/s)
@@ -136,15 +130,15 @@ impl FixedTputLink {
             Duration::from_nanos((packet_size_bits as u64 * 1_000_000_000) / self.tput_bps);
 
         // Compute the new busy time and any queueing delay.
-        let (new_busy_to_dur, queueing_delay_duration) = if self.next_busy_to_duration <= current_duration
-        {
-            // No waiting required.
-            (current_duration + this_packet_duration, Duration::default())
-        } else {
-            // Packet must wait: the queueing delay is the gap between current time and the stored busy time.
-            let q_delay = self.next_busy_to_duration - current_duration;
-            (self.next_busy_to_duration + this_packet_duration, q_delay)
-        };
+        let (new_busy_to_dur, queueing_delay_duration) =
+            if self.next_busy_to_duration <= current_duration {
+                // No waiting required.
+                (current_duration + this_packet_duration, Duration::default())
+            } else {
+                // Packet must wait: the queueing delay is the gap between current time and the stored busy time.
+                let q_delay = self.next_busy_to_duration - current_duration;
+                (self.next_busy_to_duration + this_packet_duration, q_delay)
+            };
 
         // Update the stored busy time (in ns) from the computed Duration.
         self.next_busy_to_duration = new_busy_to_dur;
@@ -167,7 +161,15 @@ pub struct HiTraceTputLink {
 }
 
 impl HiTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
+    pub fn new(
+        id: usize,
+        from: usize,
+        to: usize,
+        prop_us: Duration,
+        linktrace: Arc<LinkTrace>,
+        fixed_propagation: bool,
+        prop_us_vec: Vec<u64>,
+    ) -> Self {
         Self {
             id,
             from,
@@ -179,7 +181,7 @@ impl HiTraceTputLink {
             prop_us_vec,
         }
     }
-    
+
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
@@ -221,7 +223,7 @@ impl HiTraceTputLink {
             this_packet_duration
         }
     }
-    
+
     pub fn reset(&mut self) {
         self.next_busy_to = 0;
     }
@@ -242,10 +244,18 @@ pub struct StdTraceTputLink {
 }
 
 impl StdTraceTputLink {
-    pub fn new(id: usize, from: usize, to: usize, prop_us: Duration, linktrace: Arc<LinkTrace>, fixed_propagation: bool, prop_us_vec: Vec<u64>) -> Self {
+    pub fn new(
+        id: usize,
+        from: usize,
+        to: usize,
+        prop_us: Duration,
+        linktrace: Arc<LinkTrace>,
+        fixed_propagation: bool,
+        prop_us_vec: Vec<u64>,
+    ) -> Self {
         // For simplex operation, use the single trace
         let bw_trace = linktrace.bw_trace.clone();
-        
+
         Self {
             id,
             from,
@@ -258,7 +268,7 @@ impl StdTraceTputLink {
             prop_us_vec,
         }
     }
-    
+
     pub fn sample(&mut self, current_duration: Duration) -> Duration {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
@@ -313,8 +323,9 @@ impl StdTraceTputLink {
         }
 
         // We are now at the slot which allows the last byte of the packet to be sent
-        let ns_to_send_remaining =
-            ((remaining_pkt_size as f64 / self.bw_trace[slot_index] as f64) * 1e6_f64).round() as u64;
+        let ns_to_send_remaining = ((remaining_pkt_size as f64 / self.bw_trace[slot_index] as f64)
+            * 1e6_f64)
+            .round() as u64;
         this_packet_duration_ns += ns_to_send_remaining;
 
         // Either we are in the first slot, or we have moved, this affects send_end_ns calculation
@@ -346,12 +357,9 @@ impl StdTraceTputLink {
             this_packet_duration
         }
     }
-    
+
     pub fn reset(&mut self) {
         self.next_busy_to = 0;
         self.busy_ns_in_slot = 0;
     }
 }
-
-
-

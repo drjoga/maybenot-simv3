@@ -1,14 +1,13 @@
-
-use std::time::{Duration, Instant};
 use log::{debug, warn};
+use std::time::{Duration, Instant};
 
-use crate::{SimulEvent, SimulInfo, SimulQueue};
 use crate::topology::NetworkTopology;
+use crate::{SimulEvent, SimulInfo, SimulQueue};
 use maybenot::TriggerEvent;
 
 /// Parses a network traffic trace into simulation events.
 ///
-/// This function converts raw network traces into [`SimulInfo`] and [`SimulQueue`] 
+/// This function converts raw network traces into [`SimulInfo`] and [`SimulQueue`]
 /// objects ready for simulation. It performs dependency analysis to
 /// model client-server request-response patterns.
 ///
@@ -42,7 +41,11 @@ use maybenot::TriggerEvent;
 ///
 /// - [`traffic_trace_prepare`] for the core dependency analysis algorithm
 /// - [`fill_simq`] for event queue population logic
-pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay: Duration) -> (SimulInfo, SimulQueue) {
+pub fn parse_trace(
+    trace: &str,
+    topology: &NetworkTopology,
+    ttrace_ts_to_c_delay: Duration,
+) -> (SimulInfo, SimulQueue) {
     let mut si = SimulInfo::new();
     let mut sq = SimulQueue::new();
 
@@ -51,9 +54,8 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
     for l in trace.lines() {
         let parts: Vec<&str> = l.split(',').collect();
         if parts.len() >= 2 {
-            // Time in traffic trace is in nanoseconds... 
-            let timestamp =
-                parts[0].trim().parse::<u64>().unwrap();
+            // Time in traffic trace is in nanoseconds...
+            let timestamp = parts[0].trim().parse::<u64>().unwrap();
 
             match parts[1] {
                 "s" | "sn" => {
@@ -79,10 +81,7 @@ pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay
     (si, sq)
 }
 
-
-
-
-/// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue 
+/// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue
 
 #[derive(Debug, Clone, Copy)]
 pub struct PacketEvent {
@@ -118,11 +117,11 @@ pub struct TrafficTraceData {
     /// Client send events that did not depend on any prior receive.
     /// These represent initial client requests that start new communication flows.
     pub client_simq_push: Vec<PacketEvent>,
-    
+
     /// Client receive events that did not have a qualifying client send dependency.
     /// These represent server-initiated communications (pushes, notifications, etc.).
     pub trafficserver_simq_push: Vec<PacketEvent>,
-    
+
     /// Dependency mapping: `dependent_tx[recv_packet_id]` contains all events triggered by that receive.
     /// Each tuple is `(dependent_packet_id, time_delta_ns, event_kind)`.
     pub dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
@@ -163,7 +162,7 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     let mut pkt_events: Vec<PacketEvent> = Vec::new();
 
     // Parse input string into ordered PacketEvents.
-    for (packet_id , token) in s.split_whitespace().enumerate() {
+    for (packet_id, token) in s.split_whitespace().enumerate() {
         let parts: Vec<&str> = token.split(',').collect();
         if parts.len() != 2 {
             eprintln!("Skipping malformed entry: {}", token);
@@ -184,9 +183,12 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
                 continue;
             }
         };
-        pkt_events.push(PacketEvent { packet_id , time_ns, kind });
+        pkt_events.push(PacketEvent {
+            packet_id,
+            time_ns,
+            kind,
+        });
     }
-
 
     // Process client send events: for each send event, if there is a preceding receive, record a dependency;
     // otherwise, mark it as an initial simQ push.
@@ -199,7 +201,11 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
         } else if pkt_event.kind == EventKind::CliSend {
             if let Some(prev_recv) = last_recv {
                 let delta = pkt_event.time_ns - prev_recv.time_ns;
-                dependent_tx[prev_recv.packet_id].push((pkt_event.packet_id, delta, pkt_event.kind));
+                dependent_tx[prev_recv.packet_id].push((
+                    pkt_event.packet_id,
+                    delta,
+                    pkt_event.kind,
+                ));
             } else {
                 client_simq_push.push(*pkt_event);
             }
@@ -209,7 +215,10 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     // Process trafficserver events: for each client receive event, try to find the most recent client send event
     // that occurred at or before (recv time - 2 * ttrace_ts_to_c_delay_ns). If found,
     // record that as a dependency; otherwise, mark the receive as a simQ push for trafficserver.
-    let client_sends: Vec<&PacketEvent> = pkt_events.iter().filter(|e| e.kind == EventKind::CliSend).collect();
+    let client_sends: Vec<&PacketEvent> = pkt_events
+        .iter()
+        .filter(|e| e.kind == EventKind::CliSend)
+        .collect();
     let mut trafficserver_simq_push = Vec::new();
     for pkt_event in &pkt_events {
         if pkt_event.kind == EventKind::CliReceive {
@@ -220,25 +229,30 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
                 .max_by_key(|&&e| e.time_ns);
             if let Some(&client_send) = candidate {
                 if pkt_event.time_ns - client_send.time_ns >= 2 * ttrace_ts_to_c_delay_ns {
-                    let delta = (pkt_event.time_ns - client_send.time_ns) - 2 * ttrace_ts_to_c_delay_ns;
-                    dependent_tx[client_send.packet_id].push((pkt_event.packet_id, delta, pkt_event.kind));
+                    let delta =
+                        (pkt_event.time_ns - client_send.time_ns) - 2 * ttrace_ts_to_c_delay_ns;
+                    dependent_tx[client_send.packet_id].push((
+                        pkt_event.packet_id,
+                        delta,
+                        pkt_event.kind,
+                    ));
                 } else {
                     let mut adjusted_event = *pkt_event;
                     adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
                     trafficserver_simq_push.push(adjusted_event);
-                } 
+                }
             } else {
-                // Fix since some traces start with 0,r or time < which is messy, 
+                // Fix since some traces start with 0,r or time < which is messy,
                 let mut adjusted_event = *pkt_event;
                 adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
                 trafficserver_simq_push.push(adjusted_event);
                 //panic!("Receive event {} is too early to be a server simQ push", event.packet_id);
-            }   
+            }
         }
     }
 
-    /* 
-    // For debugging, print first few lines of dependent_tx sorted on key  
+    /*
+    // For debugging, print first few lines of dependent_tx sorted on key
     println!("\nFirst 8 lines of dependent_tx:");
     let mut sorted_dependent_tx: Vec<_> = dependent_tx.iter().map(|(key, value)| (*key, value)).collect();
     sorted_dependent_tx.sort_by_key(|(key, _)| *key);
@@ -248,15 +262,16 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     }
     */
 
-    debug!("{:#?}\n{:#?}\n{:#?}\n", client_simq_push, trafficserver_simq_push, dependent_tx);
+    debug!(
+        "{:#?}\n{:#?}\n{:#?}\n",
+        client_simq_push, trafficserver_simq_push, dependent_tx
+    );
     TrafficTraceData {
         client_simq_push,
         trafficserver_simq_push,
         dependent_tx,
     }
-    
 }
-
 
 /// Print the reconstructed traffic trace based on the TrafficTraceData struct.
 /// Also prints the SimQ prefill vectors and the dependency hashmap.
@@ -274,36 +289,40 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     );
     let mut event_output: Vec<(usize, String)> = Vec::new();
 
-    println!("Reconstructed client-side traffic trace events, ttrace_ts_to_c_delay_ns : {}:  ",
-             ttrace_ts_to_c_delay_ns);
+    println!(
+        "Reconstructed client-side traffic trace events, ttrace_ts_to_c_delay_ns : {}:  ",
+        ttrace_ts_to_c_delay_ns
+    );
     for pkt_event in &pkt_events {
         let kind_str = match pkt_event.kind {
             EventKind::CliSend => "cli_send",
             EventKind::CliReceive => "cli_recv",
         };
-        let dep_txt = format!("#{:5},  {:7}, {}  :  simQ_push", pkt_event.packet_id, pkt_event.time_ns, kind_str);
+        let dep_txt = format!(
+            "#{:5},  {:7}, {}  :  simQ_push",
+            pkt_event.packet_id, pkt_event.time_ns, kind_str
+        );
         event_output.push((pkt_event.packet_id, dep_txt));
     }
 
     // Create a copy of the dependency vector to drain
     let mut remaining_dependencies = traffic.dependent_tx.clone();
-    
-    
+
     while remaining_dependencies.iter().any(|deps| !deps.is_empty()) {
         let mut made_progress = false;
-        
+
         // Iterate through indices to avoid borrowing issues
         for (recv_id, dependency_vector) in remaining_dependencies.iter_mut().enumerate() {
             if dependency_vector.is_empty() {
                 continue;
             }
-            
+
             // Check if the receive event exists in events
             if let Some(recv_event) = pkt_events.clone().iter().find(|e| e.packet_id == recv_id) {
                 // We found the receive event, process its dependencies
                 let deps = std::mem::take(dependency_vector);
                 made_progress = true;
-                    
+
                 for (dep_id, delta, event_kind) in deps {
                     let send_time;
                     let dep_txt;
@@ -328,10 +347,10 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
                             delta
                         );
                     }
-                    
+
                     // Store the dependency info in the output vector
                     event_output.push((dep_id, dep_txt));
-                    
+
                     pkt_events.push(PacketEvent {
                         packet_id: dep_id,
                         time_ns: send_time,
@@ -343,39 +362,54 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
 
         if !made_progress {
             let remaining_count: usize = remaining_dependencies.iter().map(|deps| deps.len()).sum();
-            eprintln!("Warning: Could not process remaining {} dependencies due to missing events", remaining_count);
+            eprintln!(
+                "Warning: Could not process remaining {} dependencies due to missing events",
+                remaining_count
+            );
             break;
         }
     }
-    
+
     event_output.sort_by_key(|(idx, _)| *idx);
     for (_, text) in event_output {
         println!("{}", text);
     }
-        
+
     let mut tx_event_output: Vec<(usize, usize, String)> = Vec::new();
 
     println!("\nInitial client simQ push events:");
     for event in &traffic.client_simq_push {
-        println!("cli_send  [#{:5}  @{:7}]   simQ_push", event.packet_id, event.time_ns);
+        println!(
+            "cli_send  [#{:5}  @{:7}]   simQ_push",
+            event.packet_id, event.time_ns
+        );
     }
 
     println!("\nInitial webserver simQ push events:");
     for event in &traffic.trafficserver_simq_push {
-        println!("cli_recv  [#{:5}  @{:7}]   webserver_send simQ_push", event.packet_id, event.time_ns);
+        println!(
+            "cli_recv  [#{:5}  @{:7}]   webserver_send simQ_push",
+            event.packet_id, event.time_ns
+        );
     }
 
     println!("\nTX dependency mapping (recv_id -> [dependent_id, Δt]):");
     for (recv_id, deps) in traffic.dependent_tx.iter().enumerate() {
         for (dep_id, delta, event_kind) in deps {
             let dep_txt = if *event_kind == EventKind::CliSend {
-                format!("cli_recv [#{:5}] triggers cli_send [#{:5}] with Δt = {:5}", recv_id, dep_id, delta)
+                format!(
+                    "cli_recv [#{:5}] triggers cli_send [#{:5}] with Δt = {:5}",
+                    recv_id, dep_id, delta
+                )
             } else {
-                format!("ws_recv  [#{:5}] triggers ws_send  [#{:5}] with Δt = {:5}", recv_id, dep_id, delta)
+                format!(
+                    "ws_recv  [#{:5}] triggers ws_send  [#{:5}] with Δt = {:5}",
+                    recv_id, dep_id, delta
+                )
             };
             tx_event_output.push((recv_id, *dep_id, dep_txt));
         }
-    } 
+    }
     // Sort by recv_id and dep_id
     tx_event_output.sort_by_key(|(recv_id, dep_id, _)| (*recv_id, *dep_id));
     for (_, _, text) in tx_event_output {
@@ -383,9 +417,8 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     }
 }
 
-
 /// Helper function to get the event instant based on the zero_instant and the relative time
-/// in the trace,  with the trace is in nanoseconds. 
+/// in the trace,  with the trace is in nanoseconds.
 fn get_event_instant(si: &mut SimulInfo, pkt_event: &PacketEvent) -> Instant {
     if pkt_event.time_ns >= 0 {
         si.zero_instant + Duration::from_nanos(pkt_event.time_ns as u64)
@@ -393,22 +426,27 @@ fn get_event_instant(si: &mut SimulInfo, pkt_event: &PacketEvent) -> Instant {
         // Negative offsets can occur due to client receiving at 0,r as in some tests, or it may
         // come from trafserv_to_client_delay being configured too low compared to the actual real delay
         // when the traffic trace was collected.
-        let early_instant = si.zero_instant.checked_sub(Duration::from_nanos(-pkt_event.time_ns as u64)).expect("Underflow for Instant");
+        let early_instant = si
+            .zero_instant
+            .checked_sub(Duration::from_nanos(-pkt_event.time_ns as u64))
+            .expect("Underflow for Instant");
         if si.earliest_event_instant == si.zero_instant {
             // print out notification that trafser to client delay is too low
             warn!("Note: Negative offset in traffic trace event: {}. This may indicate that trafserv_to_client_delay is too low compared to the actual delay when the traffic trace was collected.", pkt_event.packet_id);
-        } 
+        }
         if early_instant < si.earliest_event_instant {
             si.earliest_event_instant = early_instant;
-        }                 
+        }
         early_instant
     }
 }
 
-
-
-pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, si: &mut SimulInfo, sq: &mut SimulQueue) {
-
+pub fn fill_simq(
+    traffic_events: &TrafficTraceData,
+    topology: &NetworkTopology,
+    si: &mut SimulInfo,
+    sq: &mut SimulQueue,
+) {
     for event in &traffic_events.client_simq_push {
         let event_instant = get_event_instant(si, event);
         let simul_event = SimulEvent {
@@ -426,7 +464,7 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
         };
         sq.push(simul_event);
     }
-    
+
     for event in &traffic_events.trafficserver_simq_push {
         let event_instant = get_event_instant(si, event);
         let simul_event = SimulEvent {
@@ -444,9 +482,6 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
         };
         sq.push(simul_event);
     }
-     
+
     si.dependent_tx = traffic_events.dependent_tx.clone();
 }
-
-
-
