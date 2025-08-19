@@ -335,10 +335,8 @@ pub fn set_replace(s: &mut State, value: bool) {
     }
 }
 
-/// If the
-/// environment variable `SAVE_TRACE` is set to "1", writes the formatted result
-/// to the specified filename.
-/// eg.   $SHOW_TRACE=1 cargo test
+/// If the environment variable `SHOW_EVENTS` is set to "1", writes the formatted events 
+/// eg.   $SHOW_EVENTS=1 cargo test  --test simulator test_both_block_machine  -- --nocapture
 static SHOW_EVENTS: Lazy<bool> = Lazy::new(|| match env::var("SHOW_EVENTS").as_deref() {
     Ok("0") => false,
     Ok("1") => true,
@@ -346,6 +344,8 @@ static SHOW_EVENTS: Lazy<bool> = Lazy::new(|| match env::var("SHOW_EVENTS").as_d
     Err(_) => false,
 });
 
+/// If the environment variable `SHOW_PARSING` is set to "1", writes the parsed traffic trace
+/// eg.   $SHOW_PARSING=1 cargo test  --test simulator test_both_block_machine  -- --nocapture
 static SHOW_PARSING: Lazy<bool> = Lazy::new(|| match env::var("SHOW_PARSING").as_deref() {
     Ok("0") => false,
     Ok("1") => true,

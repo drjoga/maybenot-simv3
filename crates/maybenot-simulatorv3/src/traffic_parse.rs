@@ -375,8 +375,5 @@ pub fn fill_simq(traffic_events: &TrafficTraceData, topology: &NetworkTopology, 
     si.dependent_tx = traffic_events.dependent_tx.clone();
 }
 
-// modify_toml function moved to topology_parse.rs
-// Use crate::topology_parse::modify_toml instead
-
 
 

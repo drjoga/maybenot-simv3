@@ -44,7 +44,7 @@ impl NetworkLinkstate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NetworkTopology {
     pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None

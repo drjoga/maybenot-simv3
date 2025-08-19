@@ -21,7 +21,7 @@ use rand_xoshiro::Xoshiro256StarStar;
 // RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
 // have to work around this by using an enum to support selecting rng source as
 // a simulation option.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RngSource {
     Thread(ThreadRng),
     Xoshiro(Xoshiro256StarStar),
@@ -59,9 +59,6 @@ impl RngCore for RngSource {
 
 
 
-
-
-
 /// ScheduledAction represents an action that is scheduled to be executed at a
 /// certain time.
 #[derive(PartialEq, Clone, Debug)]
@@ -71,7 +68,7 @@ pub struct ScheduledAction {
 }
 
 /// The state of the client, or relay in the simulator.
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct MbnState<M, R> {
     /// an instance of the Maybenot framework
     pub framework: Framework<M, R>,
@@ -302,7 +299,7 @@ pub trait MBNNode {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientMBN {
     pub id: usize,
     pub coreside_out: usize,
@@ -464,7 +461,7 @@ impl ClientMBN {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RelayMBN {
     pub id: usize,
     pub coreside_out: usize,
@@ -656,7 +653,7 @@ impl RelayMBN {
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RelayMBNtserver {
     pub id: usize,
     pub edgeside_in: usize,

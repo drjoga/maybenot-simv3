@@ -8,7 +8,7 @@ use log::debug;
 
 
 // High-performance enum-based node dispatch
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeType {
     ClientBasic(ClientBasic),
     RouterBasic(RouterBasic),

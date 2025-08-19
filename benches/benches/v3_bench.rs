@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 
-use maybenot_simulatorv3::{load_topology_from_file, parse_trace,simul_advanced, SimulatorArgs};
+use maybenot_simulatorv3::{load_topology_from_file, parse_trace, simul_advanced, SimulatorArgs};
 
 
 use criterion::{criterion_group, black_box, criterion_main, Criterion};
