@@ -58,7 +58,39 @@ pub struct ForwardingRule {
 
 // Main parsing functions 
 
-/// Load network configuration from a TOML file
+/// Loads network topology and link configuration from a TOML file.
+///
+/// # Arguments
+///
+/// * `path` - File path to TOML configuration (supports any type implementing `AsRef<Path>`)
+///
+/// # Returns
+///
+/// * `Ok((NetworkTopology, NetworkLinkstate))` - Parsed network configuration and initial link states
+/// * `Err(String)` - Detailed error message if file reading or parsing fails
+///
+/// # TOML Format
+///
+/// The configuration file should define nodes and links in TOML format:
+///
+/// ```toml
+/// [[Node]]
+/// id = 0
+/// type = "ClientMBN" 
+/// coreside_out = 0
+///
+/// [[Link]]  
+/// id = 0
+/// from = 0
+/// to = 1
+/// type = "FixedTput"
+/// tput_bps = 100_000_000
+/// ```
+///
+/// # See Also
+///
+/// - [`load_topology_from_str`] to parse from string instead of file
+/// - [`build_topology_from_config`] for programmatic topology construction
 pub fn load_topology_from_file<P: AsRef<Path>>(path: P) -> Result<(NetworkTopology, NetworkLinkstate), String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Network error: Failed to read file: {}", e))?;
@@ -66,7 +98,28 @@ pub fn load_topology_from_file<P: AsRef<Path>>(path: P) -> Result<(NetworkTopolo
     load_topology_from_str(&content)
 }
 
-/// Load network configuration from a TOML string
+/// Parses network topology from a TOML configuration string.
+///
+/// This is the core parsing function that converts TOML configuration into
+/// runnable network topology and link state objects.
+///
+/// # Arguments
+///
+/// * `toml_str` - TOML configuration string containing Node and Link definitions
+///
+/// # Returns
+///
+/// * `Ok((NetworkTopology, NetworkLinkstate))` - Parsed and validated network configuration
+/// * `Err(String)` - Detailed error message with parsing failure details
+///
+/// # Error Conditions
+///
+/// - Invalid TOML syntax
+/// - Missing required node/link parameters  
+/// - Inconsistent node/link ID references
+/// - Invalid node or link type specifications
+/// - Link trace file loading failures
+///
 pub fn load_topology_from_str(toml_str: &str) -> Result<(NetworkTopology, NetworkLinkstate), String> {
     let config: NetworkConfig = toml::from_str(toml_str)
         .map_err(|e| format!("Network error: Failed to parse TOML: {}", e))?;

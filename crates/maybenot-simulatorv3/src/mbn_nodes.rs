@@ -153,7 +153,13 @@ where
 
 
 
-// Helper function to handle TunnelSent event creation with blocking logic
+// Implements the core traffic shaping logic for Maybenot defenses.
+//
+// This function determines whether a packet (normal or padding) should be:
+// 1. Sent immediately (no blocking active)
+// 2. Queued for later (blocked, non-bypassable) 
+// 3. Bypassed through blocking (blocked but bypassable)
+// 4. Replaced with queued normal traffic (padding with replace=true)
 pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     node: &T,
     s_event: SimulEvent,
@@ -219,7 +225,11 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
     sq.push(s_event);
 }
 
-// Helper function to release queued events when blocking ends
+// Releases all queued events when a blocking period expires.
+//
+// Two drainage strategies are supported:
+// 1. Time-ordered: Events drain in chronological order by original timestamp
+// 2. Type-ordered: All normal packets first, then all padding packets
 pub fn mbn_release_blocked_events<T: MBNNode>(
     node: &T,
     sq: &mut SimulQueue,

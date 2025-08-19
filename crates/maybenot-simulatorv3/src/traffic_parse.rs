@@ -6,14 +6,42 @@ use crate::{SimulEvent, SimulInfo, SimulQueue};
 use crate::topology::NetworkTopology;
 use maybenot::TriggerEvent;
 
-/// Parse a trace into a [`SimQueue`] for use with [`sim`].
+/// Parses a network traffic trace into simulation events.
 ///
-/// The trace should contain one or more lines of the form
-/// "time,direction,size\n", where time is in nanoseconds relative to the first
-/// line, direction is either "s" for sent or "r" for received, and size is the
-/// number of bytes sent or received. The delay is used to model the network
-/// delay between the client and server. Returns a SimQueue with the events in
-/// the trace for use with [`sim`].
+/// This function converts raw network traces into [`SimulInfo`] and [`SimulQueue`] 
+/// objects ready for simulation. It performs dependency analysis to
+/// model client-server request-response patterns.
+///
+/// # Traffic Trace Format
+///
+/// The trace should contain space-separated entries: `"time,direction time,direction ..."`
+/// where:
+/// - **time**: nanoseconds relative to trace start (0-based)
+/// - **direction**: `"s"` (sent by client) or `"r"` (received by client)
+/// - **size**: packet size in bytes (currently unused, can be omitted)
+///
+/// # Arguments
+///
+/// * `trace` - Raw trace string in the format described above
+/// * `topology` - Network topology for node/link mapping  
+/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the traces
+///   was captured, used to determine which packets are dependent on others.
+///
+/// # Returns
+///
+/// * `SimulInfo` - Timing baselines and packet dependency information
+/// * `SimulQueue` - Priority queue pre-loaded with initial network events
+///
+/// # Dependency Analysis
+///
+/// The parser automatically identifies request-response patterns:
+/// - Client sends followed by receives become dependent events
+/// - Server responses are triggered by client requests with appropriate delays
+///
+/// # See Also
+///
+/// - [`traffic_trace_prepare`] for the core dependency analysis algorithm
+/// - [`fill_simq`] for event queue population logic
 pub fn parse_trace(trace: &str, topology: &NetworkTopology, ttrace_ts_to_c_delay: Duration) -> (SimulInfo, SimulQueue) {
     let mut si = SimulInfo::new();
     let mut sq = SimulQueue::new();
@@ -69,23 +97,68 @@ pub enum EventKind {
     CliReceive,
 }
 
+/// Result of traffic trace dependency analysis.
+///
+/// This struct represents the parsed and analyzed traffic trace, separating
+/// events into independent initial events and dependent request-response chains.
+///
+/// # Structure
+///
+/// - **Independent events** go directly into simulation queue at trace start
+/// - **Dependent events** are triggered by other events during simulation
+/// - **Dependencies** are stored as `(packet_id, delay, kind)` tuples
+///
+/// # Usage in Simulation
+///
+/// 1. `client_simq_push` and `trafficserver_simq_push` events seed the simulation
+/// 2. When a receive event processes, it triggers its `dependent_tx` events  
+/// 3. Dependent events are scheduled with appropriate delays from their triggers
 #[derive(Debug, Clone)]
 pub struct TrafficTraceData {
     /// Client send events that did not depend on any prior receive.
+    /// These represent initial client requests that start new communication flows.
     pub client_simq_push: Vec<PacketEvent>,
+    
     /// Client receive events that did not have a qualifying client send dependency.
+    /// These represent server-initiated communications (pushes, notifications, etc.).
     pub trafficserver_simq_push: Vec<PacketEvent>,
-    /// Dictionary mapping each receive packet_id to a list of dependet events: (dependent packet_id, delta, client EventKind)
+    
+    /// Dependency mapping: `dependent_tx[recv_packet_id]` contains all events triggered by that receive.
+    /// Each tuple is `(dependent_packet_id, time_delta_ns, event_kind)`.
     pub dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 
-/// Parses the input string (e.g. "0,s 18,s 25,r 25,r 30,s 35,r") and the given delay,
-/// then builds a TrafficTraceData struct:
-/// - For client sends, if there is no preceding receive, the event is a simQ_push; otherwise, it is recorded
-///   as a dependency of the most recent receive.
-/// - For each receive event, we search among client send events for the most recent candidate whose timestamp
-///   is at or before (recv time - 4×delay). If found (and the time difference is at least 4×delay), that dependency
-///   is recorded; otherwise, the receive event is treated as a webserver simQ_push event.
+/// Performs traffic dependency analysis for client-server communication.
+///
+/// This function implements the core algorithm that transforms a raw traffic trace into
+/// a dependency graph modeling realistic client-server request-response patterns.
+///
+/// # Algorithm Overview
+///
+/// ## Client Send Analysis
+/// For each client send event:
+/// - **No prior receive**: Classified as initial request → goes to `client_simq_push`
+/// - **Has prior receive**: Classified as response-triggered → recorded as dependency
+///
+/// ## Server Response Analysis  
+/// For each client receive event:
+/// - **Find matching send**: Search for client send ≥ `2×ttrace_ts_to_c_delay_ns` before receive time
+/// - **Match found**: Server response depends on that client send → recorded as dependency  
+/// - **No match**: Server-initiated event → goes to `trafficserver_simq_push`
+///
+/// # Arguments
+///
+/// * `s` - Space-separated trace string: `"0,s 18,s 25,r 25,r 30,s 35,r"`
+/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the traces
+///   was captured, used to determine which packets are dependent on others.
+///
+/// # Returns
+///
+/// [`TrafficTraceData`] containing:
+/// - `client_simq_push`: Initial client requests (no dependencies)  
+/// - `trafficserver_simq_push`: Server-initiated events (no dependencies)
+/// - `dependent_tx`: Dependency mapping `[recv_id] → [(send_id, delay, kind)]`
+///
 pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
     let mut pkt_events: Vec<PacketEvent> = Vec::new();
 

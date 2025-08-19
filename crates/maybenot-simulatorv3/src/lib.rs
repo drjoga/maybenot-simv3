@@ -36,9 +36,11 @@ use mbn_helpers::initialize_mbn_sim_states;
 
 
 
-/// SimulEvent represents an event in the v3 simulator. It is used internally to
-/// represent events that are to be processed by the simulator (in SimulQueue) and
-/// events that are produced by the simulator (the resulting trace).
+/// Represents a single network event in the Maybenot simulation.
+///
+/// `SimulEvent` is the fundamental unit of simulation, representing packets being sent/received,
+/// defense actions (padding, blocking), and internal timer events. These events flow through
+/// the simulation priority queue and form the output trace.
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
 pub struct SimulEvent {
     /// the actual event
@@ -47,7 +49,7 @@ pub struct SimulEvent {
     pub time: Instant,
     /// Packet ID for triggering dependent tx events
     pub packet_id: usize,
-    /// Node index and link index for the event
+    /// Node index and link index for the event for routing and processing
     pub node_id: usize,
     pub link_id: usize,
     /// sequence number for deterministic insertion ordering when timestamp is identical
@@ -258,7 +260,17 @@ impl SimulQueue {
 
 
 
-/// Helper function to convert a TriggerEvent to a usize for sorting purposes.
+/// Converts TriggerEvents to numeric priorities for deterministic event ordering.
+///
+/// When multiple events occur at the same timestamp, this function provides
+/// tie-breaking rules to ensure consistent simulation results:
+/// 
+/// - Tunnel events (0-2) process before application events (3-5)  
+/// - Within each category: Sent → Recv → Padding
+/// - Control events (blocking/timers) process last (6-9)
+///
+/// This ordering ensures that network transmission completes before
+/// triggering dependent events, which is useful for accurate simulation.
 fn event_to_usize(e: &TriggerEvent) -> usize {
     match e {
         // tunnel before normal before padding
@@ -278,27 +290,37 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
 
 
 
-/// The main simulator function.
+/// Runs the Maybenot network traffic simulation.
 ///
-/// Zero or more machines can concurrently be run on the client and server. The
-/// machines can be different. The framework is designed to support many
-/// machines.
+/// This is the main simulation function that processes network events through a topology
+/// with optional Maybenot defense machines running on client and server nodes.
 ///
-/// The queue MUST have been created by [`parse_trace`] with the same delay. The
-/// queue is modified by the simulator and should be re-created for each run of
-/// the simulator or cloned.
+/// # Arguments
+/// 
+/// * `machines_client` - Slice of Maybenot [`Machine`]s to run on the client side
+/// * `machines_server` - Slice of Maybenot [`Machine`]s to run on the server side  
+/// * `si` - Simulation info containing timing baselines and packet dependencies
+/// * `sq` - Mutable simulation queue pre-loaded with traffic trace events
+/// * `topology` - Network topology defining nodes, links and routing rules
+/// * `linkstate` - Mutable network link states for throughput/delay simulation
+/// * `max_trace_length` - Maximum number of events to include in output (0 = unlimited)
+/// * `only_network_activity` - If true, only return tunnel sent/received events
 ///
-/// If max_trace_length is > 0, the simulator will stop after max_trace_length
-/// events have been *simulated* by the simulator and added to the simulating
-/// output trace. Note that some machines may schedule infinite actions (e.g.,
-/// schedule new padding after sending padding), so the simulator may never
-/// stop. Use [`sim_advanced`] to set the maximum number of iterations to run
-/// the simulator for and other advanced settings.
+/// # Returns
+/// 
+/// A `Vec<SimulEvent>` representing the simulated network trace with defense modifications.
 ///
-/// If only_network_activity is true, the simulator will only append events that
-/// are related to network activity (i.e., packets sent and received) to the
-/// output trace. This is recommended if you want to use the output trace for
-/// traffic analysis without further (recursive) simulation.
+/// # Important Notes
+/// 
+/// - The simulation queue `sq` **must** be created by [`parse_trace`]. 
+/// - The queue is consumed during simulation - clone it if you need to reuse it
+/// - Some defense machines may generate infinite padding, use `max_trace_length` to limit output
+/// - For traffic analysis, set `only_network_activity = true` to filter internal events
+///
+/// # See Also
+/// 
+/// - [`simul_advanced`] for advanced configuration options
+/// - [`parse_trace`] for creating the simulation queue from traffic traces
  #[allow(clippy::too_many_arguments)]
  pub fn sim(
     machines_client: &[Machine],
@@ -318,7 +340,32 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
 
 
 
-/// Arguments for [`sim_advanced`].
+/// Configuration parameters for advanced network simulation.
+///
+/// `SimulatorArgs` provides comprehensive control over simulation behavior, including
+/// termination conditions, output filtering, and Maybenot framework parameters.
+///
+/// # Usage Patterns
+///
+/// ```rust
+/// use maybenot_simulatorv3::SimulatorArgs;
+/// // Basic configuration
+/// let args = SimulatorArgs::new(1000, true);  // 1K events, network activity only
+///
+/// // Advanced configuration  
+/// let mut args = SimulatorArgs::new(5000, false);
+/// args.max_padding_frac_client = 0.3;  // Limit padding overhead
+/// args.insecure_rng_seed = Some(42);   // Reproducible results
+/// args.only_client_events = true;     // Filter to client perspective
+/// ```
+///
+/// # Termination Conditions
+///
+/// The simulator stops when **any** of these conditions are met:
+/// - `max_trace_length` events added to output trace
+/// - `max_sim_iterations` processing iterations completed  
+/// - All normal (non-padding) packets processed (if `continue_after_all_normal_packets_processed = false`)
+///
 #[derive(Clone, Debug)]
 pub struct SimulatorArgs {
     /// The maximum number of events to simulate.
@@ -352,9 +399,9 @@ pub struct SimulatorArgs {
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
-    ///// Optional client integration delays.
+    /// Optional client integration delays.
     pub client_integration: Option<Integration>,
-    ///// Optional server integration delays.
+    /// Optional server integration delays.
     pub server_integration: Option<Integration>,
 }
 
@@ -380,9 +427,37 @@ impl SimulatorArgs {
     }
 }
 
-/// Like [`sim`], but allows to (i) set the maximum padding and blocking
-/// fractions for the client and server, (ii) specify the maximum number of
-/// iterations to run the simulator for, and (iii) only returning client events.
+/// Advanced network simulation with extensive configuration options.
+///
+/// This function provides fine-grained control over the simulation through [`SimulatorArgs`],
+/// including Maybenot framework parameters, output filtering, and termination conditions.
+///
+/// # Arguments
+///
+/// * `machines_client` - Maybenot defense machines for the client node
+/// * `machines_server` - Maybenot defense machines for the server/relay node  
+/// * `topology` - Network topology configuration
+/// * `linkstate` - Mutable link states for network simulation
+/// * `si` - Simulation timing and dependency information
+/// * `sq` - Mutable event queue from parsed traffic trace
+/// * `args` - Advanced simulation configuration parameters
+///
+/// # Returns
+///
+/// A `Vec<SimulEvent>` containing the simulated network trace with applied defenses.
+///
+/// # Key Configuration Options
+///
+/// - **Padding/Blocking limits**: Control maximum resource usage for defenses
+/// - **Output filtering**: Return only client events or network activity  
+/// - **Termination conditions**: Stop by trace length, iteration count, or traffic completion
+/// - **RNG control**: Use deterministic seeding for reproducible results
+/// - **Integration delays**: Model real-world implementation latencies
+///
+/// # See Also
+///
+/// - [`sim`] for a simpler interface with common defaults
+/// - [`SimulatorArgs`] for detailed parameter descriptions
 pub fn simul_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
@@ -512,6 +587,8 @@ pub fn simul_advanced(
 }
 
 
+// Selects the next event to process from multiple concurrent sources.
+// This is the core scheduling logic that determines simulation event ordering.
 fn pick_next(
     si: &SimulInfo,
     sq: &mut SimulQueue,
@@ -519,14 +596,22 @@ fn pick_next(
     current_time: Instant,
 ) -> Option<SimulEvent> {
     if topology.has_mb {
+        // Complex MBN scheduling: must consider queue, timers, actions, and blocking
         pick_next_mbn(si, sq, topology, current_time)
     } else {
+        // Simple case: just process queue events in timestamp order
         sq.pop()
     }
 }
 
 
-// MaybeNot node-based version of pick_next that queries nodes directly instead of using global MbnState
+// Advanced event scheduling for Maybenot defense simulation.
+// 
+// This function implements the core scheduling algorithm that coordinates:
+// 1. Network packet events from the simulation queue  
+// 2. Defense machine scheduled actions (padding/blocking)
+// 3. Defense machine internal timers
+// 4. Blocking period expiry events
 fn pick_next_mbn(
     si: &SimulInfo,
     sq: &mut SimulQueue,
