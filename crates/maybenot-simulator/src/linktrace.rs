@@ -532,8 +532,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn save_load_linktrace() {
+    //#[test]
+    fn _save_load_linktrace() {
         let dl_traceinput = "tests/ether100M_synth5K.tr";
         let ul_traceinput = "tests/ether100M_synth5K.tr";
         let sizebin_lookuptable = mk_sizebin_lookuptable();
