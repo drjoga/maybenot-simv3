@@ -207,10 +207,11 @@ const CONFIG_FILES: [&str; 3] = [
     "/tests/mbn_fast_test.toml",
     "/tests/mbn_complex_test.toml"
 ];
-const LINK_TYPES: [(&str, &str, &str); 1] = [
-    //("FixedTput", "Link:0::type:FixedTput::tput_bps:100000000", ""),
-    ("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/ether100M_synth40M.ltbin.gz", "/tests/ether100M_synth40M.ltbin.gz"),
-    //("StdTraceTput", "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz", "/tests/ether100M_synth10K_std.ltbin.gz"),
+//HiTraceTput takes very long to load, so not included by default.
+const LINK_TYPES: [(&str, &str, &str); 2] = [
+    ("FixedTput", "Link:0::type:FixedTput::tput_bps:100000000", ""),
+    //("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/ether100M_synth40M.ltbin.gz", "/tests/ether100M_synth40M.ltbin.gz"),
+    ("StdTraceTput", "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz", "/tests/ether100M_synth10K_std.ltbin.gz"),
 ];
 
 #[test_log::test]

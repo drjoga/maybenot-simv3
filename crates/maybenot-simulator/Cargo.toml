@@ -49,6 +49,3 @@ once_cell = "1.21.1"
 #name = "rng"
 #harness = false
 
-#[[bench]]
-#name = "lookup_bench"
-#harness = false

@@ -35,10 +35,6 @@ name = "dists"
 harness = false
 
 [[bench]]
-name = "lookup_bench"
-harness = false
-
-[[bench]]
 name = "v3_bench"
 harness = false
 
