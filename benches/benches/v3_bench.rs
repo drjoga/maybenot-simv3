@@ -399,5 +399,5 @@ criterion_group!(
 
 
 //criterion_main!(all_sim_benches);
-//criterion_main!(overview_sim_benches);
-criterion_main!(parallell_testing);
+criterion_main!(overview_sim_benches);
+//criterion_main!(parallell_testing);
