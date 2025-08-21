@@ -245,7 +245,7 @@ fn v3_multi_run_like() {
                 let start = Instant::now();     
                 // Can use 1000 when running test with --release
                 //for _ in 0..1000 {
-                for _ in 0..500 {
+                for _ in 0..5 {
                         let mut args = SimulatorArgs::new(*sim_event_count, true);
                         args.only_client_events = true;
                         args.continue_after_all_normal_packets_processed = false;

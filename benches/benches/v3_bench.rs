@@ -214,12 +214,12 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                 c.bench_function(bench_name.as_str(), |b| {
                     b.iter(|| {
                         (0..100).into_par_iter().for_each(|_| {
-                            let (_topology, mut _linkstate) =
+                            let (topology, mut _linkstate) =
                                 load_topology_from_str(&modified_toml).unwrap();
                             black_box(simul_advanced(
                                 &[],
                                 &[],
-                                &topology.clone(),
+                                &topology,
                                 &mut linkstate.clone(),
                                 &si,
                                 &mut sq.clone(),
