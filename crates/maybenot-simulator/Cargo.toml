@@ -11,7 +11,7 @@ categories.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "linktrace_util_duplex"                 # ✅ Unique name
+name = "linktrace_util_duplex"
 path = "src/bin/linktrace_util.rs"
 
 [lints]

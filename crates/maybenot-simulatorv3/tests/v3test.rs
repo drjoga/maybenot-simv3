@@ -1,6 +1,8 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim};
+use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim, modify_toml, load_topology_from_str};
 use std::{str::FromStr, time::Duration};
+use maybenot_simulatorv3::{SimulatorArgs, simul_advanced};
+use std::fs;
 
 #[test_log::test]
 fn full_trace_compare() {
@@ -194,3 +196,160 @@ fn simulator_example_use() {
     // sent a normal packet at 9401 ms
     // received a normal packet at 9420 ms
 }
+
+
+use std::time::Instant;
+
+//const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
+const SIM_EVENT_COUNTS: [usize; 1] = [10_000, ];
+const CONFIG_FILES: [&str; 3] = [
+    "/tests/mbn_baseline_test.toml",
+    "/tests/mbn_fast_test.toml",
+    "/tests/mbn_complex_test.toml"
+];
+const LINK_TYPES: [(&str, &str, &str); 1] = [
+    //("FixedTput", "Link:0::type:FixedTput::tput_bps:100000000", ""),
+    ("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/ether100M_synth40M.ltbin.gz", "/tests/ether100M_synth40M.ltbin.gz"),
+    //("StdTraceTput", "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz", "/tests/ether100M_synth10K_std.ltbin.gz"),
+];
+
+#[test_log::test]
+fn v3_multi_run_like() {
+    const EARLY_TRACE: &str =
+        include_str!("EARLY_TEST_TRACE.log");
+
+    let toml_path = env!("CARGO_MANIFEST_DIR").to_string();
+
+    for sim_event_count in SIM_EVENT_COUNTS.iter() {
+        for (link_name, toml_edit_string, _pattern_file_path) in LINK_TYPES.iter() {
+            for config_file in CONFIG_FILES.iter() {
+                let config_path = toml_path.clone() + config_file;
+                let config_name = config_file.split('_').nth(1).unwrap();
+                
+                println!("Running simulation with config: {}", config_path);
+                // Read TOML file content
+                let toml_content = fs::read_to_string(&config_path).unwrap();
+                
+                // Modify TOML to change Link 0's type
+                let modified_toml = modify_toml(&toml_content, toml_edit_string).unwrap();
+                
+                // Use load_topology_from_str instead of load_topology_from_file
+                let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
+                let trafserv_to_client_delay= Duration::from_millis(20);
+                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let mut output_len = 0;
+                let bench_name = format!("v3_{:?}K_{}_{},", sim_event_count/1000, config_name, link_name);
+                //c.bench_function(bench_name.as_str(), |b| {
+                    //b.iter(|| {
+
+                let start = Instant::now();     
+                // Can use 1000 when running test with --release
+                //for _ in 0..1000 {
+                for _ in 0..500 {
+                        let mut args = SimulatorArgs::new(*sim_event_count, true);
+                        args.only_client_events = true;
+                        args.continue_after_all_normal_packets_processed = false;
+                        let trace = simul_advanced(&[], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
+                        //let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
+
+                        output_len = trace.len();
+                        print!("x");
+                }
+                    //});
+                //});
+                let duration = start.elapsed(); 
+                println!("\n{}   Loop took {:.3} seconds", bench_name, duration.as_secs_f64());
+                print!("Length of output trace: {}\n", output_len );
+            }
+        }
+    }
+}
+
+
+
+use maybenot::{
+    action::Action,
+    constants::MAX_SAMPLED_BLOCK_DURATION,
+    dist::{Dist, DistType},
+    event::Event,
+    state::{State, Trans},    
+};
+use enum_map::enum_map;
+
+
+
+fn _ratio3_machine() -> Machine {
+    let n = 3;
+    let mut states = vec![];
+
+    // start state 0
+    let start_state = State::new(enum_map! {
+       Event::TunnelSent | Event::TunnelRecv => vec![Trans(1, 1.0)],
+       _ => vec![],
+    });
+    states.push(start_state);
+
+    // blocking state 1
+    let mut blocking_state = State::new(enum_map! {
+        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        _ => vec![],
+    });
+    blocking_state.action = Some(Action::BlockOutgoing {
+        bypass: true,
+        replace: true,
+        timeout: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        duration: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: MAX_SAMPLED_BLOCK_DURATION,
+            max: 0.0,
+        },
+        limit: None,
+    });
+    states.push(blocking_state);
+
+    // recv states 2..n+2
+    for i in 0..n {
+        states.push(State::new(enum_map! {
+           // to the next state
+           Event::TunnelRecv => vec![Trans(3+i, 1.0)],
+           // something else let traffic through, back to counting
+           //Event::TunnelSent => vec![Trans(2, 1.0)],
+           _ => vec![],
+        }));
+    }
+
+    // padding state n+2
+    let mut padding_state = State::new(enum_map! {
+        Event::PaddingSent => vec![Trans(2, 1.0)],
+        _ => vec![],
+    });
+    padding_state.action = Some(Action::SendPadding {
+        bypass: true,
+        replace: true,
+        timeout: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        limit: None,
+    });
+    states.push(padding_state);
+
+    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+}
+
+
+

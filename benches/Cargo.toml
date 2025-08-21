@@ -41,3 +41,7 @@ harness = false
 [[bench]]
 name = "v3_bench"
 harness = false
+
+[[bench]]
+name = "sim_components"
+harness = false

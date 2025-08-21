@@ -83,6 +83,14 @@ impl LinkType {
             LinkType::StdTraceTput(link) => link.fixed_propagation,
         }
     }
+
+    pub fn reset(&mut self) {
+        match self {
+            LinkType::FixedTput(_) => {}, // No reset needed for fixed throughput
+            LinkType::HiTraceTput(link) => link.reset(),
+            LinkType::StdTraceTput(link) => link.reset(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
