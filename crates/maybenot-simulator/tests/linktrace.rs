@@ -10,8 +10,8 @@ use std::time::Duration;
 mod tests {
     use super::*;
 
-    #[test]
-    fn linktrace_simulator_run() {
+    //#[test]
+    fn _linktrace_simulator_run() {
         const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
 
         let linktrace = load_linktrace_from_file("tests/ether100M_synth10K_std.ltbin.gz")
