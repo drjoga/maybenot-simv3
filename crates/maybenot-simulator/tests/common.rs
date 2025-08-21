@@ -126,8 +126,8 @@ pub fn run_test_sim_trace(
     let network = Network::new(delay, None);
     let base_args = SimulatorArgs::new(network, max_trace_length, only_packets);
 
-    let mut args= get_test_simargs(base_args, use_network.to_string(), TraceSpec::ether100M);
-    
+    let mut args = get_test_simargs(base_args, use_network.to_string(), TraceSpec::ether100M);
+
     let tracefilename = format!("{}__{}.simtrace", description, use_network);
 
     args.continue_after_all_normal_packets_processed = true;

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::Duration;
 
 // TOML configuration structures
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct NetworkConfig {
     #[serde(rename = "Node")]
     pub nodes: Vec<NodeConfig>,
@@ -21,7 +21,7 @@ pub struct NetworkConfig {
     pub routes: Vec<RouteConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct NodeConfig {
     pub id: usize,
     #[serde(rename = "type")]
@@ -33,7 +33,7 @@ pub struct NodeConfig {
     pub params: HashMap<String, toml::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LinkConfig {
     pub id: usize,
     pub from: usize,
@@ -135,8 +135,17 @@ pub fn load_topology_from_str(
 pub fn build_topology_from_config(
     config: NetworkConfig,
 ) -> Result<(NetworkTopology, NetworkLinkstate), String> {
-    let mut topology = NetworkTopology::new();
-    let mut linkstate = NetworkLinkstate::new();
+    Ok((
+        build_networktopology_from_config(&config)?,
+        build_networklinkstate_from_config(&config)?,
+    ))
+}
+
+/// Create network from parsed configuration
+pub fn build_networktopology_from_config(
+    config: &NetworkConfig,
+) -> Result<NetworkTopology, String> {
+    let mut topology = NetworkTopology::new(config.clone());
 
     // Find and validate client and traffic server nodes
     let mut client_id: Option<usize> = None;
@@ -240,28 +249,6 @@ pub fn build_topology_from_config(
         topology.add_node(node, node_config.id);
     }
 
-    // Create links
-    for link_config in &config.links {
-        // Convert TOML values to strings for the factory function
-        let params = convert_toml_params(&link_config.params);
-
-        let link = create_link(
-            &link_config.link_type,
-            link_config.id,
-            link_config.from,
-            link_config.to,
-            &params,
-        )
-        .map_err(|e| {
-            format!(
-                "Network error: Failed to create link {}: {}",
-                link_config.id, e
-            )
-        })?;
-
-        linkstate.add_link(link, link_config.id);
-    }
-
     // Build routing matrix
     let num_nodes = config.nodes.len();
     let num_links = config.links.len();
@@ -300,11 +287,41 @@ pub fn build_topology_from_config(
         }
     }
 
-    Ok((topology, linkstate))
+    Ok(topology)
+}
+
+/// Create network from parsed configuration
+pub fn build_networklinkstate_from_config(
+    config: &NetworkConfig,
+) -> Result<NetworkLinkstate, String> {
+    let mut linkstate = NetworkLinkstate::new();
+
+    // Create links
+    for link_config in &config.links {
+        // Convert TOML values to strings for the factory function
+        let params = convert_toml_params(&link_config.params);
+
+        let link = create_link(
+            &link_config.link_type,
+            link_config.id,
+            link_config.from,
+            link_config.to,
+            &params,
+        )
+        .map_err(|e| {
+            format!(
+                "Network error: Failed to create link {}: {}",
+                link_config.id, e
+            )
+        })?;
+
+        linkstate.add_link(link, link_config.id);
+    }
+    Ok(linkstate)
 }
 
 // Helper function to convert TOML values to strings
-fn convert_toml_params(params: &HashMap<String, toml::Value>) -> HashMap<String, String> {
+pub fn convert_toml_params(params: &HashMap<String, toml::Value>) -> HashMap<String, String> {
     let mut result = HashMap::new();
     for (key, value) in params {
         let value_str = match value {

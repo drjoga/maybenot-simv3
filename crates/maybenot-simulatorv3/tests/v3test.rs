@@ -1,8 +1,10 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim, modify_toml, load_topology_from_str};
-use std::{str::FromStr, time::Duration};
-use maybenot_simulatorv3::{SimulatorArgs, simul_advanced};
+use maybenot_simulatorv3::{
+    load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, sim,
+};
+use maybenot_simulatorv3::{simul_advanced, SimulatorArgs};
 use std::fs;
+use std::{str::FromStr, time::Duration};
 
 #[test_log::test]
 fn full_trace_compare() {
@@ -173,12 +175,10 @@ fn simulator_example_use() {
         true,
     );
 
-
     // print packets from the client's perspective
     for event in trace.iter().filter(|p| p.node_id == 0) {
         println!("{}", event.display_full(&si, &topology, &linkstate));
     }
-
 
     //Force error to be able to get debug output
     //assert_eq!(10, 1000);
@@ -197,27 +197,33 @@ fn simulator_example_use() {
     // received a normal packet at 9420 ms
 }
 
-
 use std::time::Instant;
 
 //const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
-const SIM_EVENT_COUNTS: [usize; 1] = [10_000, ];
+const SIM_EVENT_COUNTS: [usize; 1] = [10_000];
 const CONFIG_FILES: [&str; 3] = [
     "/tests/mbn_baseline_test.toml",
     "/tests/mbn_fast_test.toml",
-    "/tests/mbn_complex_test.toml"
+    "/tests/mbn_complex_test.toml",
 ];
 //HiTraceTput takes very long to load, so not included by default.
 const LINK_TYPES: [(&str, &str, &str); 2] = [
-    ("FixedTput", "Link:0::type:FixedTput::tput_bps:100000000", ""),
+    (
+        "FixedTput",
+        "Link:0::type:FixedTput::tput_bps:100000000",
+        "",
+    ),
     //("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/ether100M_synth40M.ltbin.gz", "/tests/ether100M_synth40M.ltbin.gz"),
-    ("StdTraceTput", "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz", "/tests/ether100M_synth10K_std.ltbin.gz"),
+    (
+        "StdTraceTput",
+        "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz",
+        "/tests/ether100M_synth10K_std.ltbin.gz",
+    ),
 ];
 
 #[test_log::test]
 fn v3_multi_run_like() {
-    const EARLY_TRACE: &str =
-        include_str!("EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
 
     let toml_path = env!("CARGO_MANIFEST_DIR").to_string();
 
@@ -226,58 +232,71 @@ fn v3_multi_run_like() {
             for config_file in CONFIG_FILES.iter() {
                 let config_path = toml_path.clone() + config_file;
                 let config_name = config_file.split('_').nth(1).unwrap();
-                
+
                 println!("Running simulation with config: {}", config_path);
                 // Read TOML file content
                 let toml_content = fs::read_to_string(&config_path).unwrap();
-                
+
                 // Modify TOML to change Link 0's type
                 let modified_toml = modify_toml(&toml_content, toml_edit_string).unwrap();
-                
+
                 // Use load_topology_from_str instead of load_topology_from_file
                 let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
-                let trafserv_to_client_delay= Duration::from_millis(20);
+                let trafserv_to_client_delay = Duration::from_millis(20);
                 let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
                 let mut output_len = 0;
-                let bench_name = format!("v3_{:?}K_{}_{},", sim_event_count/1000, config_name, link_name);
+                let bench_name = format!(
+                    "v3_{:?}K_{}_{},",
+                    sim_event_count / 1000,
+                    config_name,
+                    link_name
+                );
                 //c.bench_function(bench_name.as_str(), |b| {
-                    //b.iter(|| {
+                //b.iter(|| {
 
-                let start = Instant::now();     
+                let start = Instant::now();
                 // Can use 1000 when running test with --release
                 //for _ in 0..1000 {
                 for _ in 0..2 {
-                        let mut args = SimulatorArgs::new(*sim_event_count, true);
-                        args.only_client_events = true;
-                        args.continue_after_all_normal_packets_processed = false;
-                        let trace = simul_advanced(&[], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
-                        //let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
+                    let mut args = SimulatorArgs::new(*sim_event_count, true);
+                    args.only_client_events = true;
+                    args.continue_after_all_normal_packets_processed = false;
+                    let trace = simul_advanced(
+                        &[],
+                        &[],
+                        &topology,
+                        &mut linkstate.clone(),
+                        &si,
+                        &mut sq.clone(),
+                        &args,
+                    );
+                    //let trace = simul_advanced(&[ratio3_machine()], &[], &topology, &mut linkstate.clone(), &si, &mut sq.clone(), &args);
 
-                        output_len = trace.len();
-                        print!("x");
+                    output_len = trace.len();
+                    print!("x");
                 }
-                    //});
                 //});
-                let duration = start.elapsed(); 
-                println!("\n{}   Loop took {:.3} seconds", bench_name, duration.as_secs_f64());
-                print!("Length of output trace: {}\n", output_len );
+                //});
+                let duration = start.elapsed();
+                println!(
+                    "\n{}   Loop took {:.3} seconds",
+                    bench_name,
+                    duration.as_secs_f64()
+                );
+                print!("Length of output trace: {}\n", output_len);
             }
         }
     }
 }
 
-
-
+use enum_map::enum_map;
 use maybenot::{
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
     dist::{Dist, DistType},
     event::Event,
-    state::{State, Trans},    
+    state::{State, Trans},
 };
-use enum_map::enum_map;
-
-
 
 fn _ratio3_machine() -> Machine {
     let n = 3;
@@ -351,6 +370,3 @@ fn _ratio3_machine() -> Machine {
 
     Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
 }
-
-
-

@@ -1,6 +1,9 @@
 use crate::links::LinkType;
 use crate::mbn_nodes::MBNNode;
 use crate::nodes::NodeType;
+use crate::topology_parse::{
+    build_networktopology_from_config, NetworkConfig,
+};
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkstate {
@@ -41,8 +44,9 @@ impl NetworkLinkstate {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NetworkTopology {
+    pub network_config: NetworkConfig,
     pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
     pub client: usize,
@@ -52,15 +56,10 @@ pub struct NetworkTopology {
     pub mb_server: usize,
 }
 
-impl Default for NetworkTopology {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl NetworkTopology {
-    pub fn new() -> Self {
+    pub fn new(network_config: NetworkConfig) -> Self {
         Self {
+            network_config,
             nodes: Vec::new(),
             routes: Vec::new(),
             client: 0,
@@ -69,6 +68,11 @@ impl NetworkTopology {
             mb_client: 0,
             mb_server: 0,
         }
+    }
+
+    pub fn new_from_config(&self) -> Self {
+        build_networktopology_from_config(&self.network_config)
+            .expect("Failed to build network topology from config")
     }
 
     /// Get outgoing link for a node given an incoming link
@@ -97,3 +101,4 @@ impl NetworkTopology {
         }
     }
 }
+

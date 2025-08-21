@@ -1,6 +1,7 @@
 use std::fs;
 use std::time::Duration;
 
+use maybenot_simulatorv3::topology_parse::build_networktopology_from_config;
 use maybenot_simulatorv3::{
     load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, simul_advanced,
     SimulatorArgs,
@@ -176,8 +177,6 @@ fn v3_multi_ratio3(c: &mut Criterion) {
     }
 }
 
-// FIXME: Refactor linkstate initalization, since loading trace files in loop as necessary for
-// parallell runing, is really costly, and thus these linktypes are currently not evaluated for parallell execution
 fn v3_multi_run_parallel(c: &mut Criterion) {
     const EARLY_TRACE: &str =
         include_str!("../../crates/maybenot-simulatorv3/tests/EARLY_TEST_TRACE.log");
@@ -198,6 +197,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
 
                 // Use load_topology_from_str instead of load_topology_from_file
                 let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
+                let network_config = topology.network_config.clone();
 
                 let trafserv_to_client_delay = Duration::from_millis(20);
                 let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
@@ -214,12 +214,12 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                 c.bench_function(bench_name.as_str(), |b| {
                     b.iter(|| {
                         (0..100).into_par_iter().for_each(|_| {
-                            let (topology, mut _linkstate) =
-                                load_topology_from_str(&modified_toml).unwrap();
+                            let thread_topology =
+                                build_networktopology_from_config(&network_config).unwrap();
                             black_box(simul_advanced(
                                 &[],
                                 &[],
-                                &topology,
+                                &thread_topology,
                                 &mut linkstate.clone(),
                                 &si,
                                 &mut sq.clone(),
@@ -255,7 +255,8 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
                 let modified_toml = modify_toml(&toml_content, toml_edit_string).unwrap();
 
                 // Use load_topology_from_str instead of load_topology_from_file
-                let (topology, _linkstate) = load_topology_from_str(&modified_toml).unwrap();
+                let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
+                let network_config = topology.network_config.clone();
 
                 let trafserv_to_client_delay = Duration::from_millis(20);
                 let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
@@ -272,13 +273,13 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
                 c.bench_function(bench_name.as_str(), |b| {
                     b.iter(|| {
                         (0..100).into_par_iter().for_each(|_| {
-                            let (topology, mut linkstate) =
-                                load_topology_from_str(&modified_toml).unwrap();
+                            let thread_topology =
+                                build_networktopology_from_config(&network_config).unwrap();
                             black_box(simul_advanced(
-                                &[ratio3_machine()],
                                 &[],
-                                &topology,
-                                &mut linkstate,
+                                &[],
+                                &thread_topology,
+                                &mut linkstate.clone(),
                                 &si,
                                 &mut sq.clone(),
                                 &args.clone(),
@@ -396,7 +397,6 @@ criterion_group!(
     v3_multi_run_parallel,
     v3_multi_run_parallel_ratio3,
 );
-
 
 //criterion_main!(all_sim_benches);
 criterion_main!(overview_sim_benches);

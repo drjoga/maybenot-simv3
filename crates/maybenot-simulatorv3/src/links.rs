@@ -86,7 +86,7 @@ impl LinkType {
 
     pub fn reset(&mut self) {
         match self {
-            LinkType::FixedTput(_) => {}, // No reset needed for fixed throughput
+            LinkType::FixedTput(_) => {} // No reset needed for fixed throughput
             LinkType::HiTraceTput(link) => link.reset(),
             LinkType::StdTraceTput(link) => link.reset(),
         }
