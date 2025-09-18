@@ -283,7 +283,7 @@ fn v3_multi_run_like() {
                     bench_name,
                     duration.as_secs_f64()
                 );
-                print!("Length of output trace: {}\n", output_len);
+                println!("Length of output trace: {}", output_len);
             }
         }
     }

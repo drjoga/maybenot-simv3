@@ -353,7 +353,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
         }
 
         if !made_progress {
-            let remaining_count: usize = remaining_dependencies.iter().map(|deps| deps.len()).sum();
+            let remaining_count: usize = remaining_dependencies.iter().map(Vec::len).sum();
             eprintln!(
                 "Warning: Could not process remaining {} dependencies due to missing events",
                 remaining_count

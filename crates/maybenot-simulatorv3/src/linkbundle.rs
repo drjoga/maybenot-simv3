@@ -14,7 +14,7 @@ where
     S: serde::Serializer,
 {
     // Create a temporary vector of references to LinkTrace
-    let vec_inner: Vec<&LinkTrace> = vec.iter().map(|arc| arc.as_ref()).collect();
+    let vec_inner: Vec<&LinkTrace> = vec.iter().map(Arc::as_ref).collect();
     vec_inner.serialize(serializer)
 }
 

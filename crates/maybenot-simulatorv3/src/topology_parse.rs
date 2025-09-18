@@ -9,6 +9,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::time::Duration;
+use toml::Value;
 
 // TOML configuration structures
 #[derive(Debug, Deserialize, Clone)]
@@ -656,7 +657,7 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
                 entry
                     .as_table()
                     .and_then(|table| table.get("id"))
-                    .and_then(|id| id.as_integer())
+                    .and_then(Value::as_integer)
                     .map(|id| id == section_id as i64)
                     .unwrap_or(false)
             })

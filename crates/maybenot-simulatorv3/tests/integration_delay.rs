@@ -83,10 +83,7 @@ fn run_sim(
     let mut trace = simul_advanced(&[m], &[], &topology, &mut linkstate, &si, &mut sq, &args);
 
     if !only_client {
-        trace = trace
-            .into_iter()
-            .filter(|e| e.node_id == topology.get_mbn_server().node_id())
-            .collect();
+        trace.retain(|e| e.node_id == topology.get_mbn_server().node_id());
     }
 
     for event in &trace {

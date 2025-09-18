@@ -56,12 +56,12 @@ pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
         let _ = Command::new("bash")
             .arg("-c")
             .arg(info_cmd)
-            .current_dir(&tests_dir)
+            .current_dir(tests_dir)
             .status();
 
         let script_result = Command::new("bash")
             .arg(&script_path)
-            .current_dir(&tests_dir)
+            .current_dir(tests_dir)
             .status();
 
         match script_result {

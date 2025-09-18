@@ -457,7 +457,7 @@ mod tests {
         let sizebin_lookuptable = mk_sizebin_lookuptable();
 
         // These are depenent on the boundaries used in mk_sizebin_lookuptable
-        let expected = vec![64, 240, 576, 1200, 1420];
+        let expected = [64, 240, 576, 1200, 1420];
         for (i, value) in vec![50, 200, 520, 1200, 1201].into_iter().enumerate() {
             let bin_result = std::panic::catch_unwind(|| sizebin_lookuptable.get_bin_idx(value));
             let bin_pktsize = sizebin_lookuptable.get_bin_pktsize(value);
@@ -475,7 +475,7 @@ mod tests {
         let link_trace = Arc::new(LinkTrace::new_hi_res(traceinput, sizebin_lookuptable));
 
         // Save the instance to a file
-        let _ = save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)
+        save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)
             .expect("Failed to save LinkTrace ltbin to file");
 
         // Load the instance back from the file

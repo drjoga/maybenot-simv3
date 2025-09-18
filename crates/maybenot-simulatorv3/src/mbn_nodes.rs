@@ -116,21 +116,21 @@ where
     pub fn reporting_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.reporting_delay())
+            .map(Integration::reporting_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn action_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.action_delay())
+            .map(Integration::action_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn trigger_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.trigger_delay())
+            .map(Integration::trigger_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 }

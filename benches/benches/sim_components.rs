@@ -50,7 +50,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
             output_len = trace.len();
         });
     });
-    print!("Length of output trace: {}\n", output_len);
+    println!("Length of output trace: {}", output_len);
 }
 
 fn v3_multi_run(c: &mut Criterion) {
@@ -86,7 +86,7 @@ fn v3_multi_run(c: &mut Criterion) {
                     output_len = trace.len();
                 });
             });
-            print!("Length of output trace: {}\n", output_len);
+            println!("Length of output trace: {}", output_len);
         }
     }
 }
@@ -165,7 +165,7 @@ fn initialize_ndarray(rows: usize, cols: usize) -> (Array2<u32>, Vec<(usize, usi
     (array, indices)
 }
 
-fn flat_vector_lookup(array: &Vec<u32>, indices: &[(usize, usize)], cols: usize) -> u64 {
+fn flat_vector_lookup(array: &[u32], indices: &[(usize, usize)], cols: usize) -> u64 {
     let mut sum: u64 = 0;
 
     // Perform lookups using pre-generated indices
@@ -223,10 +223,8 @@ pub fn benchmark_busy_to(c: &mut Criterion) {
 
     for file in linktrace_files {
         // Load the LinkTrace instance from the file
-        let linksim_trace = load_linktrace_from_file(file).expect(&format!(
-            "Failed to load LinkTrace ltbin from file: {}",
-            file
-        ));
+        let linksim_trace = load_linktrace_from_file(file)
+            .unwrap_or_else(|_| panic!("Failed to load LinkTrace ltbin from file: {}", file));
 
         // Generate random time slot values between 0 and trace length
         let nr_time_slots = linksim_trace.get_nr_timeslots() as usize;
@@ -303,9 +301,9 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     c.bench_function("Linktrace HiRes network.sample", |b| {
         b.iter(|| {
-            for i in 0..nr_iter {
+            for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt.sample(durations[i]));
+                black_box(network_lt.sample(*duration));
                 network_lt.reset();
             }
         })
@@ -328,9 +326,9 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     c.bench_function("Linktrace StdRes eth 100Mbps network.sample", |b| {
         b.iter(|| {
-            for i in 0..nr_iter {
+            for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt_std.sample(durations[i]));
+                black_box(network_lt_std.sample(*duration));
                 network_lt_std.reset();
             }
         })
@@ -353,9 +351,9 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     c.bench_function("Linktrace StdRes slow 100Kbps network.sample", |b| {
         b.iter(|| {
-            for i in 0..nr_iter {
+            for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt_slow.sample(durations[i]));
+                black_box(network_lt_slow.sample(*duration));
                 network_lt_slow.reset();
             }
         })
@@ -374,9 +372,9 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     c.bench_function("FixedTput 100Mbps network.sample", |b| {
         b.iter(|| {
-            for i in 0..nr_iter {
+            for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_ftput.sample(durations[i]));
+                black_box(network_ftput.sample(*duration));
             }
         })
     });
@@ -394,9 +392,9 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     c.bench_function("FixedTput 10Mbps network.sample", |b| {
         b.iter(|| {
-            for i in 0..nr_iter {
+            for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_ftput_slow.sample(durations[i]));
+                black_box(network_ftput_slow.sample(*duration));
             }
         })
     });

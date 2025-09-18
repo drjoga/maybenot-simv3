@@ -69,7 +69,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
             output_len = trace.len();
         });
     });
-    print!("Length of output trace: {}\n", output_len);
+    println!("Length of output trace: {}", output_len);
 }
 
 fn v3_multi_run(c: &mut Criterion) {
@@ -118,7 +118,7 @@ fn v3_multi_run(c: &mut Criterion) {
                         output_len = trace.len();
                     });
                 });
-                print!("Length of output trace: {}\n", output_len);
+                println!("Length of output trace: {}", output_len);
             }
         }
     }

@@ -318,9 +318,9 @@ pub fn make_si_sq(
 
     let traffic_events = traffic_trace_prepare(&s, ttrace_ts_to_c_delay_ns);
     if *SHOW_PARSING {
-        print!("----- Parsing -----------------------------\n");
+        println!("----- Parsing -----------------------------");
         event_schedule_print(&traffic_events, ttrace_ts_to_c_delay_ns);
-        print!("----------------------------------\n");
+        println!("----------------------------------");
     }
 
     fill_simq(&traffic_events, topology, &mut si, &mut sq);
