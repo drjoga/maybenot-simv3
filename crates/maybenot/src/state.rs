@@ -1,9 +1,9 @@
-//! A state as part of a [`Machine`]. Contains an optional [`Action`] and
-//! [`Counter`] to be executed upon transition to this state, and a vector of
-//! state transitions for each possible [`Event`].
+//! A state as part of a [`Machine`](crate::Machine). Contains an optional
+//! [`Action`] and [`Counter`] to be executed upon transition to this state, and
+//! a vector of state transitions for each possible [`Event`].
 
-use crate::constants::*;
-use crate::*;
+use crate::constants::{EVENT_NUM, STATE_END, STATE_SIGNAL};
+use crate::{Error, action, counter, event};
 use enum_map::Enum;
 use enum_map::EnumMap;
 use rand::RngCore;
@@ -32,7 +32,7 @@ impl fmt::Display for Trans {
     }
 }
 
-/// A state as part of a [`Machine`].
+/// A state as part of a [`Machine`](crate::Machine).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     /// Take an action upon transitioning to this state.
@@ -61,7 +61,7 @@ impl State {
     /// [`Event::PaddingSent`] and to state 2 on [`Event::CounterZero`], both
     /// with 100% probability. All other events will not cause a transition.
     /// Note that state indexes are 0-based and determined by the order in which
-    /// states are added to the [`Machine`].
+    /// states are added to the [`Machine`](crate::Machine).
     pub fn new(t: EnumMap<Event, Vec<Trans>>) -> Self {
         const ARRAY_NO_TRANS: Option<Vec<Trans>> = None;
         let mut transitions = [ARRAY_NO_TRANS; EVENT_NUM];
@@ -150,7 +150,7 @@ impl State {
         use rand::Rng;
         if let Some(vector) = &self.transitions[event.to_usize()] {
             let mut sum = 0.0;
-            let r = rng.gen_range(0.0..1.0);
+            let r = rng.random_range(0.0..1.0);
             for t in vector.iter() {
                 sum += t.1;
                 if r < sum {
@@ -181,25 +181,25 @@ impl State {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(action) = self.action {
-            writeln!(f, "action: {}", action)?;
+            writeln!(f, "action: {action}")?;
         } else {
             writeln!(f, "action: None")?;
         }
         match self.counter {
             (Some(counter_a), Some(counter_b)) => {
-                writeln!(f, "counter A: {}", counter_a)?;
-                writeln!(f, "counter B: {}", counter_b)?;
+                writeln!(f, "counter A: {counter_a}")?;
+                writeln!(f, "counter B: {counter_b}")?;
             }
             (Some(counter), None) => {
-                writeln!(f, "counter A: {}", counter)?;
+                writeln!(f, "counter A: {counter}")?;
             }
             (None, Some(counter)) => {
-                writeln!(f, "counter B: {}", counter)?;
+                writeln!(f, "counter B: {counter}")?;
             }
             _ => {
                 writeln!(f, "counter: None")?;
             }
-        };
+        }
 
         writeln!(f, "transitions: ")?;
         for event in Event::iter() {
@@ -207,9 +207,9 @@ impl fmt::Display for State {
                 if vector.is_empty() {
                     continue;
                 }
-                write!(f, "\t{}:", event)?;
+                write!(f, "\t{event}:")?;
                 for trans in vector {
-                    write!(f, " {}", trans)?;
+                    write!(f, " {trans}")?;
                     if trans != vector.last().unwrap() {
                         write!(f, ",")?;
                     }
@@ -242,7 +242,7 @@ mod tests {
         let s0: State = bincode::deserialize(&s0).unwrap();
 
         assert_eq!(
-            s0.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
+            s0.sample_state(Event::PaddingSent, &mut rand::rng()),
             Some(6)
         );
     }

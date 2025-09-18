@@ -1,7 +1,7 @@
 use crate::linktrace::LinkTrace;
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::File;

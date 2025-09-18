@@ -122,7 +122,11 @@ impl SimulEvent {
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
             self.format_event_compact(),
             time_since_zero,
-            if self.packet_id == usize::MAX { "MAX".to_string() } else {self.packet_id.to_string() },
+            if self.packet_id == usize::MAX {
+                "MAX".to_string()
+            } else {
+                self.packet_id.to_string()
+            },
             self.node_id,
             topology.nodes[self.node_id].type_name(),
             self.link_id,

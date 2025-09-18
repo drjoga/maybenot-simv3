@@ -2,17 +2,17 @@ use std::time::Duration;
 
 //use bincode::de;
 use maybenot::{
+    Machine,
     action::Action,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine,
 };
 use maybenot_simulatorv3::{
+    SimulEvent, SimulatorArgs,
     integration::{BinDist, Integration},
     load_topology_from_str, set_toml_propagation_us, simul_advanced,
     traffic_parse::parse_trace,
-    SimulEvent, SimulatorArgs,
 };
 
 use enum_map::enum_map;

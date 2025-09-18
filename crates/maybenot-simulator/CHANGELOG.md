@@ -2,7 +2,16 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## XXX - XXX
+## 2.2.1 - 2025-09-09
+
+- MSRV 1.85 to align with Arti.
+
+## 2.2.0 - 2025-08-08
+
+- Update to Maybenot 2.2.0 and Rust edition 2024.
+- Use rand 0.9 ecosystem.
+
+## 2.1.0 - 2025-06-18
 
 - The version of the simulator now longer tracks the framework and instead
   follows SemVer compatible updates.
@@ -13,6 +22,11 @@ Manually generated changelog, for now. We follow semantic versioning.
   with bypass and replace set. There is a a 1ms window (TODO:tune or parameter?)
   within other packets part of the same burst (conceptually) will reduce the
   amount of delay.
+- Slight change to SimulatorArgs to make it easier to store as part of other
+  structs.
+- Default to stopping after all normal packets have been processed.
+- Use different seeds on client and server.
+- Expose get_max_pps() in SimQueue.
 
 ## 2.0.1 - 2024-10-24
 

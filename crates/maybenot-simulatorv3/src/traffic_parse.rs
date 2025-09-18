@@ -330,21 +330,13 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
                         send_time = recv_event.time_ns + delta;
                         dep_txt = format!(
                             "#{:5},  {:7}, cli_send  :  depends_on cli_recv                [#{:5} @{:7}]         [Δt = {:6}]",
-                            dep_id,
-                            send_time,
-                            recv_event.packet_id,
-                            recv_event.time_ns,
-                            delta
+                            dep_id, send_time, recv_event.packet_id, recv_event.time_ns, delta
                         );
                     } else {
                         send_time = recv_event.time_ns + 2 * (ttrace_ts_to_c_delay_ns) + delta;
                         dep_txt = format!(
                             "#{:5},  {:7}, cli_recv  :  webserver_send depends_on cli_send [#{:5} @{:7}] [ws send Δt = {:6}]",
-                            dep_id,
-                            send_time,
-                            recv_event.packet_id,
-                            recv_event.time_ns,
-                            delta
+                            dep_id, send_time, recv_event.packet_id, recv_event.time_ns, delta
                         );
                     }
 
@@ -432,7 +424,10 @@ fn get_event_instant(si: &mut SimulInfo, pkt_event: &PacketEvent) -> Instant {
             .expect("Underflow for Instant");
         if si.earliest_event_instant == si.zero_instant {
             // print out notification that trafser to client delay is too low
-            warn!("Note: Negative offset in traffic trace event: {}. This may indicate that trafserv_to_client_delay is too low compared to the actual delay when the traffic trace was collected.", pkt_event.packet_id);
+            warn!(
+                "Note: Negative offset in traffic trace event: {}. This may indicate that trafserv_to_client_delay is too low compared to the actual delay when the traffic trace was collected.",
+                pkt_event.packet_id
+            );
         }
         if early_instant < si.earliest_event_instant {
             si.earliest_event_instant = early_instant;

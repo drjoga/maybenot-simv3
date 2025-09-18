@@ -55,7 +55,7 @@
 //! //
 //! // The framework validates all machines (like ::From_str() above) and
 //! // verifies that the fractions are fractions, so it can return an error.
-//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
+//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run
 //! // for as long as the underlying connection the framework is attached to
@@ -203,6 +203,70 @@
 //!     break;
 //! }
 //! ```
+//! ## Key concepts
+//!
+//! ### Packets
+//!
+//! We assume that all traffic is sent in "packets" of uniform size, which may
+//! either be padding or non-padding ("normal").
+//!
+//! ### Tunnels
+//!
+//! We assume that incoming and outgoing traffic is queued in a "tunnel" on its
+//! way to or from the network.
+//!
+//! In the incoming direction, when we receive a packet, it is first queued on
+//! the tunnel, and then eventually processed to find out whether it is padding
+//! or not.
+//!
+//! In the outgoing direction, when we generate a packet, it is encrypted ASAP,
+//! queued on the tunnel, and eventually transmitted on the network.
+//!
+//! ### Framework state, and per-machine state.
+//!
+//! For each [`Machine`] in a [`Framework`], you will need to maintain a certain
+//! amount of state. Specifically, you will need to track:
+//!
+//! - A single "internal" timer, which the machine will manage via
+//!   [`TriggerAction::UpdateTimer`] and [`TriggerAction::Cancel`]. If it
+//!   expires, you will need to trigger [`TriggerEvent::TimerEnd`].
+//! - A single "action" timer, which the machine will manage via
+//!   [`TriggerAction::SendPadding`], [`TriggerAction::BlockOutgoing`], and
+//!   [`TriggerAction::Cancel`].
+//!   - An action to be taken if and when the "action" timer expires. This
+//!     action may be "begin blocking for a certain Duration" or "Send a padding
+//!     packet". (There are additional flags associated with these actions.)
+//!
+//! Additionally, for the [`Framework`] itself, you will need to track:
+//! - Whether traffic blocking has been enabled, and when it will expire.
+//! - Whether the enabled traffic blocking is "bypassable" (q.v.).
+//!
+//! ### Blocking
+//!
+//! In addition to sending padding, a Maybenot [`Machine`] can tell the
+//! application to temporarily _block_ traffic.
+//!
+//! While traffic is blocked on a connection, no packets should ordinarily be
+//! sent to the network until traffic becomes unblocked. Instead, normal traffic
+//! should be queued.
+//!
+//! Traffic blocking may be "bypassable" or "non-bypassable". This difference
+//! affects whether padding packets marked with the "bypass" flag can still be
+//! sent while the blocking is in effect.
+//!
+//! By cases:
+//!
+//! | Blocking       | Padding         | Action         |
+//! | -------------- | --------------- | -------------- |
+//! | non-bypassable | none            | queue padding  |
+//! |                | bypass          | queue padding  |
+//! |                | replace         | queue padding if queue is empty |
+//! |                | bypass, replace | queue padding if queue is empty
+//! | bypassable     | none            | queue padding  |
+//! |                | bypass          | send padding immediately |
+//! |                | replace         | queue padding if queue is empty |
+//! |                | bypass, replace | send packet from queue immediately, or padding if queue is empty |
+
 pub mod action;
 pub mod constants;
 pub mod counter;
@@ -211,17 +275,16 @@ mod error;
 pub mod event;
 mod framework;
 mod machine;
+mod rate_limited_framework;
 pub mod state;
 pub mod time;
 
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
+pub use crate::rate_limited_framework::RateLimitedFramework;
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
-
-#[cfg(feature = "parsing")]
-pub mod parsing;
 
 #[cfg(test)]
 mod tests {
@@ -268,7 +331,7 @@ mod tests {
         //
         // The framework validates all machines (like ::From_str() above) and
         // verifies that the fractions are fractions, so it can return an error.
-        let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 
         // Below is the main loop for operating the framework. This should run
         // for as long as the underlying connection the framework is attached to

@@ -106,7 +106,7 @@ pub enum DistType {
 
 impl fmt::Display for DistType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -203,23 +203,21 @@ impl Dist {
             } => {
                 if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
                     Err(Error::Machine(format!(
-                        "for Binomial dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling",
-                        probability
+                        "for Binomial dist, probability 0.0 > {probability:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling"
                     )))?;
                 }
                 if trials > 1_000_000_000 {
                     Err(Error::Machine(format!(
-                        "for Binomial dist, {} trials > 1e9, error due to too slow sampling",
-                        trials
+                        "for Binomial dist, {trials} trials > 1e9, error due to too slow sampling"
                     )))?;
                 }
                 Binomial::new(trials, probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Geometric { probability } => {
                 if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
-                    Err(Error::Machine(
-                        format!("for Geometric dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling", probability),
-                    ))?;
+                    Err(Error::Machine(format!(
+                        "for Geometric dist, probability 0.0 > {probability:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling"
+                    )))?;
                 }
                 Geometric::new(probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
@@ -229,8 +227,7 @@ impl Dist {
             DistType::Poisson { lambda } => {
                 if lambda > 1_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0 {
                     Err(Error::Machine(format!(
-                        "for Poisson dist, lambda {} > 1e42, error due to too slow sampling",
-                        lambda
+                        "for Poisson dist, lambda {lambda} > 1e42, error due to too slow sampling"
                     )))?;
                 }
                 Poisson::new(lambda).map_err(|e| Error::Machine(e.to_string()))?;
@@ -246,17 +243,27 @@ impl Dist {
             DistType::Beta { alpha, beta } => {
                 Beta::new(alpha, beta).map_err(|e| Error::Machine(e.to_string()))?;
             }
-        };
+        }
 
         Ok(())
     }
 
     /// Sample the distribution. May panic if not valid (see [`Self::validate()`]).
     pub fn sample<R: RngCore>(self, rng: &mut R) -> f64 {
+        let sampled = self.dist_sample(rng);
         let mut r: f64 = 0.0;
-        r = r.max(self.dist_sample(rng) + self.start);
+        let adjusted = sampled + self.start;
+
+        // Ensure the addition didn't produce NaN/inf (also catches NaN/inf from sampled)
+        if !adjusted.is_finite() {
+            return 0.0;
+        }
+
+        r = r.max(adjusted);
         if self.max > 0.0 {
-            return r.min(self.max);
+            let clamped = r.min(self.max);
+            // Final safety check in case min() produced NaN
+            return if clamped.is_finite() { clamped } else { 0.0 };
         }
         r
     }
@@ -270,7 +277,7 @@ impl Dist {
                 if low == high {
                     return low;
                 }
-                rng.gen_range(low..high)
+                rng.random_range(low..high)
             }
             DistType::Normal { mean, stdev } => Normal::new(mean, stdev).unwrap().sample(rng),
             DistType::SkewNormal {
@@ -625,7 +632,7 @@ mod tests {
             start: 5.0,
             max: 0.0,
         };
-        assert_eq!(d.sample(&mut rand::thread_rng()), 5.0);
+        assert_eq!(d.sample(&mut rand::rng()), 5.0);
 
         // max: uniform 10, ensure sampled value is < 10
         let d = Dist {
@@ -636,7 +643,7 @@ mod tests {
             start: 0.0,
             max: 5.0,
         };
-        assert_eq!(d.sample(&mut rand::thread_rng()), 5.0);
+        assert_eq!(d.sample(&mut rand::rng()), 5.0);
 
         // finally, make sure values < 0.0 cannot be sampled
         let d = Dist {
@@ -647,6 +654,89 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        assert_eq!(d.sample(&mut rand::thread_rng()), 0.0);
+        assert_eq!(d.sample(&mut rand::rng()), 0.0);
+    }
+
+    #[test]
+    fn sample_nan_inf_robustness() {
+        // Test handling of distributions that could potentially produce problematic values
+
+        // Test with extreme parameter combinations that might cause numerical issues
+        // Note: These would be caught by validate(), but we test the sampling robustness
+
+        // Test with a distribution that has valid parameters but might produce edge case values
+        let d = Dist {
+            dist: DistType::Normal {
+                mean: 0.0,
+                stdev: 1e300, // Very large standard deviation (still passes validation)
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        // Sample multiple times to increase chance of hitting edge cases
+        for _ in 0..100 {
+            let sampled = d.sample(&mut rand::rng());
+            assert!(
+                sampled.is_finite(),
+                "Normal distribution with large stdev should not produce non-finite values"
+            );
+            assert!(sampled >= 0.0, "Sample should respect minimum bound of 0.0");
+        }
+
+        // Test with Pareto distribution (known for heavy tails)
+        let d_pareto = Dist {
+            dist: DistType::Pareto {
+                scale: 1.0,
+                shape: 0.1, // Very small shape parameter creates heavy tail
+            },
+            start: 0.0,
+            max: 1000.0, // Clamp to prevent extreme values
+        };
+
+        for _ in 0..100 {
+            let sampled = d_pareto.sample(&mut rand::rng());
+            assert!(
+                sampled.is_finite(),
+                "Pareto distribution should not produce non-finite values"
+            );
+            assert!(sampled >= 0.0, "Sample should respect minimum bound of 0.0");
+            assert!(sampled <= 1000.0, "Sample should respect maximum bound");
+        }
+
+        // Test with extreme start value that could cause overflow
+        let d_extreme_start = Dist {
+            dist: DistType::Uniform {
+                low: 1e300,
+                high: 1e300,
+            },
+            start: 1e300, // Adding two very large numbers
+            max: 0.0,
+        };
+
+        let sampled = d_extreme_start.sample(&mut rand::rng());
+        assert!(
+            sampled.is_finite(),
+            "Large start value should not produce non-finite values"
+        );
+        assert!(sampled >= 0.0, "Sample should respect minimum bound of 0.0");
+
+        // Test with NaN-producing scenario (if we could construct one, but validation prevents this)
+        // Instead, test that our robustness handles the clamping correctly
+        let d_with_max = Dist {
+            dist: DistType::Uniform {
+                low: 100.0,
+                high: 200.0,
+            },
+            start: 0.0,
+            max: 50.0, // Max smaller than possible samples
+        };
+
+        for _ in 0..20 {
+            let sampled = d_with_max.sample(&mut rand::rng());
+            assert!(sampled.is_finite(), "Clamped sample should be finite");
+            assert!(sampled <= 50.0, "Sample should respect max bound");
+            assert!(sampled >= 0.0, "Sample should respect minimum bound of 0.0");
+        }
     }
 }

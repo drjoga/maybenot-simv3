@@ -1,7 +1,7 @@
 use bincode;
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::fmt;

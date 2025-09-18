@@ -5,9 +5,8 @@ use std::time::{Duration, Instant};
 use maybenot::event::TriggerEvent;
 
 use crate::{
-    event_to_usize,
+    SimEvent, event_to_usize,
     queue_event::{EventQueue, Queue},
-    SimEvent,
 };
 
 /// SimQueue represents the queue of events that are to be processed by the
@@ -49,6 +48,10 @@ impl SimQueue {
 
     pub fn no_normal_packets(&self) -> bool {
         self.client.no_normal_packets() && self.server.no_normal_packets()
+    }
+
+    pub fn get_max_pps(&self) -> Option<usize> {
+        self.max_pps
     }
 
     pub fn push(

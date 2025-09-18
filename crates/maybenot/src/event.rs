@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use self::Event::*;
-use crate::{constants::*, MachineId};
+use crate::{MachineId, constants::EVENT_NUM};
 use enum_map::Enum;
 use std::fmt;
 use std::hash::Hash;
@@ -44,7 +44,7 @@ pub enum Event {
 
 impl fmt::Display for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -78,24 +78,60 @@ impl Event {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
     /// Received non-padding packet.
+    ///
+    /// This event should be triggered once for each incoming non-padding
+    /// packet, after `TunnelRecv`, as soon as we have identified the packet as
+    /// non-padding.
     NormalRecv,
     /// Received padding packet.
+    ///
+    /// This event should be triggered once for each incoming padding packet,
+    /// after `TunnelRecv`, as soon as we have identified the packet as padding.
     PaddingRecv,
-    /// Received packet in the tunnel.
+    /// Received a complete packet in the tunnel.
+    ///
+    /// This event should be triggered once for each incoming packet of any
+    /// type, as soon as possible after the packet is received from the network,
+    /// before the packet is queued, processed, or decrypted.
+    ///
+    /// (No event should be generated for a partially read packet.)
     TunnelRecv,
     /// Sent non-padding packet.
+    ///
+    /// This event should be triggered once for each outgoing non-padding
+    /// packet, as soon as we have decided put it on any internal queue.
     NormalSent,
     /// Sent padding packet.
+    ///
+    /// This event should be triggered once for each outgoing padding packet, as
+    /// soon as we have decided put it on any internal queue.
     PaddingSent { machine: MachineId },
     /// Sent packet in the tunnel.
+    ///
+    /// This event should be triggered once for each outgoing packet of any
+    /// type, after that packet's `NormalSent` or `PaddingSent` event, as close
+    /// as possible to the time when it is actually written to the network.
     TunnelSent,
     /// Blocking of outgoing traffic started by the action from a machine.
+    ///
+    /// This event should be triggered whenever the action timer for a
+    /// [`crate::action::TriggerAction::BlockOutgoing`] action expires, whether
+    /// the blocking timer is adjusted or not.
     BlockingBegin { machine: MachineId },
-    /// Blocking of outgoing traffic stopped.
+    /// Blocking of outgoing traffic has stopped.
+    ///
+    /// This event should be triggered when the framework-scoped blocking timer
+    /// expires.
     BlockingEnd,
-    /// A machine's timer started.
+    /// A machine's internal timer started, or was changed.
+    ///
+    /// This event should be triggered any time a new internal timer is started,
+    /// or whenever the expiration time of an machine's internal timer changes.
     TimerBegin { machine: MachineId },
-    /// A machine's timer expired.
+    /// A machine's internal timer expired.
+    ///
+    /// (This event _should not_ be sent in response to a timer being
+    /// cancelled.)
     TimerEnd { machine: MachineId },
 }
 

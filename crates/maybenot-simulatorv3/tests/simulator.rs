@@ -5,12 +5,12 @@ use common::{run_test_sim, set_bypass, set_replace};
 use std::time::Duration;
 
 use maybenot::{
+    Machine, Timer,
     action::Action,
     counter::{Counter, Operation},
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine, Timer,
 };
 
 use enum_map::enum_map;
@@ -30,7 +30,7 @@ fn test_no_machine() {
         true,
         false,
     ); //assert!(1==0,"dummyt");
-       // server
+    // server
     run_test_sim(
         input,
         "5,rt 20,st 20,st 23,rt 30,st 35,rt",
@@ -89,7 +89,6 @@ fn test_simple_pad_machine() {
         "5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn",
         // previous netsim output below, included packet at the end which are not "normal" packets
         //"5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn 37,rt 37,rp",
-
         Duration::from_micros(5),
         &[m.clone()],
         &[],

@@ -9,9 +9,9 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use rand::{rngs::ThreadRng, RngCore};
-use rand_xoshiro::rand_core::SeedableRng;
+use rand::{RngCore, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
+use rand_xoshiro::rand_core::SeedableRng;
 
 // Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
 // RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
@@ -42,13 +42,6 @@ impl RngCore for RngSource {
         match self {
             RngSource::Thread(rng) => rng.fill_bytes(dest),
             RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            RngSource::Thread(rng) => rng.try_fill_bytes(dest),
-            RngSource::Xoshiro(rng) => rng.try_fill_bytes(dest),
         }
     }
 }
@@ -97,7 +90,7 @@ where
             // deterministic, insecure RNG
             Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
             // secure RNG, default
-            None => RngSource::Thread(rand::thread_rng()),
+            None => RngSource::Thread(rand::rng()),
         };
 
         let num_machines = machines.as_ref().len();

@@ -16,15 +16,15 @@ workspace = true
 maybenot = { path = "../crates/maybenot/" }
 maybenot-simulator = { path = "../crates/maybenot-simulator" }
 maybenot-simulatorv3 = { path = "../crates/maybenot-simulatorv3" }
-enum-map = "2.7.3"
-rand = "0.8.5"
-rand_xoshiro = "0.6.0"
-rand_core = "0.6.4"
-ndarray = { version = "0.16", features = ["serde"] }
+rand = "0.9"
+rand_xoshiro = "0.7"
+rand_core = "0.9"
 rayon = "1.10"
+ndarray = { version = "0.16", features = ["serde"] }
 
 [dev-dependencies]
 criterion = "0.5.1"
+enum-map = "2.7.3"
 
 [[bench]]
 name = "rng"
@@ -32,12 +32,4 @@ harness = false
 
 [[bench]]
 name = "dists"
-harness = false
-
-[[bench]]
-name = "v3_bench"
-harness = false
-
-[[bench]]
-name = "sim_components"
 harness = false

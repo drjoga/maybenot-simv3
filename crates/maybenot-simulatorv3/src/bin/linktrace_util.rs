@@ -1,16 +1,16 @@
 use clap::{Parser, Subcommand};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 
 use maybenot_simulatorv3::linktrace::{
-    load_linktrace_from_file, save_linktrace_to_file, LinkTrace, SizebinLookupTable,
+    LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file,
 };
 
 use maybenot_simulatorv3::linkbundle::{
-    load_linkbundle_from_file, save_linkbundle_to_file, LinkBundle,
+    LinkBundle, load_linkbundle_from_file, save_linkbundle_to_file,
 };
 
 #[derive(Parser)]

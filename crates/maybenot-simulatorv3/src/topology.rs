@@ -1,9 +1,7 @@
 use crate::links::LinkType;
 use crate::mbn_nodes::MBNNode;
 use crate::nodes::NodeType;
-use crate::topology_parse::{
-    build_networktopology_from_config, NetworkConfig,
-};
+use crate::topology_parse::{NetworkConfig, build_networktopology_from_config};
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkstate {
@@ -101,4 +99,3 @@ impl NetworkTopology {
         }
     }
 }
-

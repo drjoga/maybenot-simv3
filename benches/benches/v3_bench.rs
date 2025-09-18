@@ -3,11 +3,11 @@ use std::time::Duration;
 
 use maybenot_simulatorv3::topology_parse::build_networktopology_from_config;
 use maybenot_simulatorv3::{
-    load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, simul_advanced,
-    SimulatorArgs,
+    SimulatorArgs, load_topology_from_file, load_topology_from_str, modify_toml, parse_trace,
+    simul_advanced,
 };
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use rayon::prelude::*;
 
@@ -20,9 +20,21 @@ const CONFIG_FILES: [&str; 3] = [
     "/benches/topologies/mbn_complex_bench.toml",
 ];
 const LINK_TYPES: [(&str, &str, &str); 3] = [
-    ("FixedTput", "Link:0::type:FixedTput::tput_bps:100000000", ""),
-    ("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:../crates/maybenot-simulatorv3/tests/ether100M_synth40M.ltbin.gz", "../crates/maybenot-simulatorv3/tests/ether100M_synth40M.ltbin.gz"),
-    ("StdTraceTput", "Link:0::type:StdTraceTput::trace_file:../crates/maybenot-simulatorv3/tests/ether100M_synth10K_std.ltbin.gz", "../crates/maybenot-simulatorv3/tests/ether100M_synth10K_std.ltbin.gz"),
+    (
+        "FixedTput",
+        "Link:0::type:FixedTput::tput_bps:100000000",
+        "",
+    ),
+    (
+        "HiTraceTput",
+        "Link:0::type:HiTraceTput::trace_file:../crates/maybenot-simulatorv3/tests/ether100M_synth40M.ltbin.gz",
+        "../crates/maybenot-simulatorv3/tests/ether100M_synth40M.ltbin.gz",
+    ),
+    (
+        "StdTraceTput",
+        "Link:0::type:StdTraceTput::trace_file:../crates/maybenot-simulatorv3/tests/ether100M_synth10K_std.ltbin.gz",
+        "../crates/maybenot-simulatorv3/tests/ether100M_synth10K_std.ltbin.gz",
+    ),
 ];
 
 fn v3_single_simulator_run(c: &mut Criterion) {
@@ -294,12 +306,12 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
 
 use enum_map::enum_map;
 use maybenot::{
+    Machine,
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine,
 };
 
 fn ratio3_machine() -> Machine {

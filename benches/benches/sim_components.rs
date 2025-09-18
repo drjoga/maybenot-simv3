@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use maybenot_simulatorv3::links::{FixedTputLink, HiTraceTputLink, LinkType, StdTraceTputLink};
 use maybenot_simulatorv3::linktrace::load_linktrace_from_file;
-use maybenot_simulatorv3::{load_topology_from_file, parse_trace, simul_advanced, SimulatorArgs};
+use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_file, parse_trace, simul_advanced};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use ndarray::Array2;
 use rand::Rng;
@@ -129,18 +129,18 @@ fn sim_initialization_components(c: &mut Criterion) {
 // Evaluate lookup performance of different data structures
 fn initialize_flat_vector(rows: usize, cols: usize) -> (Vec<u32>, Vec<(usize, usize)>) {
     let mut array: Vec<u32> = vec![0; rows * cols];
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Initialize the array with random numbers
     for row in 0..rows {
         for col in 0..cols {
-            array[row * cols + col] = rng.gen_range(0..10000);
+            array[row * cols + col] = rng.random_range(0..10000);
         }
     }
 
     // Generate 10,000 random indices for lookup
     let indices: Vec<(usize, usize)> = (0..10_000)
-        .map(|_| (rng.gen_range(0..rows), rng.gen_range(0..cols)))
+        .map(|_| (rng.random_range(0..rows), rng.random_range(0..cols)))
         .collect();
 
     (array, indices)
@@ -148,18 +148,18 @@ fn initialize_flat_vector(rows: usize, cols: usize) -> (Vec<u32>, Vec<(usize, us
 
 fn initialize_ndarray(rows: usize, cols: usize) -> (Array2<u32>, Vec<(usize, usize)>) {
     let mut array = Array2::<u32>::zeros((rows, cols));
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Initialize the array with random numbers
     for row in 0..rows {
         for col in 0..cols {
-            array[[row, col]] = rng.gen_range(0..10000);
+            array[[row, col]] = rng.random_range(0..10000);
         }
     }
 
     // Generate 10,000 random indices for lookup
     let indices: Vec<(usize, usize)> = (0..10_000)
-        .map(|_| (rng.gen_range(0..rows), rng.gen_range(0..cols)))
+        .map(|_| (rng.random_range(0..rows), rng.random_range(0..cols)))
         .collect();
 
     (array, indices)
@@ -219,7 +219,7 @@ pub fn benchmark_busy_to(c: &mut Criterion) {
     ];
 
     let nr_samples = 10_000;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for file in linktrace_files {
         // Load the LinkTrace instance from the file
@@ -231,11 +231,13 @@ pub fn benchmark_busy_to(c: &mut Criterion) {
         // Generate random time slot values between 0 and trace length
         let nr_time_slots = linksim_trace.get_nr_timeslots() as usize;
         let time_slots: Vec<usize> = (0..nr_samples)
-            .map(|_| rng.gen_range(0..nr_time_slots))
+            .map(|_| rng.random_range(0..nr_time_slots))
             .collect();
 
         // Generate random packet size values between 40 and 1500
-        let pkt_sizes: Vec<i32> = (0..nr_samples).map(|_| rng.gen_range(40..=1500)).collect();
+        let pkt_sizes: Vec<i32> = (0..nr_samples)
+            .map(|_| rng.random_range(40..=1500))
+            .collect();
 
         // Benchmark the get_dl_busy_to function for the current linktrace file
         c.bench_function(&format!("get_dl_busy_to_  {}", file), |b| {
@@ -255,7 +257,7 @@ fn simulator_network_sample(c: &mut Criterion) {
 
     // Initialize the vector with Duration values instead of Instant
     let mut durations = Vec::with_capacity(nr_iter);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Start with Duration::ZERO
     let mut current_duration = Duration::from_micros(1);
@@ -273,7 +275,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         let average_step = remaining_duration / remaining_steps;
 
         // Generate a random step, allowing some variation around the average step
-        let step_micros: u64 = rng.gen_range(average_step / 2..=average_step * 2) as u64;
+        let step_micros: u64 = rng.random_range(average_step / 2..=average_step * 2) as u64;
 
         // Update the accumulated duration
         accumulated_duration += step_micros as usize;

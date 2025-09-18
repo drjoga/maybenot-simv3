@@ -3,14 +3,16 @@
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::*;
-use crate::*;
+use crate::constants::{
+    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_TIMEOUT, MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
+};
+use crate::{Error, MachineId, dist};
 use std::fmt;
 use std::hash::Hash;
 
 use self::dist::Dist;
 
-/// The different types of timers used by a [`Machine`].
+/// The different types of timers used by a [`Machine`](crate::Machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Timer {
     /// The scheduled timer for actions with a timeout.
@@ -31,11 +33,23 @@ pub enum Action {
     Cancel { timer: Timer },
     /// Schedule padding to be sent after a timeout.
     ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
+    ///
     /// The bypass flag determines if the padding packet MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
     /// The replace flag determines if the padding packet MAY be replaced by a
-    /// non-padding packet queued at the time the padding packet would be sent.
+    /// packet already queued to be sent at the time the padding packet would be
+    /// sent. This applies for data queued to be turned into normal
+    /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
+    /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
+    /// Such a packet could be in the queue due to ongoing blocking or just not
+    /// being sent yet (e.g., due to CC). We assume that packets will be
+    /// encrypted ASAP for the egress queue and we do not want to keep state
+    /// around to distinguish padding and non-padding, hence, any packet.
+    /// Similarly, this implies that a single blocked packet in the egress queue
+    /// can replace multiple padding packets with the replace flag set.
     SendPadding {
         bypass: bool,
         replace: bool,
@@ -43,6 +57,9 @@ pub enum Action {
         limit: Option<Dist>,
     },
     /// Schedule blocking of outgoing traffic after a timeout.
+    ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
     ///
     /// The bypass flag determines if padding actions are allowed to bypass this
     /// blocking action. This allows for machines that can fail closed (never
@@ -76,7 +93,7 @@ pub enum Action {
 
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#?}", self)
+        write!(f, "{self:#?}")
     }
 }
 
@@ -168,7 +185,13 @@ impl Action {
 /// The action to be taken by the framework user.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
-    /// Cancel the timer for a machine.
+    /// Cancel one or more timers for a machine.
+    ///
+    /// Depending on the value of `timer`, either the internal timer should be
+    /// cancelled, the external timer should be cancelled, or both.
+    ///
+    /// Cancelling a timer does not cause a
+    /// [`TriggerEvent::TimerEnd`](crate::TriggerEvent::TimerEnd) event.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     ///
@@ -176,13 +199,36 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// active blocking of outgoing traffic. Note that this is only allowed if
     /// the active blocking was set with the bypass flag set to true.
     ///
-    /// The replace flag indicates if the padding packet MAY be replaced by an
-    /// existing non-padding packet already queued for sending at the time the
-    /// padding packet would be sent (egress queued) or about to be sent.
+    /// The replace flag determines if the padding packet MAY be replaced by a
+    /// packet already queued to be sent at the time the padding packet would be
+    /// sent. This applies for data queued to be turned into normal
+    /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
+    /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
+    /// Such a packet could be in the queue due to ongoing blocking or just not
+    /// being sent yet (e.g., due to CC). We assume that packets will be
+    /// encrypted ASAP for the egress queue and we do not want to keep state
+    /// around to distinguish padding and non-padding, hence, any packet.
+    /// Similarly, this implies that a single blocked packet in the egress queue
+    /// can replace multiple padding packets with the replace flag set.
     ///
     /// If the bypass and replace flags are both set to true AND the active
     /// blocking may be bypassed, then non-padding packets MAY replace the
     /// padding packet AND bypass the active blocking.
+    ///
+    /// When the padding is queued, a corresponding
+    /// [`TriggerEvent::PaddingSent`](crate::TriggerEvent::PaddingSent) event
+    /// SHOULD always be triggered, with a matching MachineId, even if the
+    /// padding packet is replaced by another packet.
+    /// (If the padding packet is replaced by queueing a _new_ normal
+    /// packet, then a `NormalSent` should _also_ be triggered, along
+    /// with `PaddingSent`.  If the padding packet is "replaced" by
+    /// noting the presence of an already queued packet, then no
+    /// additional event bedes `PaddingSent` needs to be triggered.)
+    ///
+    /// Note that, since only one action timer per machine can be pending at a
+    /// time, this `SendPadding` action should replace any currently pending
+    /// `SendPadding` or `BlockOutgoing` action timer for this machine that has
+    /// not yet expired.
     SendPadding {
         timeout: T::Duration,
         bypass: bool,
@@ -190,7 +236,14 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         machine: MachineId,
     },
     /// Schedule blocking of outgoing traffic after the given timeout for a
-    /// machine. The duration of the blocking is specified.
+    /// machine. The duration of the blocking is specified. Note that the
+    /// blocking is framework scoped, i.e., if there are multiple machines
+    /// running, then the blocking will affect all of them.
+    ///
+    /// Whenever the given action timeout expires, a corresponding
+    /// [`TriggerEvent::BlockingBegin`](crate::TriggerEvent::BlockingBegin)
+    /// event should be triggered with the same MachineId, regardless of whether
+    /// the current blocking was adjusted.
     ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
     /// bypassed by padding packets with the bypass flag set to true.
@@ -198,6 +251,14 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
+    ///
+    /// Whenever the blocking timer of outgoing traffic is replaced or adjusted,
+    /// the "bypassable" status of the blocking is also replaced.
+    ///
+    /// Note that, since only one action timer per machine can be pending at a
+    /// time, this `BlockOutgoing` action should replace any currently pending
+    /// `BlockOutgoing` or `SendPadding` action timer for this machine that has
+    /// not yet expired.
     BlockOutgoing {
         timeout: T::Duration,
         duration: T::Duration,
@@ -205,11 +266,20 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         replace: bool,
         machine: MachineId,
     },
-    /// Update the timer duration for a machine.
+    /// Update the duration of the internal timer for a machine.
     ///
     /// The replace flag specifies if the duration should replace the current
     /// timer duration. If the flag is false, the longest of the two durations
     /// MUST be used.
+    ///
+    /// Whenever an internal timer is created, and whenever the timer's duration
+    /// is changed, a corresponding
+    /// [`TriggerEvent::TimerBegin`](crate::TriggerEvent::TimerBegin) event
+    /// should be triggered, with a matching [`MachineId`].
+    ///
+    /// Whenever an internal expires, a corresponding
+    /// [`TriggerEvent::TimerEnd`](crate::TriggerEvent::TimerEnd) event should
+    /// be triggered. with a matching [`MachineId`].
     UpdateTimer {
         duration: T::Duration,
         replace: bool,
@@ -219,7 +289,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
 
 impl fmt::Display for TriggerAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#?}", self)
+        write!(f, "{self:#?}")
     }
 }
 

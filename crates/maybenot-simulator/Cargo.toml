@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-simulator"
-version = "2.0.1"
+version = "2.2.1"
 description = "A simulator for the Maybenot framework"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
@@ -10,42 +10,19 @@ keywords.workspace = true
 categories.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "linktrace_util_duplex"
-path = "src/bin/linktrace_util.rs"
-
 [lints]
 workspace = true
 
 [dependencies]
 # defaults to relative path in workspace
-maybenot = { version = "2.0.1", path = "../maybenot/" }
-log = "0.4.21"
-test-log = "0.2.15"
-#serde = "1.0.198"
-rand = "0.8.5"
-serde_json = "1.0.116"
-enum-map = "2.7.3"
-rand_xoshiro = "0.6.0"
-rand_core = "0.6.4"
-rand_distr = "0.4.3"
-serde = { version = "1.0.198", features = ["derive"] }
-serde-big-array = "0.5.1"
-ndarray = { version = "0.16", features = ["serde"] }
-ndarray-npy = "0.7"  # Optional, if using .npy files
-ndarray-stats = "0.5.1"
-bincode = "1.3.3"
-flate2 = "1.0"
-chrono = "0.4.38"
-clap = { version = "4.5.16", features = ["derive"] }
-rayon = "1.10"
+maybenot = { version = "2.2.2", path = "../maybenot/" }
+log = "0.4"
+rand = "0.9"
+serde_json = "1.0"
+rand_xoshiro = "0.7"
 
 [dev-dependencies]
-env_logger = "0.10.2"
-criterion = "0.5.1"
-once_cell = "1.21.1"
-
-#[[bench]]
-#name = "rng"
-#harness = false
-
+enum-map = "2.7"
+test-log = "0.2.18"
+rand_core = "0.9"
+env_logger = "0.11"

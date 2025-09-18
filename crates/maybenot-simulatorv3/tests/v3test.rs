@@ -1,8 +1,8 @@
 use maybenot::{Machine, TriggerEvent};
+use maybenot_simulatorv3::{SimulatorArgs, simul_advanced};
 use maybenot_simulatorv3::{
     load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, sim,
 };
-use maybenot_simulatorv3::{simul_advanced, SimulatorArgs};
 use std::fs;
 use std::{str::FromStr, time::Duration};
 

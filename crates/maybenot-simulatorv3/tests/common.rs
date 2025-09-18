@@ -2,11 +2,10 @@ use std::env;
 use std::time::{Duration, Instant};
 
 use log::debug;
-use maybenot::{action::Action, state::State, Machine, TriggerEvent};
+use maybenot::{Machine, TriggerEvent, action::Action, state::State};
 use maybenot_simulatorv3::{
-    event_schedule_print, fill_simq, load_topology_from_str, simul_advanced,
-    topology::NetworkTopology, traffic_trace_prepare, SimulEvent, SimulInfo, SimulQueue,
-    SimulatorArgs,
+    SimulEvent, SimulInfo, SimulQueue, SimulatorArgs, event_schedule_print, fill_simq,
+    load_topology_from_str, simul_advanced, topology::NetworkTopology, traffic_trace_prepare,
 };
 use once_cell::sync::Lazy;
 

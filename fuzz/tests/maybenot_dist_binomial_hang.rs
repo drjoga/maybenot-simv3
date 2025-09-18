@@ -8,8 +8,8 @@ mod tests {
     #[test]
     fn test_binomial_hang() {
         let artifacts = vec![
-            include_bytes!("../artifacts/bionomial,id:000000,src:000018+000083,time:43455,execs:576361,op:splice,rep:4").to_vec(),
-            include_bytes!("../artifacts/bionomial,id:000000,src:000049,time:1595,execs:25705,op:havoc,rep:1").to_vec(),
+            include_bytes!("../artifacts/bionomial,id-000000,src-000018+000083,time-43455,execs-576361,op-splice,rep-4").to_vec(),
+            include_bytes!("../artifacts/bionomial,id-000000,src-000049,time-1595,execs-25705,op-havoc,rep-1").to_vec(),
         ];
 
         for data in artifacts {
@@ -28,7 +28,7 @@ mod tests {
             Err(_) => return,
         };
         let seed = u64::from_le_bytes(seed);
-        let mut rng = &mut Xoshiro256StarStar::seed_from_u64(seed);
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
         let trials: [u8; 8] = match data[8..16].try_into() {
             Ok(arr) => arr,
@@ -42,10 +42,7 @@ mod tests {
         };
         let probability = f64::from_le_bytes(probability);
 
-        println!(
-            "trials: {}, probability: {}, seed: {}",
-            trials, probability, seed
-        );
+        println!("trials: {trials}, probability: {probability}, seed: {seed}");
         let d = Dist {
             dist: DistType::Binomial {
                 trials,
