@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use log::debug;
 use maybenot::{Machine, TriggerEvent, action::Action, state::State};
 use maybenot_simulatorv3::{
-    SimulEvent, SimulInfo, SimulQueue, SimulatorArgs, event_schedule_print, fill_simq,
-    load_topology_from_str, simul_advanced, topology::NetworkTopology, traffic_trace_prepare,
+    SimEvent, SimInfo, SimQueue, SimulatorArgs, event_schedule_print, fill_simq,
+    load_topology_from_str, sim_advanced, topology::NetworkTopology, traffic_trace_prepare,
 };
 use once_cell::sync::Lazy;
 
@@ -77,7 +77,8 @@ pub fn run_test_sim_toml(
         topology.nodes[topology.mb_server],
         maybenot_simulatorv3::nodes::NodeType::RelayMBNtserver(_)
     ) {
-        // Iterate over the SimulEvents in the queue and adjust the time for trafficserver events
+        // Iterate over the SimEvents in the queue and adjust the time for
+        // trafficserver events
         let mut events: Vec<_> = sq.heap.drain().collect();
         for event in events.iter_mut() {
             if event.node_id == topology.mb_server && event.event == TriggerEvent::NormalSent {
@@ -88,7 +89,7 @@ pub fn run_test_sim_toml(
         sq.heap.extend(events);
     }
 
-    let trace = simul_advanced(
+    let trace = sim_advanced(
         machines_client,
         machines_server,
         &topology,
@@ -232,14 +233,14 @@ trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#,
 }
 
 fn fmt_trace(
-    trace: &[SimulEvent],
+    trace: &[SimEvent],
     client: bool,
     only_packets: bool,
     ms: bool,
     topology: NetworkTopology,
-    si: &SimulInfo,
+    si: &SimInfo,
 ) -> String {
-    fn fmt_event(e: &SimulEvent, base: Instant, ms: bool) -> String {
+    fn fmt_event(e: &SimEvent, base: Instant, ms: bool) -> String {
         let time_value = if e.time >= base {
             // Event is at or after base time
             match ms {
@@ -290,9 +291,9 @@ pub fn make_si_sq(
     topology: &NetworkTopology,
     delay: Duration,
     as_ms: bool,
-) -> (SimulInfo, SimulQueue) {
-    let mut si = SimulInfo::new();
-    let mut sq = SimulQueue::new();
+) -> (SimInfo, SimQueue) {
+    let mut si = SimInfo::new();
+    let mut sq = SimQueue::new();
     let to_ns_factor = match as_ms {
         true => 1_000_000,
         false => 1_000,

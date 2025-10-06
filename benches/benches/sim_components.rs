@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use maybenot_simulatorv3::links::{FixedTputLink, HiTraceTputLink, LinkType, StdTraceTputLink};
 use maybenot_simulatorv3::linktrace::load_linktrace_from_file;
-use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_file, parse_trace, simul_advanced};
+use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_file, parse_trace, sim_advanced};
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
@@ -37,7 +37,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
             let mut args = SimulatorArgs::new(*sim_event_count, true);
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
-            let trace = simul_advanced(
+            let trace = sim_advanced(
                 &[],
                 &[],
                 &topology,
@@ -73,7 +73,7 @@ fn v3_multi_run(c: &mut Criterion) {
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(
+                    let trace = sim_advanced(
                         &[],
                         &[],
                         &topology,

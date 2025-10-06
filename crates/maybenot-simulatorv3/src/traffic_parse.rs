@@ -2,19 +2,19 @@ use log::{debug, warn};
 use std::time::{Duration, Instant};
 
 use crate::topology::NetworkTopology;
-use crate::{SimulEvent, SimulInfo, SimulQueue};
+use crate::{SimEvent, SimInfo, SimQueue};
 use maybenot::TriggerEvent;
 
 /// Parses a network traffic trace into simulation events.
 ///
-/// This function converts raw network traces into [`SimulInfo`] and [`SimulQueue`]
-/// objects ready for simulation. It performs dependency analysis to
-/// model client-server request-response patterns.
+/// This function converts raw network traces into [`SimInfo`] and [`SimQueue`]
+/// objects ready for simulation. It performs dependency analysis to model
+/// client-server request-response patterns.
 ///
 /// # Traffic Trace Format
 ///
-/// The trace should contain space-separated entries: `"time,direction time,direction ..."`
-/// where:
+/// The trace should contain line-separated entries:
+/// `"<time>,<direction>,<size>\n<time>,<direction>,<size>\n..."` where:
 /// - **time**: nanoseconds relative to trace start (0-based)
 /// - **direction**: `"s"` (sent by client) or `"r"` (received by client)
 /// - **size**: packet size in bytes (currently unused, can be omitted)
@@ -23,13 +23,14 @@ use maybenot::TriggerEvent;
 ///
 /// * `trace` - Raw trace string in the format described above
 /// * `topology` - Network topology for node/link mapping  
-/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the traces
-///   was captured, used to determine which packets are dependent on others.
+/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the
+///   traces was captured, used to determine which packets are dependent on
+///   others.
 ///
 /// # Returns
 ///
-/// * `SimulInfo` - Timing baselines and packet dependency information
-/// * `SimulQueue` - Priority queue pre-loaded with initial network events
+/// * `SimInfo` - Timing baselines and packet dependency information
+/// * `SimQueue` - Priority queue pre-loaded with initial network events
 ///
 /// # Dependency Analysis
 ///
@@ -45,9 +46,9 @@ pub fn parse_trace(
     trace: &str,
     topology: &NetworkTopology,
     ttrace_ts_to_c_delay: Duration,
-) -> (SimulInfo, SimulQueue) {
-    let mut si = SimulInfo::new();
-    let mut sq = SimulQueue::new();
+) -> (SimInfo, SimQueue) {
+    let mut si = SimInfo::new();
+    let mut sq = SimQueue::new();
 
     let mut oneline = String::new();
 
@@ -65,7 +66,9 @@ pub fn parse_trace(
                     oneline.push_str(&format!("{},r ", timestamp));
                 }
                 "sp" | "rp" => {
-                    // TODO: figure out of ignoring is the right thing to do
+                    // TODO: figure out of ignoring is the right thing to do in
+                    // all cases, we might want to support recursive use of the
+                    // simulator
                 }
                 _ => {
                     panic!("invalid direction")
@@ -76,12 +79,11 @@ pub fn parse_trace(
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
     fill_simq(&traffic_events, topology, &mut si, &mut sq);
-    //let total_dependent_events: usize = traffic_events.dependent_tx.values().map(|v| v.len()).sum();
-    //println!(" Online events: {:?}   SimQ length: {:?}   tx_dpend length: {:?} tx_dpend events: {:?}", oneline.split_whitespace().count(), sq.len(), traffic_events.dependent_tx.len(), total_dependent_events);
+
     (si, sq)
 }
 
-/// Code for reading in traffic trace, create depndent_tx, and prefill SimulQueue
+/// Code for reading in traffic trace, create depndent_tx, and prefill SimQueue
 
 #[derive(Debug, Clone, Copy)]
 pub struct PacketEvent {
@@ -129,27 +131,33 @@ pub struct TrafficTraceData {
 
 /// Performs traffic dependency analysis for client-server communication.
 ///
-/// This function implements the core algorithm that transforms a raw traffic trace into
-/// a dependency graph modeling realistic client-server request-response patterns.
+/// This function implements the core algorithm that transforms a raw traffic
+/// trace into a dependency graph modeling realistic client-server
+/// request-response patterns.
 ///
 /// # Algorithm Overview
 ///
 /// ## Client Send Analysis
 /// For each client send event:
-/// - **No prior receive**: Classified as initial request → goes to `client_simq_push`
-/// - **Has prior receive**: Classified as response-triggered → recorded as dependency
+/// - **No prior receive**: Classified as initial request → goes to
+///   `client_simq_push`
+/// - **Has prior receive**: Classified as response-triggered → recorded as
+///   dependency
 ///
 /// ## Server Response Analysis  
 /// For each client receive event:
-/// - **Find matching send**: Search for client send ≥ `2×ttrace_ts_to_c_delay_ns` before receive time
-/// - **Match found**: Server response depends on that client send → recorded as dependency  
+/// - **Find matching send**: Search for client send ≥
+///   `2×ttrace_ts_to_c_delay_ns` before receive time
+/// - **Match found**: Server response depends on that client send → recorded as
+///   dependency  
 /// - **No match**: Server-initiated event → goes to `trafficserver_simq_push`
 ///
 /// # Arguments
 ///
 /// * `s` - Space-separated trace string: `"0,s 18,s 25,r 25,r 30,s 35,r"`
-/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the traces
-///   was captured, used to determine which packets are dependent on others.
+/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the
+///   traces was captured, used to determine which packets are dependent on
+///   others.
 ///
 /// # Returns
 ///
@@ -190,8 +198,8 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
         });
     }
 
-    // Process client send events: for each send event, if there is a preceding receive, record a dependency;
-    // otherwise, mark it as an initial simQ push.
+    // Process client send events: for each send event, if there is a preceding
+    // receive, record a dependency; otherwise, mark it as an initial simQ push.
     let mut client_simq_push = Vec::new();
     let mut dependent_tx = vec![Vec::new(); s.split_whitespace().count()];
     let mut last_recv: Option<&PacketEvent> = None;
@@ -212,9 +220,10 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
         }
     }
 
-    // Process trafficserver events: for each client receive event, try to find the most recent client send event
-    // that occurred at or before (recv time - 2 * ttrace_ts_to_c_delay_ns). If found,
-    // record that as a dependency; otherwise, mark the receive as a simQ push for trafficserver.
+    // Process trafficserver events: for each client receive event, try to find
+    // the most recent client send event that occurred at or before (recv time -
+    // 2 * ttrace_ts_to_c_delay_ns). If found, record that as a dependency;
+    // otherwise, mark the receive as a simQ push for trafficserver.
     let client_sends: Vec<&PacketEvent> = pkt_events
         .iter()
         .filter(|e| e.kind == EventKind::CliSend)
@@ -246,7 +255,6 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
                 let mut adjusted_event = *pkt_event;
                 adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
                 trafficserver_simq_push.push(adjusted_event);
-                //panic!("Receive event {} is too early to be a server simQ push", event.packet_id);
             }
         }
     }
@@ -409,21 +417,22 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     }
 }
 
-/// Helper function to get the event instant based on the zero_instant and the relative time
-/// in the trace,  with the trace is in nanoseconds.
-fn get_event_instant(si: &mut SimulInfo, pkt_event: &PacketEvent) -> Instant {
+/// Helper function to get the event instant based on the zero_instant and the
+/// relative time in the trace, with the trace is in nanoseconds.
+fn get_event_instant(si: &mut SimInfo, pkt_event: &PacketEvent) -> Instant {
     if pkt_event.time_ns >= 0 {
         si.zero_instant + Duration::from_nanos(pkt_event.time_ns as u64)
     } else {
-        // Negative offsets can occur due to client receiving at 0,r as in some tests, or it may
-        // come from trafserv_to_client_delay being configured too low compared to the actual real delay
-        // when the traffic trace was collected.
+        // Negative offsets can occur due to client receiving at 0,r as in some
+        // tests, or it may come from trafserv_to_client_delay being configured
+        // too low compared to the actual real delay when the traffic trace was
+        // collected.
         let early_instant = si
             .zero_instant
             .checked_sub(Duration::from_nanos(-pkt_event.time_ns as u64))
             .expect("Underflow for Instant");
         if si.earliest_event_instant == si.zero_instant {
-            // print out notification that trafser to client delay is too low
+            // print out notification that transfer to client delay is too low
             warn!(
                 "Note: Negative offset in traffic trace event: {}. This may indicate that trafserv_to_client_delay is too low compared to the actual delay when the traffic trace was collected.",
                 pkt_event.packet_id
@@ -439,12 +448,12 @@ fn get_event_instant(si: &mut SimulInfo, pkt_event: &PacketEvent) -> Instant {
 pub fn fill_simq(
     traffic_events: &TrafficTraceData,
     topology: &NetworkTopology,
-    si: &mut SimulInfo,
-    sq: &mut SimulQueue,
+    si: &mut SimInfo,
+    sq: &mut SimQueue,
 ) {
     for event in &traffic_events.client_simq_push {
         let event_instant = get_event_instant(si, event);
-        let simul_event = SimulEvent {
+        let simul_event = SimEvent {
             event: TriggerEvent::NormalSent,
             time: event_instant,
             packet_id: event.packet_id,
@@ -462,7 +471,7 @@ pub fn fill_simq(
 
     for event in &traffic_events.trafficserver_simq_push {
         let event_instant = get_event_instant(si, event);
-        let simul_event = SimulEvent {
+        let simul_event = SimEvent {
             event: TriggerEvent::NormalSent,
             time: event_instant,
             packet_id: event.packet_id,

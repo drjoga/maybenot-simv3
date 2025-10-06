@@ -26,7 +26,7 @@ use std::{
 
 use integration::Integration;
 use log::debug;
-use topology::{NetworkLinkstate, NetworkTopology};
+use topology::{NetworkLinkState, NetworkTopology};
 use traffic_parse::EventKind;
 
 use maybenot::{Machine, TriggerEvent};
@@ -34,23 +34,25 @@ use mbn_helpers::initialize_mbn_sim_states;
 
 /// Represents a single network event in the Maybenot simulation.
 ///
-/// `SimulEvent` is the fundamental unit of simulation, representing packets being sent/received,
+/// `SimEvent` is the fundamental unit of simulation, representing packets being sent/received,
 /// defense actions (padding, blocking), and internal timer events. These events flow through
 /// the simulation priority queue and form the output trace.
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
-pub struct SimulEvent {
+pub struct SimEvent {
     /// the actual event
     pub event: TriggerEvent,
     /// the time of the event taking place
     pub time: Instant,
     /// Packet ID for triggering dependent tx events
     pub packet_id: usize,
-    /// Node index and link index for the event for routing and processing
+    /// Node index for the event for routing and processing
     pub node_id: usize,
+    /// Link index for the event for routing and processing
     pub link_id: usize,
-    /// sequence number for deterministic insertion ordering when timestamp is identical
+    /// sequence number for deterministic insertion ordering when timestamp is
+    /// identical
     pub q_sequence_nr: u64,
-    // Start of MaybeNot specific fields
+    // Start of Maybenot specific fields
     /// flag to track padding or normal packet
     pub contains_padding: bool,
     /// internal flag to mark event as bypass
@@ -62,7 +64,7 @@ pub struct SimulEvent {
     pub debug_note: Option<String>,
 }
 
-impl SimulEvent {
+impl SimEvent {
     /// Format event as compact string for column alignment
     fn format_event_compact(&self) -> String {
         match &self.event {
@@ -79,8 +81,8 @@ impl SimulEvent {
         }
     }
 
-    /// Display SimulEvent with time as microseconds since si.zero_instant
-    pub fn display_relative(&self, si: &SimulInfo) -> String {
+    /// Display SimEvent with time as microseconds since si.zero_instant
+    pub fn display_relative(&self, si: &SimInfo) -> String {
         let time_since_zero = if self.time >= si.zero_instant {
             self.time.duration_since(si.zero_instant).as_micros() as i64
         } else {
@@ -102,13 +104,14 @@ impl SimulEvent {
             if self.replace { "T" } else { "F" }
         )
     }
-    /// Display SimulEvent as display_relative but with shortform of nodetype string printed for each node,
-    /// from - to nodeid for each link
+
+    /// Display SimEvent as display_relative but with shortform of nodetype
+    /// string printed for each node, from - to nodeid for each link
     pub fn display_full(
         &self,
-        si: &SimulInfo,
+        si: &SimInfo,
         topology: &NetworkTopology,
-        linkstate: &NetworkLinkstate,
+        linkstate: &NetworkLinkState,
     ) -> String {
         let time_since_zero = if self.time >= si.zero_instant {
             self.time.duration_since(si.zero_instant).as_micros() as i64
@@ -139,9 +142,9 @@ impl SimulEvent {
     }
 }
 
-// A display fmt for SimulEvent that shows the event type, time, and packet index as one line
-// and has P:T B:F R:T according to the booleans
-impl std::fmt::Display for SimulEvent {
+// A display fmt for SimEvent that shows the event type, time, and packet
+// index as one line and has P:T B:F R:T according to the booleans
+impl std::fmt::Display for SimEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -158,8 +161,8 @@ impl std::fmt::Display for SimulEvent {
     }
 }
 
-// for SimulEvent, implement Ord and PartialOrd to allow for sorting by time
-impl Ord for SimulEvent {
+// for SimEvent, implement Ord and PartialOrd to allow for sorting by time
+impl Ord for SimEvent {
     fn cmp(&self, other: &Self) -> Ordering {
         // reverse order to get the smallest time first
         self.time
@@ -170,26 +173,26 @@ impl Ord for SimulEvent {
     }
 }
 
-impl PartialOrd for SimulEvent {
+impl PartialOrd for SimEvent {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct SimulInfo {
+pub struct SimInfo {
     pub zero_instant: Instant,
     pub earliest_event_instant: Instant,
     pub(crate) dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 
-impl Default for SimulInfo {
+impl Default for SimInfo {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SimulInfo {
+impl SimInfo {
     pub fn new() -> Self {
         let now_time = Instant::now();
         Self {
@@ -205,18 +208,18 @@ impl SimulInfo {
 }
 
 #[derive(Clone, Debug)]
-pub struct SimulQueue {
-    pub heap: BinaryHeap<SimulEvent>,
+pub struct SimQueue {
+    pub heap: BinaryHeap<SimEvent>,
     next_q_sequence_nr: u64,
 }
 
-impl Default for SimulQueue {
+impl Default for SimQueue {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SimulQueue {
+impl SimQueue {
     pub fn new() -> Self {
         Self {
             heap: BinaryHeap::new(),
@@ -224,17 +227,17 @@ impl SimulQueue {
         }
     }
 
-    pub fn push(&mut self, mut s_event: SimulEvent) {
+    pub fn push(&mut self, mut s_event: SimEvent) {
         s_event.q_sequence_nr = self.next_q_sequence_nr;
         self.next_q_sequence_nr += 1;
         self.heap.push(s_event);
     }
 
-    pub fn pop(&mut self) -> Option<SimulEvent> {
+    pub fn pop(&mut self) -> Option<SimEvent> {
         self.heap.pop()
     }
 
-    pub fn peek(&self) -> Option<&SimulEvent> {
+    pub fn peek(&self) -> Option<&SimEvent> {
         self.heap.peek()
     }
 
@@ -246,13 +249,15 @@ impl SimulQueue {
         self.heap.is_empty()
     }
 
-    // This function is called for every processed event if continue_after_all_normal_packets_processed is false
+    // This function is called for every processed event if
+    // continue_after_all_normal_packets_processed is false
     pub fn no_normal_packets(&self, topology: &topology::NetworkTopology) -> bool {
-        // Check main simulation queue, see if any of traffic trace packer are in it.
+        // check main simulation queue, see if any of traffic trace packer are
+        // in it
         if self.heap.iter().any(|e| e.packet_id < usize::MAX) {
             return false;
         }
-        // Check MBN node blocking queues if they exist
+        // check MBN node blocking queues if they exist
         if topology.has_mb {
             let client_mbn = topology.get_mbn_client();
             if !client_mbn.get_queue_normal().borrow().is_empty() {
@@ -268,25 +273,28 @@ impl SimulQueue {
     }
 }
 
-/// Converts TriggerEvents to numeric priorities for deterministic event ordering.
+/// Converts TriggerEvents to numeric priorities for deterministic event
+/// ordering.
 ///
 /// When multiple events occur at the same timestamp, this function provides
 /// tie-breaking rules to ensure consistent simulation results:
 ///
-/// - Tunnel events (0-2) process before application events (3-5)  
-/// - Within each category: Sent → Recv → Padding
-/// - Control events (blocking/timers) process last (6-9)
+/// - Packets > Control events
+/// - For Packets, Tunnel > Normal > Padding
+/// - For Control events, Blocking > Timer
 ///
-/// This ordering ensures that network transmission completes before
-/// triggering dependent events, which is useful for accurate simulation.
+/// This ordering ensures that network transmission completes before triggering
+/// dependent events, which is useful for accurate simulation. XXX: we want
+/// padding after tunnel/normal since padding is generated by the framework and
+/// MAY have lower priority than normal/tunnel packets in most integrations.
 fn event_to_usize(e: &TriggerEvent) -> usize {
     match e {
         // tunnel before normal before padding
         TriggerEvent::TunnelSent => 0,
-        TriggerEvent::NormalSent => 1,
-        TriggerEvent::PaddingSent { .. } => 2,
-        TriggerEvent::TunnelRecv => 3,
-        TriggerEvent::NormalRecv => 4,
+        TriggerEvent::TunnelRecv => 1,
+        TriggerEvent::NormalSent => 2,
+        TriggerEvent::NormalRecv => 3,
+        TriggerEvent::PaddingSent { .. } => 4,
         TriggerEvent::PaddingRecv => 5,
         // begin before end
         TriggerEvent::BlockingBegin { .. } => 6,
@@ -298,52 +306,59 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
 
 /// Runs the Maybenot network traffic simulation.
 ///
-/// This is the main simulation function that processes network events through a topology
-/// with optional Maybenot defense machines running on client and server nodes.
+/// This is the main simulation function that processes network events through a
+/// topology with optional Maybenot defense machines running on client and
+/// server nodes.
 ///
 /// # Arguments
 ///
-/// * `machines_client` - Slice of Maybenot [`Machine`]s to run on the client side
-/// * `machines_server` - Slice of Maybenot [`Machine`]s to run on the server side  
+/// * `machines_client` - Slice of Maybenot [`Machine`]s to run on the client
+///   side
+/// * `machines_server` - Slice of Maybenot [`Machine`]s to run on the server
+///   side  
 /// * `si` - Simulation info containing timing baselines and packet dependencies
 /// * `sq` - Mutable simulation queue pre-loaded with traffic trace events
 /// * `topology` - Network topology defining nodes, links and routing rules
 /// * `linkstate` - Mutable network link states for throughput/delay simulation
-/// * `max_trace_length` - Maximum number of events to include in output (0 = unlimited)
+/// * `max_trace_length` - Maximum number of events to include in output (0 =
+///   unlimited)
 /// * `only_network_activity` - If true, only return tunnel sent/received events
 ///
 /// # Returns
 ///
-/// A `Vec<SimulEvent>` representing the simulated network trace with defense modifications.
+/// A `Vec<SimEvent>` representing the simulated network trace with defense
+/// modifications.
 ///
 /// # Important Notes
 ///
 /// - The simulation queue `sq` **must** be created by [`parse_trace`].
 /// - The queue is consumed during simulation - clone it if you need to reuse it
-/// - Some defense machines may generate infinite padding, use `max_trace_length` to limit output
-/// - For traffic analysis, set `only_network_activity = true` to filter internal events
+/// - Some defense machines may generate infinite padding, use
+///   `max_trace_length` to limit output
+/// - For traffic analysis, set `only_network_activity = true` to filter
+///   internal events
 ///
 /// # See Also
 ///
-/// - [`simul_advanced`] for advanced configuration options
+/// - [`sim_advanced`] for advanced configuration options
 /// - [`parse_trace`] for creating the simulation queue from traffic traces
 #[allow(clippy::too_many_arguments)]
 pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    si: &SimInfo,
+    sq: &mut SimQueue,
     topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
+    link_state: &mut NetworkLinkState,
     max_trace_length: usize,
     only_network_activity: bool,
-) -> Vec<SimulEvent> {
+) -> Vec<SimEvent> {
     let args = SimulatorArgs::new(max_trace_length, only_network_activity);
-    simul_advanced(
+    sim_advanced(
         machines_client,
         machines_server,
         topology,
-        linkstate,
+        link_state,
         si,
         sq,
         &args,
@@ -352,8 +367,9 @@ pub fn sim(
 
 /// Configuration parameters for advanced network simulation.
 ///
-/// `SimulatorArgs` provides comprehensive control over simulation behavior, including
-/// termination conditions, output filtering, and Maybenot framework parameters.
+/// `SimulatorArgs` provides comprehensive control over simulation behavior,
+/// including termination conditions, output filtering, and Maybenot framework
+/// parameters.
 ///
 /// # Usage Patterns
 ///
@@ -374,7 +390,8 @@ pub fn sim(
 /// The simulator stops when **any** of these conditions are met:
 /// - `max_trace_length` events added to output trace
 /// - `max_sim_iterations` processing iterations completed  
-/// - All normal (non-padding) packets processed (if `continue_after_all_normal_packets_processed = false`)
+/// - All normal (non-padding) packets processed (if
+///   `continue_after_all_normal_packets_processed = false`)
 ///
 #[derive(Clone, Debug)]
 pub struct SimulatorArgs {
@@ -420,7 +437,7 @@ impl SimulatorArgs {
         Self {
             max_trace_length,
             max_sim_iterations: 0,
-            //This bool has different impact in v3 , should be noted
+            // NOTE: This bool has different impact in v3 vs v2 simulator
             continue_after_all_normal_packets_processed: true,
             only_client_events: false,
             only_network_activity,
@@ -438,8 +455,9 @@ impl SimulatorArgs {
 
 /// Advanced network simulation with extensive configuration options.
 ///
-/// This function provides fine-grained control over the simulation through [`SimulatorArgs`],
-/// including Maybenot framework parameters, output filtering, and termination conditions.
+/// This function provides fine-grained control over the simulation through
+/// [`SimulatorArgs`], including Maybenot framework parameters, output
+/// filtering, and termination conditions.
 ///
 /// # Arguments
 ///
@@ -453,13 +471,15 @@ impl SimulatorArgs {
 ///
 /// # Returns
 ///
-/// A `Vec<SimulEvent>` containing the simulated network trace with applied defenses.
+/// A `Vec<SimEvent>` containing the simulated network trace with applied
+/// defenses.
 ///
 /// # Key Configuration Options
 ///
 /// - **Padding/Blocking limits**: Control maximum resource usage for defenses
 /// - **Output filtering**: Return only client events or network activity  
-/// - **Termination conditions**: Stop by trace length, iteration count, or traffic completion
+/// - **Termination conditions**: Stop by trace length, iteration count, or
+///   traffic completion
 /// - **RNG control**: Use deterministic seeding for reproducible results
 /// - **Integration delays**: Model real-world implementation latencies
 ///
@@ -467,15 +487,15 @@ impl SimulatorArgs {
 ///
 /// - [`sim`] for a simpler interface with common defaults
 /// - [`SimulatorArgs`] for detailed parameter descriptions
-pub fn simul_advanced(
+pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    link_state: &mut NetworkLinkState,
+    si: &SimInfo,
+    sq: &mut SimQueue,
     args: &SimulatorArgs,
-) -> Vec<SimulEvent> {
+) -> Vec<SimEvent> {
     // the resulting simulated trace
     let expected_trace_len = if args.max_trace_length > 0 {
         args.max_trace_length
@@ -483,7 +503,7 @@ pub fn simul_advanced(
         // a rough estimate of the number of events in the trace
         sq.len() * 5
     };
-    let mut trace: Vec<SimulEvent> = Vec::with_capacity(expected_trace_len);
+    let mut trace: Vec<SimEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
     let mut current_time = si.earliest_event_instant;
@@ -499,16 +519,8 @@ pub fn simul_advanced(
         );
     }
 
-    let client_mbn = if topology.has_mb {
-        Some(topology.get_mbn_client())
-    } else {
-        None
-    };
-    let relay_mbn = if topology.has_mb {
-        Some(topology.get_mbn_server())
-    } else {
-        None
-    };
+    let client_mbn = topology.has_mb.then(|| topology.get_mbn_client());
+    let relay_mbn = topology.has_mb.then(|| topology.get_mbn_server());
 
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
@@ -532,52 +544,52 @@ pub fn simul_advanced(
             _ => {}
         }
 
-        if let Some(blocking_until) = client_mbn.unwrap().get_sim_state().borrow().blocking_until {
-            debug!(
-                "sim(): client is blocked until time {:#?}",
-                blocking_until.duration_since(si.zero_instant)
-            );
+        if let Some(client_mbn) = client_mbn {
+            if let Some(blocking_until) = client_mbn.get_sim_state().borrow().blocking_until {
+                debug!(
+                    "sim(): client is blocked until time {:#?}",
+                    blocking_until.duration_since(si.zero_instant)
+                );
+            }
         }
-        if let Some(blocking_until) = relay_mbn.unwrap().get_sim_state().borrow().blocking_until {
-            debug!(
-                "sim(): server is blocked until time {:#?}",
-                blocking_until.duration_since(si.zero_instant)
-            );
+        if let Some(relay_mbn) = relay_mbn {
+            if let Some(blocking_until) = relay_mbn.get_sim_state().borrow().blocking_until {
+                debug!(
+                    "sim(): server is blocked until time {:#?}",
+                    blocking_until.duration_since(si.zero_instant)
+                );
+            }
         }
 
         debug!("sim(): next event: {}", next.display_relative(si));
 
         // Handle event at node
-        topology.nodes[next.node_id].handle_event(&next, topology, linkstate, si, sq);
+        topology.nodes[next.node_id].handle_event(&next, topology, link_state, si, sq);
 
         // Call trigger_update on MBN nodes after handling the event
         if topology.has_mb {
             if next.node_id == topology.mb_client {
-                debug!("sim(): trigger @client framework {:?}", next.event);
-                let reporting_delay = client_mbn
-                    .unwrap()
-                    .get_sim_state()
-                    .borrow()
-                    .reporting_delay();
-                client_mbn.unwrap().trigger_update(
-                    &next,
-                    &(current_time + reporting_delay),
-                    sq,
-                    topology,
-                );
+                if let Some(client_mbn) = client_mbn {
+                    debug!("sim(): trigger @client framework {:?}", next.event);
+                    let reporting_delay = client_mbn.get_sim_state().borrow().reporting_delay();
+                    client_mbn.trigger_update(
+                        &next,
+                        &(current_time + reporting_delay),
+                        sq,
+                        topology,
+                    );
+                }
             } else if next.node_id == topology.mb_server {
-                debug!("sim(): trigger @server framework {:?}", next.event);
-                let reporting_delay = relay_mbn
-                    .unwrap()
-                    .get_sim_state()
-                    .borrow()
-                    .reporting_delay();
-                relay_mbn.unwrap().trigger_update(
-                    &next,
-                    &(current_time + reporting_delay),
-                    sq,
-                    topology,
-                );
+                if let Some(relay_mbn) = relay_mbn {
+                    debug!("sim(): trigger @server framework {:?}", next.event);
+                    let reporting_delay = relay_mbn.get_sim_state().borrow().reporting_delay();
+                    relay_mbn.trigger_update(
+                        &next,
+                        &(current_time + reporting_delay),
+                        sq,
+                        topology,
+                    );
+                }
             }
         }
 
@@ -598,8 +610,6 @@ pub fn simul_advanced(
             );
             break;
         }
-
-        // check if we should stop
         sim_iterations += 1;
         if args.max_sim_iterations > 0 && sim_iterations >= args.max_sim_iterations {
             debug!(
@@ -608,8 +618,6 @@ pub fn simul_advanced(
             );
             break;
         }
-
-        // check if we should stop after all normal packets have been processed
         if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets(topology) {
             debug!("sim(): we done, all normal packets processed");
             debug!(" Heap: {:?}", sq.heap);
@@ -620,21 +628,17 @@ pub fn simul_advanced(
         debug!("#########################################################");
     }
 
-    // No need to sort the trace by time, as the events are already sorted
-    // by the pick_next function which picks based on time.
-    //trace.sort_by(|a, b| a.time.cmp(&b.time));
-
     trace
 }
 
 // Selects the next event to process from multiple concurrent sources.
 // This is the core scheduling logic that determines simulation event ordering.
 fn pick_next(
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    si: &SimInfo,
+    sq: &mut SimQueue,
     topology: &NetworkTopology,
     current_time: Instant,
-) -> Option<SimulEvent> {
+) -> Option<SimEvent> {
     if topology.has_mb {
         // Complex MBN scheduling: must consider queue, timers, actions, and blocking
         pick_next_mbn(si, sq, topology, current_time)
@@ -652,11 +656,11 @@ fn pick_next(
 // 3. Defense machine internal timers
 // 4. Blocking period expiry events
 fn pick_next_mbn(
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    si: &SimInfo,
+    sq: &mut SimQueue,
     topology: &NetworkTopology,
     current_time: Instant,
-) -> Option<SimulEvent> {
+) -> Option<SimEvent> {
     let client_mbn = topology.get_mbn_client();
     let relay_mbn = topology.get_mbn_server();
 
@@ -798,7 +802,7 @@ fn pick_next_mbn(
             relay_mbn.get_sim_state().borrow_mut().blocking_until = None;
         }
 
-        let e = SimulEvent {
+        let e = SimEvent {
             event: TriggerEvent::BlockingEnd,
             time: current_time + min_blocking,
             packet_id: usize::MAX,

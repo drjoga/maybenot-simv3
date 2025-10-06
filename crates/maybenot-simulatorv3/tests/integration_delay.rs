@@ -9,9 +9,9 @@ use maybenot::{
     state::{State, Trans},
 };
 use maybenot_simulatorv3::{
-    SimulEvent, SimulatorArgs,
+    SimEvent, SimulatorArgs,
     integration::{BinDist, Integration},
-    load_topology_from_str, set_toml_propagation_us, simul_advanced,
+    load_topology_from_str, set_toml_propagation_us, sim_advanced,
     traffic_parse::parse_trace,
 };
 
@@ -48,7 +48,7 @@ fn run_sim(
     client: Option<&Integration>,
     server: Option<&Integration>,
     only_client: bool,
-) -> Vec<SimulEvent> {
+) -> Vec<SimEvent> {
     // a simple machine that pads once after 5ms
     let m = get_test_machine();
 
@@ -80,7 +80,7 @@ fn run_sim(
     args.server_integration = server.cloned();
     args.only_client_events = only_client;
 
-    let mut trace = simul_advanced(&[m], &[], &topology, &mut linkstate, &si, &mut sq, &args);
+    let mut trace = sim_advanced(&[m], &[], &topology, &mut linkstate, &si, &mut sq, &args);
 
     if !only_client {
         trace.retain(|e| e.node_id == topology.get_mbn_server().node_id());

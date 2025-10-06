@@ -1,8 +1,8 @@
 use crate::integration::Integration;
 use crate::mbn_helpers::{mbn_do_internal_timer, mbn_do_scheduled_action, mbn_trigger_update};
 use crate::nodes::check_dependent_packets;
-use crate::topology::{NetworkLinkstate, NetworkTopology};
-use crate::{SimulEvent, SimulInfo, SimulQueue};
+use crate::topology::{NetworkLinkState, NetworkTopology};
+use crate::{SimEvent, SimInfo, SimQueue};
 use log::debug;
 use maybenot::{Framework, Machine, TriggerAction, TriggerEvent};
 use std::cell::RefCell;
@@ -142,11 +142,7 @@ where
 // 2. Queued for later (blocked, non-bypassable)
 // 3. Bypassed through blocking (blocked but bypassable)
 // 4. Replaced with queued normal traffic (padding with replace=true)
-pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
-    node: &T,
-    s_event: SimulEvent,
-    sq: &mut SimulQueue,
-) {
+pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(node: &T, s_event: SimEvent, sq: &mut SimQueue) {
     let sim_state = node.get_sim_state().borrow();
     let blocking_bypassable = sim_state.blocking_bypassable;
     let blocking_until = sim_state.blocking_until;
@@ -216,7 +212,7 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(
 // 2. Type-ordered: All normal packets first, then all padding packets
 pub fn mbn_release_blocked_events<T: MBNNode>(
     node: &T,
-    sq: &mut SimulQueue,
+    sq: &mut SimQueue,
     current_time: Instant,
     drain_blocked_by_time: bool,
 ) {
@@ -292,19 +288,19 @@ pub trait MBNNode {
     fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>>;
     fn node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
-    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>>;
-    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>>;
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>>;
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimEvent>>;
 
     // Methods needed for simulation
     fn trigger_update(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         current_time: &Instant,
-        sq: &mut SimulQueue,
+        sq: &mut SimQueue,
         topology: &NetworkTopology,
     );
-    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent>;
-    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent>;
+    fn do_internal_timer(&self, target: Instant) -> Option<SimEvent>;
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent>;
 }
 
 #[derive(Debug, Clone)]
@@ -312,8 +308,8 @@ pub struct ClientMBN {
     pub id: usize,
     pub coreside_out: usize,
     pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
-    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
-    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
+    pub queue_padding: RefCell<VecDeque<SimEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimEvent>>,
 }
 
 impl MBNNode for ClientMBN {
@@ -329,29 +325,29 @@ impl MBNNode for ClientMBN {
         self.coreside_out
     }
 
-    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_padding
     }
 
-    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_normal
     }
 
     fn trigger_update(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         current_time: &Instant,
-        sq: &mut SimulQueue,
+        sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
         mbn_trigger_update(self, s_event, current_time, sq, topology)
     }
 
-    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_internal_timer(self, target)
     }
 
-    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_scheduled_action(self, target)
     }
 }
@@ -389,15 +385,15 @@ impl ClientMBN {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::NormalSent => {
-                let forward_s_event = SimulEvent {
+                let forward_s_event = SimEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -415,7 +411,7 @@ impl ClientMBN {
             }
 
             TriggerEvent::PaddingSent { .. } => {
-                let forward_s_event = SimulEvent {
+                let forward_s_event = SimEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -441,7 +437,7 @@ impl ClientMBN {
                     true => TriggerEvent::PaddingRecv,
                     false => TriggerEvent::NormalRecv,
                 };
-                let forward_s_event = SimulEvent {
+                let forward_s_event = SimEvent {
                     event: new_t_event,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -485,8 +481,8 @@ pub struct RelayMBN {
     pub edgeside_in: usize,
     pub edgeside_out: usize,
     pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
-    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
-    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
+    pub queue_padding: RefCell<VecDeque<SimEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimEvent>>,
 }
 
 impl MBNNode for RelayMBN {
@@ -502,29 +498,29 @@ impl MBNNode for RelayMBN {
         self.edgeside_out
     }
 
-    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_padding
     }
 
-    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_normal
     }
 
     fn trigger_update(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         current_time: &Instant,
-        sq: &mut SimulQueue,
+        sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
         mbn_trigger_update(self, s_event, current_time, sq, topology)
     }
 
-    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_internal_timer(self, target)
     }
 
-    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_scheduled_action(self, target)
     }
 }
@@ -566,11 +562,11 @@ impl RelayMBN {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::TunnelRecv => {
@@ -578,7 +574,7 @@ impl RelayMBN {
                     true => TriggerEvent::PaddingRecv,
                     false => TriggerEvent::NormalRecv,
                 };
-                let forward_event = SimulEvent {
+                let forward_event = SimEvent {
                     event: new_event,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -603,7 +599,7 @@ impl RelayMBN {
                         s_event, topology, linkstate, si, sq,
                     );
                 } else if outlink == self.edgeside_out {
-                    let new_s_event = SimulEvent {
+                    let new_s_event = SimEvent {
                         event: TriggerEvent::NormalSent,
                         time: s_event.time,
                         packet_id: s_event.packet_id,
@@ -631,7 +627,7 @@ impl RelayMBN {
                         s_event, topology, linkstate, si, sq,
                     );
                 } else if s_event.link_id == self.edgeside_out {
-                    let forward_s_event = SimulEvent {
+                    let forward_s_event = SimEvent {
                         event: TriggerEvent::TunnelSent,
                         time: s_event.time,
                         packet_id: s_event.packet_id,
@@ -655,7 +651,7 @@ impl RelayMBN {
             }
 
             TriggerEvent::PaddingSent { .. } => {
-                let forward_s_event = SimulEvent {
+                let forward_s_event = SimEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -696,8 +692,8 @@ pub struct RelayMBNtserver {
     pub edgeside_in: usize,
     pub edgeside_out: usize,
     pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
-    pub queue_padding: RefCell<VecDeque<SimulEvent>>,
-    pub queue_normal: RefCell<VecDeque<SimulEvent>>,
+    pub queue_padding: RefCell<VecDeque<SimEvent>>,
+    pub queue_normal: RefCell<VecDeque<SimEvent>>,
     pub ts_prop_us: Duration,
 }
 
@@ -714,29 +710,29 @@ impl MBNNode for RelayMBNtserver {
         self.edgeside_out
     }
 
-    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_padding
     }
 
-    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimulEvent>> {
+    fn get_queue_normal(&self) -> &RefCell<VecDeque<SimEvent>> {
         &self.queue_normal
     }
 
     fn trigger_update(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         current_time: &Instant,
-        sq: &mut SimulQueue,
+        sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
         mbn_trigger_update(self, s_event, current_time, sq, topology)
     }
 
-    fn do_internal_timer(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_internal_timer(self, target)
     }
 
-    fn do_scheduled_action(&self, target: Instant) -> Option<SimulEvent> {
+    fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
         mbn_do_scheduled_action(self, target)
     }
 }
@@ -778,11 +774,11 @@ impl RelayMBNtserver {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::TunnelRecv => {
@@ -790,7 +786,7 @@ impl RelayMBNtserver {
                     true => TriggerEvent::PaddingRecv,
                     false => TriggerEvent::NormalRecv,
                 };
-                let forward_event = SimulEvent {
+                let forward_event = SimEvent {
                     event: new_event,
                     time: s_event.time,
                     packet_id: s_event.packet_id,
@@ -826,7 +822,7 @@ impl RelayMBNtserver {
             TriggerEvent::NormalSent => {
                 // Only handle edgeside NormalSent - convert to TunnelSent with blocking logic
                 if s_event.link_id == self.edgeside_out {
-                    let forward_s_event = SimulEvent {
+                    let forward_s_event = SimEvent {
                         event: TriggerEvent::TunnelSent,
                         time: s_event.time,
                         packet_id: s_event.packet_id,
@@ -846,7 +842,7 @@ impl RelayMBNtserver {
             }
 
             TriggerEvent::PaddingSent { .. } => {
-                let forward_s_event = SimulEvent {
+                let forward_s_event = SimEvent {
                     event: TriggerEvent::TunnelSent,
                     time: s_event.time,
                     packet_id: s_event.packet_id,

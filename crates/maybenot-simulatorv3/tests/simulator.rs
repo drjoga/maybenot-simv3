@@ -29,7 +29,7 @@ fn test_no_machine() {
         0,
         true,
         false,
-    ); //assert!(1==0,"dummyt");
+    );
     // server
     run_test_sim(
         input,

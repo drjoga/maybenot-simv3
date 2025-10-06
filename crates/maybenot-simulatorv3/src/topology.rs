@@ -4,17 +4,17 @@ use crate::nodes::NodeType;
 use crate::topology_parse::{NetworkConfig, build_networktopology_from_config};
 
 #[derive(Debug, Clone)]
-pub struct NetworkLinkstate {
+pub struct NetworkLinkState {
     pub links: Vec<LinkType>,
 }
 
-impl Default for NetworkLinkstate {
+impl Default for NetworkLinkState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl NetworkLinkstate {
+impl NetworkLinkState {
     pub fn new() -> Self {
         Self { links: Vec::new() }
     }

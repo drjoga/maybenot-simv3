@@ -1,7 +1,7 @@
 use crate::mbn_nodes::MBNNode;
 use crate::mbn_nodes::{MbnState, ScheduledAction};
 use crate::topology::NetworkTopology;
-use crate::{SimulEvent, SimulQueue, SimulatorArgs};
+use crate::{SimEvent, SimQueue, SimulatorArgs};
 use log::debug;
 use maybenot::{Machine, MachineId, Timer, TriggerAction, TriggerEvent};
 use std::time::{Duration, Instant};
@@ -101,7 +101,9 @@ pub fn initialize_mbn_sim_states(
         args.max_blocking_frac_server,
         args.drain_blocked_by_time,
         args.server_integration.clone(),
-        args.insecure_rng_seed,
+        // if we have an insecure seed, we use the next number in the sequence
+        // to avoid the same seed for both client and server
+        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
     *relay_mbn.get_sim_state().borrow_mut() = new_state;
 }
@@ -109,9 +111,9 @@ pub fn initialize_mbn_sim_states(
 // Generic helper functions for MBN operations
 pub fn mbn_trigger_update<T: MBNNode>(
     node: &T,
-    s_event: &SimulEvent,
+    s_event: &SimEvent,
     current_time: &Instant,
-    sq: &mut SimulQueue,
+    sq: &mut SimQueue,
     _topology: &NetworkTopology,
 ) {
     let node_id = node.node_id();
@@ -201,7 +203,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
                     state.scheduled_internal_timer[machine.into_raw()] =
                         Some(*current_time + duration);
                     // TimerBegin event
-                    sq.push(SimulEvent {
+                    sq.push(SimEvent {
                         event: TriggerEvent::TimerBegin { machine },
                         time: *current_time,
                         packet_id: usize::MAX,
@@ -220,7 +222,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
     }
 }
 
-pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<SimulEvent> {
+pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut machine: Option<MachineId> = None;
 
@@ -234,7 +236,7 @@ pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<Si
         }
     }
 
-    machine.map(|machine| SimulEvent {
+    machine.map(|machine| SimEvent {
         event: TriggerEvent::TimerEnd { machine },
         time: target,
         packet_id: usize::MAX,
@@ -249,7 +251,7 @@ pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<Si
     })
 }
 
-pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<SimulEvent> {
+pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut a: Option<ScheduledAction> = None;
 
@@ -277,7 +279,7 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<
             bypass,
             replace,
             machine,
-        } => Some(SimulEvent {
+        } => Some(SimEvent {
             event: TriggerEvent::PaddingSent { machine },
             time: a.time + state.action_delay(),
             packet_id: usize::MAX,
@@ -307,7 +309,7 @@ pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<
             }
             let event_bypass = state.blocking_bypassable;
 
-            Some(SimulEvent {
+            Some(SimEvent {
                 event: TriggerEvent::BlockingBegin { machine },
                 time: a.time + state.action_delay() + state.reporting_delay(),
                 packet_id: usize::MAX,

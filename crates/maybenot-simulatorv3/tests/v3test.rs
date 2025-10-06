@@ -1,5 +1,5 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{SimulatorArgs, simul_advanced};
+use maybenot_simulatorv3::{SimulatorArgs, sim_advanced};
 use maybenot_simulatorv3::{
     load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, sim,
 };
@@ -261,7 +261,7 @@ fn v3_multi_run_like() {
                     let mut args = SimulatorArgs::new(*sim_event_count, true);
                     args.only_client_events = true;
                     args.continue_after_all_normal_packets_processed = false;
-                    let trace = simul_advanced(
+                    let trace = sim_advanced(
                         &[],
                         &[],
                         &topology,

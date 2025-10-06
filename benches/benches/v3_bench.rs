@@ -4,7 +4,7 @@ use std::time::Duration;
 use maybenot_simulatorv3::topology_parse::build_networktopology_from_config;
 use maybenot_simulatorv3::{
     SimulatorArgs, load_topology_from_file, load_topology_from_str, modify_toml, parse_trace,
-    simul_advanced,
+    sim_advanced,
 };
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
@@ -57,7 +57,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
             let mut args = SimulatorArgs::new(*sim_event_count, true);
             args.only_client_events = true;
             args.continue_after_all_normal_packets_processed = false;
-            let trace = simul_advanced(
+            let trace = sim_advanced(
                 &[],
                 &[],
                 &topology,
@@ -106,7 +106,7 @@ fn v3_multi_run(c: &mut Criterion) {
                         let mut args = SimulatorArgs::new(*sim_event_count, true);
                         args.only_client_events = true;
                         args.continue_after_all_normal_packets_processed = false;
-                        let trace = simul_advanced(
+                        let trace = sim_advanced(
                             &[],
                             &[],
                             &topology,
@@ -163,7 +163,7 @@ fn v3_multi_ratio3(c: &mut Criterion) {
                         let mut args = SimulatorArgs::new(*sim_event_count, true);
                         args.only_client_events = true;
                         args.continue_after_all_normal_packets_processed = false;
-                        out_trace = simul_advanced(
+                        out_trace = sim_advanced(
                             &[ratio3_machine()],
                             &[],
                             &topology,
@@ -228,7 +228,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                         (0..100).into_par_iter().for_each(|_| {
                             let thread_topology =
                                 build_networktopology_from_config(&network_config).unwrap();
-                            black_box(simul_advanced(
+                            black_box(sim_advanced(
                                 &[],
                                 &[],
                                 &thread_topology,
@@ -287,7 +287,7 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
                         (0..100).into_par_iter().for_each(|_| {
                             let thread_topology =
                                 build_networktopology_from_config(&network_config).unwrap();
-                            black_box(simul_advanced(
+                            black_box(sim_advanced(
                                 &[],
                                 &[],
                                 &thread_topology,

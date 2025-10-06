@@ -2,7 +2,7 @@ use crate::links::LinkType;
 use crate::linktrace::load_linktrace_from_file;
 use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
 use crate::nodes::NodeType;
-use crate::topology::{NetworkLinkstate, NetworkTopology};
+use crate::topology::{NetworkLinkState, NetworkTopology};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -94,7 +94,7 @@ pub struct ForwardingRule {
 /// - [`build_topology_from_config`] for programmatic topology construction
 pub fn load_topology_from_file<P: AsRef<Path>>(
     path: P,
-) -> Result<(NetworkTopology, NetworkLinkstate), String> {
+) -> Result<(NetworkTopology, NetworkLinkState), String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Network error: Failed to read file: {}", e))?;
 
@@ -125,7 +125,7 @@ pub fn load_topology_from_file<P: AsRef<Path>>(
 ///
 pub fn load_topology_from_str(
     toml_str: &str,
-) -> Result<(NetworkTopology, NetworkLinkstate), String> {
+) -> Result<(NetworkTopology, NetworkLinkState), String> {
     let config: NetworkConfig = toml::from_str(toml_str)
         .map_err(|e| format!("Network error: Failed to parse TOML: {}", e))?;
 
@@ -135,7 +135,7 @@ pub fn load_topology_from_str(
 /// Create network from parsed configuration
 pub fn build_topology_from_config(
     config: NetworkConfig,
-) -> Result<(NetworkTopology, NetworkLinkstate), String> {
+) -> Result<(NetworkTopology, NetworkLinkState), String> {
     Ok((
         build_networktopology_from_config(&config)?,
         build_networklinkstate_from_config(&config)?,
@@ -294,8 +294,8 @@ pub fn build_networktopology_from_config(
 /// Create network from parsed configuration
 pub fn build_networklinkstate_from_config(
     config: &NetworkConfig,
-) -> Result<NetworkLinkstate, String> {
-    let mut linkstate = NetworkLinkstate::new();
+) -> Result<NetworkLinkState, String> {
+    let mut linkstate = NetworkLinkState::new();
 
     // Create links
     for link_config in &config.links {

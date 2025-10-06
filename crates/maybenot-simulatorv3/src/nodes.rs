@@ -1,7 +1,7 @@
 use crate::links::LinkType;
 use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
-use crate::topology::{NetworkLinkstate, NetworkTopology};
-use crate::{SimulEvent, SimulInfo, SimulQueue};
+use crate::topology::{NetworkLinkState, NetworkTopology};
+use crate::{SimEvent, SimInfo, SimQueue};
 use log::debug;
 use maybenot::TriggerEvent;
 use std::time::Duration;
@@ -20,11 +20,11 @@ pub enum NodeType {
 impl NodeType {
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match self {
             NodeType::ClientBasic(node) => node.handle_event(s_event, topology, linkstate, si, sq),
@@ -101,9 +101,9 @@ impl NodeType {
 }
 
 pub fn check_dependent_packets(
-    s_event: &SimulEvent,
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    s_event: &SimEvent,
+    si: &SimInfo,
+    sq: &mut SimQueue,
     outgoing_link: &LinkType,
     ts_to_relay_extra_us: u64,
 ) {
@@ -120,7 +120,7 @@ pub fn check_dependent_packets(
             let additional_duration =
                 Duration::from_nanos(*delta as u64 + ts_to_relay_extra_us * 1000);
 
-            sq.push(SimulEvent {
+            sq.push(SimEvent {
                 event: TriggerEvent::NormalSent,
                 time: s_event.time + additional_duration,
                 packet_id: *new_pktidx,
@@ -137,12 +137,12 @@ pub fn check_dependent_packets(
     }
 }
 
-pub fn make_network_receive_from_sent(
-    s_event: &SimulEvent,
+pub(crate) fn make_network_receive_from_sent(
+    s_event: &SimEvent,
     _topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    linkstate: &mut NetworkLinkState,
+    si: &SimInfo,
+    sq: &mut SimQueue,
 ) {
     let new_t_event = match s_event.event {
         TriggerEvent::NormalSent => TriggerEvent::NormalRecv,
@@ -179,7 +179,7 @@ pub fn make_network_receive_from_sent(
     // Now we can safely do the mutable borrow for sampling
     let transmission_delay = linkstate.links[link_id].sample(current_duration);
 
-    let recv_s_event = SimulEvent {
+    let recv_s_event = SimEvent {
         event: new_t_event,
         time: s_event.time + transmission_delay + prop_us,
         packet_id: s_event.packet_id,
@@ -195,12 +195,12 @@ pub fn make_network_receive_from_sent(
     sq.push(recv_s_event);
 }
 
-pub fn forward_network_receive_from_receive(
-    s_event: &SimulEvent,
+pub(crate) fn forward_network_receive_from_receive(
+    s_event: &SimEvent,
     topology: &NetworkTopology,
-    linkstate: &mut NetworkLinkstate,
-    si: &SimulInfo,
-    sq: &mut SimulQueue,
+    linkstate: &mut NetworkLinkState,
+    si: &SimInfo,
+    sq: &mut SimQueue,
 ) {
     let new_t_event = match s_event.event {
         TriggerEvent::NormalRecv => TriggerEvent::NormalRecv,
@@ -238,7 +238,7 @@ pub fn forward_network_receive_from_receive(
         s_event.node_id, outgoing_link_id, to_node
     );
 
-    let recv_s_event = SimulEvent {
+    let recv_s_event = SimEvent {
         event: new_t_event,
         time: s_event.time + transmission_delay + prop_us,
         packet_id: s_event.packet_id,
@@ -267,11 +267,11 @@ impl ClientBasic {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::NormalSent => {
@@ -310,11 +310,11 @@ impl RouterBasic {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::NormalRecv => {
@@ -346,11 +346,11 @@ impl TrafficServerBasic {
 
     pub fn handle_event(
         &self,
-        s_event: &SimulEvent,
+        s_event: &SimEvent,
         topology: &NetworkTopology,
-        linkstate: &mut NetworkLinkstate,
-        si: &SimulInfo,
-        sq: &mut SimulQueue,
+        linkstate: &mut NetworkLinkState,
+        si: &SimInfo,
+        sq: &mut SimQueue,
     ) {
         match &s_event.event {
             TriggerEvent::NormalRecv => {
