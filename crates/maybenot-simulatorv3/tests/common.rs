@@ -22,9 +22,9 @@ pub fn run_test_sim(
     as_ms: bool,
 ) {
     let config_files = [
-        "tests/maybenot_baseline_test.toml",
-        "tests/maybenot_fast_test.toml",
-        "tests/maybenot_complex_test.toml",
+        "tests/cfg/maybenot_baseline_test.toml",
+        "tests/cfg/maybenot_fast_test.toml",
+        "tests/cfg/maybenot_complex_test.toml",
     ];
 
     for config_file in config_files.iter() {

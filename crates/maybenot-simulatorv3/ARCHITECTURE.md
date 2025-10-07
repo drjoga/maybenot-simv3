@@ -525,5 +525,5 @@ Shows event selection, framework triggers, and state transitions.
 ## Further Reading
 
 - **Core Maybenot**: See `crates/maybenot/README.md` for framework details
-- **TOML configs**: Example files in crate root (`basic_test.toml`, `maybenot_test.toml`)
+- **TOML configs**: Example files in `tests/cfg/` directory
 - **Traffic traces**: See `traffic_parse::traffic_trace_prepare()` for dependency analysis algorithm

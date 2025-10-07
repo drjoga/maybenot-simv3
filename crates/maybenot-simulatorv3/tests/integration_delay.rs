@@ -59,7 +59,7 @@ fn run_sim(
         56000000,s,100
         100000000,s,100";
 
-    let config_file = "tests/maybenot_baseline_test.toml";
+    let config_file = "tests/cfg/maybenot_baseline_test.toml";
     let delay = Duration::from_millis(5);
 
     //Read in config path to toml_str
