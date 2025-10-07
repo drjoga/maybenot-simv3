@@ -309,9 +309,30 @@ pub trait MaybenotNode {
     fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent>;
 }
 
+/// A Maybenot-enabled client node that originates traffic with defense
+/// mechanisms.
+///
+/// # Network Topology Directionality
+///
+/// In the simulator, nodes have directional links defined by their position in
+/// the network:
+/// - **coreside**: Links toward the destination (core of the network, away from
+///   edge)
+/// - **edgeside**: Links toward the client (edge of the network, back toward
+///   origin)
+///
+/// Client nodes originate traffic and send defense actions (padding, blocking)
+/// toward the destination, so they only have `coreside_out`.
+///
+/// # Defense Action Link
+///
+/// For ClientMaybenot, all Maybenot defense actions (padding, blocking) are
+/// sent on the **coreside_out** link. This is returned by
+/// `get_action_link_id()`.
 #[derive(Debug, Clone)]
 pub struct ClientMaybenot {
     pub id: usize,
+    /// Link ID for outgoing traffic and defense actions toward the destination (forward direction)
     pub coreside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
@@ -485,11 +506,41 @@ impl ClientMaybenot {
     }
 }
 
+/// A Maybenot-enabled relay node that forwards traffic bidirectionally with
+/// defense mechanisms.
+///
+/// # Network Topology Directionality
+///
+/// Relay nodes sit in the middle of the network path and forward traffic
+/// bidirectionally:
+/// - **coreside_out**: Forwards traffic toward the destination (away from
+///   client)
+/// - **edgeside_in**: Receives traffic from coreside (from destination
+///   direction)
+/// - **edgeside_out**: Forwards traffic back toward the client (return path)
+///
+/// Traffic flow through a relay:
+/// ```text
+/// Client --> Relay --[coreside_out]--> Destination
+///            Relay <-[edgeside_in]---- Destination
+/// Client <-[edgeside_out]-- Relay <--- Destination
+/// ```
+///
+/// # Defense Action Link
+///
+/// For RelayMaybenot, all Maybenot defense actions (padding, blocking) are sent
+/// on the **edgeside_out** link (back toward the client). This is returned by
+/// `get_action_link_id()`.
+///
+/// This is different from ClientMaybenot, which uses coreside_out for actions.
 #[derive(Debug, Clone)]
 pub struct RelayMaybenot {
     pub id: usize,
+    /// Link ID for forwarding traffic toward the destination (forward direction)
     pub coreside_out: usize,
+    /// Link ID for receiving traffic from the coreside (from destination direction)
     pub edgeside_in: usize,
+    /// Link ID for forwarding traffic and defense actions back toward the client (return direction)
     pub edgeside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
@@ -702,14 +753,46 @@ impl RelayMaybenot {
     }
 }
 
+/// A Maybenot-enabled relay+destination combined node that receives traffic and
+/// responds with defenses.
+///
+/// # Network Topology Directionality
+///
+/// This node type combines relay and destination functionality. It sits at the
+/// end of the network path (core side) and only handles traffic in the return
+/// direction:
+/// - **edgeside_in**: Receives traffic from the coreside (from prior hops)
+/// - **edgeside_out**: Sends response traffic and defense actions back toward
+///   the client
+///
+/// Traffic flow for a relay-destination:
+/// ```text
+/// Client --> ... --> RelayMaybenotDestination (receives on edgeside_in)
+/// Client <-[edgeside_out]-- RelayMaybenotDestination (sends response + defense)
+/// ```
+///
+/// # Defense Action Link
+///
+/// For RelayMaybenotDestination, all Maybenot defense actions (padding,
+/// blocking) are sent on the **edgeside_out** link (back toward the client).
+/// This is returned by `get_action_link_id()`.
+///
+/// # Implementation Note
+///
+/// Unlike DestinationBasic, this node includes an internal
+/// `destination_prop_us` delay to simulate processing time at the destination
+/// before responding.
 #[derive(Debug, Clone)]
 pub struct RelayMaybenotDestination {
     pub id: usize,
+    /// Link ID for receiving traffic from prior network hops (forward direction)
     pub edgeside_in: usize,
+    /// Link ID for sending response traffic and defense actions back toward the client (return direction)
     pub edgeside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
     pub queue_normal: RefCell<VecDeque<SimEvent>>,
+    /// Propagation delay simulating destination processing time
     pub destination_prop_us: Duration,
 }
 

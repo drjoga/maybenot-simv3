@@ -260,9 +260,29 @@ pub(crate) fn forward_network_receive_from_receive(
     sq.push(recv_s_event);
 }
 
+/// A basic client node that originates traffic toward a destination.
+///
+/// # Network Topology Directionality
+///
+/// In the simulator, nodes have directional links defined by their position in
+/// the network:
+/// - **coreside**: Links toward the destination (core of the network, away from
+///   edge)
+/// - **edgeside**: Links toward the client (edge of the network, back toward
+///   origin)
+///
+/// Traffic flow:
+/// ```text
+/// Client --[coreside]--> ... --[coreside]--> Destination
+/// Client <-[edgeside]--- ... <-[edgeside]--- Destination
+/// ```
+///
+/// Client nodes only send traffic toward the destination, so they only have
+/// `coreside_out`.
 #[derive(Debug, Copy, Clone)]
 pub struct ClientBasic {
     pub id: usize,
+    /// Link ID for outgoing traffic toward the destination (forward direction)
     pub coreside_out: usize,
 }
 
@@ -296,11 +316,36 @@ impl ClientBasic {
     }
 }
 
+/// A basic router node that forwards traffic in both directions.
+///
+/// # Network Topology Directionality
+///
+/// Router nodes sit in the middle of the network path and forward traffic
+/// bidirectionally:
+/// - **coreside_out**: Forwards traffic toward the destination (away from
+///   client)
+/// - **edgeside_in**: Receives traffic from coreside (from destination side)
+/// - **edgeside_out**: Forwards traffic back toward the client (return path)
+///
+/// Traffic flow through a router:
+/// ```text
+/// Client --> Router --[coreside_out]--> Destination
+///            Router <-[edgeside_in]---- Destination
+/// Client <-[edgeside_out]-- Router <--- Destination
+/// ```
+///
+/// Example: In a path Client -> WLAN -> Relay -> Destination, the WLAN node is
+/// a router.
 #[derive(Debug, Copy, Clone)]
 pub struct RouterBasic {
     pub id: usize,
+    /// Link ID for forwarding traffic toward the destination (forward
+    /// direction)
     pub coreside_out: usize,
+    /// Link ID for receiving traffic from the coreside (from destination
+    /// direction)
     pub edgeside_in: usize,
+    /// Link ID for forwarding traffic back toward the client (return direction)
     pub edgeside_out: usize,
 }
 
@@ -339,9 +384,27 @@ impl RouterBasic {
     }
 }
 
+/// A basic destination node that receives traffic and sends responses.
+///
+/// # Network Topology Directionality
+///
+/// Destination nodes are at the end of the network path (core side) and only
+/// respond to received traffic by sending back toward the client:
+/// - **edgeside_out**: Sends response traffic back toward the client (return
+///   path)
+///
+/// Traffic flow for a destination:
+/// ```text
+/// Client --> ... --> Destination (receives on coreside, no explicit link needed)
+/// Client <-[edgeside_out]-- Destination (sends response)
+/// ```
+///
+/// Destination nodes only send back toward the client, so they only have
+/// `edgeside_out`.
 #[derive(Debug, Copy, Clone)]
 pub struct DestinationBasic {
     pub id: usize,
+    /// Link ID for sending response traffic back toward the client (return direction)
     pub edgeside_out: usize,
 }
 

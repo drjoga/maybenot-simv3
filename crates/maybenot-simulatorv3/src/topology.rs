@@ -1,7 +1,7 @@
 use crate::links::LinkType;
 use crate::maybenot_nodes::MaybenotNode;
 use crate::nodes::NodeType;
-use crate::topology_parse::{NetworkConfig, build_networktopology_from_config};
+use crate::topology_parse::{NetworkConfig, build_network_topology_from_config};
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkState {
@@ -69,7 +69,7 @@ impl NetworkTopology {
     }
 
     pub fn new_from_config(&self) -> Self {
-        build_networktopology_from_config(&self.network_config)
+        build_network_topology_from_config(&self.network_config)
             .expect("Failed to build network topology from config")
     }
 

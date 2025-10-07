@@ -137,13 +137,13 @@ pub fn build_topology_from_config(
     config: NetworkConfig,
 ) -> Result<(NetworkTopology, NetworkLinkState), String> {
     Ok((
-        build_networktopology_from_config(&config)?,
-        build_networklinkstate_from_config(&config)?,
+        build_network_topology_from_config(&config)?,
+        build_network_linkstate_from_config(&config)?,
     ))
 }
 
 /// Create network from parsed configuration
-pub fn build_networktopology_from_config(
+pub fn build_network_topology_from_config(
     config: &NetworkConfig,
 ) -> Result<NetworkTopology, String> {
     let mut topology = NetworkTopology::new(config.clone());
@@ -292,7 +292,7 @@ pub fn build_networktopology_from_config(
 }
 
 /// Create network from parsed configuration
-pub fn build_networklinkstate_from_config(
+pub fn build_network_linkstate_from_config(
     config: &NetworkConfig,
 ) -> Result<NetworkLinkState, String> {
     let mut linkstate = NetworkLinkState::new();

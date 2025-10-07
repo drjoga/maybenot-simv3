@@ -1,7 +1,7 @@
 use std::fs;
 use std::time::Duration;
 
-use maybenot_simulatorv3::topology_parse::build_networktopology_from_config;
+use maybenot_simulatorv3::topology_parse::build_network_topology_from_config;
 use maybenot_simulatorv3::{
     SimulatorArgs, load_topology_from_file, load_topology_from_str, modify_toml, parse_trace,
     sim_advanced,
@@ -227,7 +227,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                     b.iter(|| {
                         (0..100).into_par_iter().for_each(|_| {
                             let thread_topology =
-                                build_networktopology_from_config(&network_config).unwrap();
+                                build_network_topology_from_config(&network_config).unwrap();
                             black_box(sim_advanced(
                                 &[],
                                 &[],
@@ -286,7 +286,7 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
                     b.iter(|| {
                         (0..100).into_par_iter().for_each(|_| {
                             let thread_topology =
-                                build_networktopology_from_config(&network_config).unwrap();
+                                build_network_topology_from_config(&network_config).unwrap();
                             black_box(sim_advanced(
                                 &[],
                                 &[],
