@@ -129,7 +129,7 @@ pub fn adjust_toml_string(
                 r#"type = "FixedTput"
 tput_bps = 100_000_000_000_000"#,
                 r#"type = "HiTraceTput"
-trace_file = "tests/ether100M_synth5M.ltbin.gz""#,
+trace_file = "tests/data/ether100M_synth5M.ltbin.gz""#,
             );
             toml_str
         }
@@ -140,22 +140,22 @@ trace_file = "tests/ether100M_synth5M.ltbin.gz""#,
                 r#"type = "FixedTput"
 tput_bps = 100_000_000_000_000"#,
                 r#"type = "HiTraceTput"
-trace_file = "tests/ether10M_synth5M.ltbin.gz""#,
+trace_file = "tests/data/ether10M_synth5M.ltbin.gz""#,
             );
             // Replace only the first two occurrences with ether100M for the return path
             let mut count = 0;
             let parts: Vec<&str> = toml_str
-                .split(r#"trace_file = "tests/ether10M_synth5M.ltbin.gz""#)
+                .split(r#"trace_file = "tests/data/ether10M_synth5M.ltbin.gz""#)
                 .collect();
             let mut result = String::new();
             for (i, part) in parts.iter().enumerate() {
                 result.push_str(part);
                 if i < parts.len() - 1 {
                     if count < 2 {
-                        result.push_str(r#"trace_file = "tests/ether100M_synth5M.ltbin.gz""#);
+                        result.push_str(r#"trace_file = "tests/data/ether100M_synth5M.ltbin.gz""#);
                         count += 1;
                     } else {
-                        result.push_str(r#"trace_file = "tests/ether10M_synth5M.ltbin.gz""#);
+                        result.push_str(r#"trace_file = "tests/data/ether10M_synth5M.ltbin.gz""#);
                     }
                 }
             }
@@ -167,7 +167,7 @@ trace_file = "tests/ether10M_synth5M.ltbin.gz""#,
                 r#"type = "FixedTput"
 tput_bps = 100_000_000_000_000"#,
                 r#"type = "StdTraceTput"
-trace_file = "tests/ether100M_synth10K_std.ltbin.gz""#,
+trace_file = "tests/data/ether100M_synth10K_std.ltbin.gz""#,
             );
             toml_str
         }
@@ -177,22 +177,26 @@ trace_file = "tests/ether100M_synth10K_std.ltbin.gz""#,
                 r#"type = "FixedTput"
 tput_bps = 100_000_000_000_000"#,
                 r#"type = "StdTraceTput"
-trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#,
+trace_file = "tests/data/ether10M_synth10K_std.ltbin.gz""#,
             );
             // Replace only the first two occurrences with ether100M for the return path
             let mut count = 0;
             let parts: Vec<&str> = toml_str
-                .split(r#"trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#)
+                .split(r#"trace_file = "tests/data/ether10M_synth10K_std.ltbin.gz""#)
                 .collect();
             let mut result = String::new();
             for (i, part) in parts.iter().enumerate() {
                 result.push_str(part);
                 if i < parts.len() - 1 {
                     if count < 2 {
-                        result.push_str(r#"trace_file = "tests/ether100M_synth10K_std.ltbin.gz""#);
+                        result.push_str(
+                            r#"trace_file = "tests/data/ether100M_synth10K_std.ltbin.gz""#,
+                        );
                         count += 1;
                     } else {
-                        result.push_str(r#"trace_file = "tests/ether10M_synth10K_std.ltbin.gz""#);
+                        result.push_str(
+                            r#"trace_file = "tests/data/ether10M_synth10K_std.ltbin.gz""#,
+                        );
                     }
                 }
             }
@@ -373,3 +377,99 @@ static SHOW_PARSING: Lazy<bool> = Lazy::new(|| match env::var("SHOW_PARSING").as
     Ok(v) => panic!("Invalid SHOW_PARSING value: {}. Expected 0 or 1.", v),
     Err(_) => false,
 });
+
+// Trace setup for trace-dependent tests
+#[cfg(feature = "trace-tests")]
+use std::process::Command;
+#[cfg(feature = "trace-tests")]
+use std::sync::Once;
+
+#[cfg(feature = "trace-tests")]
+static TRACE_INIT: Once = Once::new();
+
+/// Helper function to ensure traces exist before running trace-dependent tests.
+/// Call this at the start of any test that needs generated trace files.
+#[cfg(feature = "trace-tests")]
+pub fn setup_traces() {
+    let manifest_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let tests_dir = std::path::Path::new(&manifest_root).join("tests");
+    ensure_traces_exist(&tests_dir);
+}
+
+#[cfg(feature = "trace-tests")]
+fn ensure_traces_exist(tests_dir: &std::path::Path) {
+    TRACE_INIT.call_once(|| {
+        let required_trace_files = [
+            "ether100M_synth10K_std.ltbin.gz",
+            "ether100M_synth5K.tr",
+            "ether10M_synth10K_std.ltbin.gz",
+            "test100K_synth2M_std.ltbin.gz",
+            "ether100M_synth5K.ltbin.gz",
+            "ether100M_synth5M.ltbin.gz",
+            "ether100M_synth5M_21bins.ltbin.gz",
+            "ether100M_synth10M.ltbin.gz",
+            "ether10M_synth5M.ltbin.gz",
+            "ether100M_synth40M.ltbin.gz",
+        ];
+
+        let data_dir = tests_dir.join("data");
+        let missing_files: Vec<_> = required_trace_files
+            .iter()
+            .filter(|&file| !data_dir.join(file).exists())
+            .collect();
+
+        if missing_files.is_empty() {
+            return;
+        }
+
+        println!(
+            "Missing {} trace files, attempting to generate them...",
+            missing_files.len()
+        );
+
+        let script_path = tests_dir.join("create_testlinktraces.sh");
+        if !script_path.exists() {
+            panic!("Trace generation script not found: {:?}", script_path);
+        }
+
+        let info_cmd = "echo '\\n\\nSTARTING TRACE GENERATION FOR TESTS, \
+            WILL TAKE SOME TIME, RUNS ONCE.\\n\\n'";
+        let _ = Command::new("bash")
+            .arg("-c")
+            .arg(info_cmd)
+            .current_dir(tests_dir)
+            .status();
+
+        let script_result = Command::new("bash")
+            .arg(&script_path)
+            .current_dir(tests_dir)
+            .status();
+
+        match script_result {
+            Ok(status) if status.success() => {
+                println!("Successfully generated trace files");
+            }
+            Ok(status) => {
+                panic!(
+                    "Failed to run trace generation script: exit code {}",
+                    status
+                );
+            }
+            Err(e) => {
+                panic!("Failed to execute trace generation script: {}", e);
+            }
+        }
+
+        let still_missing: Vec<_> = required_trace_files
+            .iter()
+            .filter(|&file| !data_dir.join(file).exists())
+            .collect();
+
+        if !still_missing.is_empty() {
+            panic!(
+                "Failed to generate all required trace files. Still missing: {:?}",
+                still_missing
+            );
+        }
+    });
+}

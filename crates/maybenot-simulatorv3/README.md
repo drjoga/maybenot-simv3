@@ -139,6 +139,31 @@ get rich debug output. For example, to run the integration test
 RUST_LOG=debug cargo test test_bypass_machine
 ```
 
+## Testing
+
+The test suite includes both fast unit tests and slower integration tests that require
+large generated trace files (up to 106MB compressed).
+
+### Running Tests
+
+```bash
+# Run fast tests only (default, excludes trace-dependent tests)
+cargo test
+
+# Run all tests including trace-dependent ones
+cargo test-all
+# or equivalently: cargo test --features trace-tests
+
+# Run only trace-dependent tests
+cargo test-traces
+```
+
+### Generating Test Traces
+
+Tests requiring trace files are gated behind the `trace-tests` feature flag. When you
+first run these tests, the required trace files will be automatically generated using
+the `xtask-linktrace` tool.
+
 ## Contributing
 
 Unless you explicitly state otherwise, any contribution intentionally submitted

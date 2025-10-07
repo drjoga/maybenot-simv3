@@ -3,6 +3,15 @@ use std::sync::Once;
 
 static INIT: Once = Once::new();
 
+/// Helper function to ensure traces exist before running trace-dependent tests.
+/// Call this at the start of any test that needs generated trace files.
+#[cfg(feature = "trace-tests")]
+pub fn setup_traces() {
+    let manifest_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let tests_dir = std::path::Path::new(&manifest_root).join("tests");
+    ensure_traces_exist(&tests_dir);
+}
+
 /// Ensures all required trace files exist for testing.
 /// This is a fallback mechanism in case the build script didn't run
 /// or failed to generate the required files.
@@ -21,10 +30,11 @@ pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
             "ether100M_synth40M.ltbin.gz",
         ];
 
-        // Check if any files are missing (look in crate/tests/ directory)
+        // Check if any files are missing (look in crate/tests/data/ directory)
+        let data_dir = tests_dir.join("data");
         let missing_files: Vec<_> = required_trace_files
             .iter()
-            .filter(|&file| !tests_dir.join(file).exists())
+            .filter(|&file| !data_dir.join(file).exists())
             .collect();
 
         if missing_files.is_empty() {
@@ -79,10 +89,10 @@ pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
             }
         }
 
-        // Verify files were created (check in crate/tests directory)
+        // Verify files were created (check in crate/tests/data directory)
         let still_missing: Vec<_> = required_trace_files
             .iter()
-            .filter(|&file| !tests_dir.join(file).exists())
+            .filter(|&file| !data_dir.join(file).exists())
             .collect();
 
         if !still_missing.is_empty() {
@@ -98,6 +108,7 @@ pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
 
 /// Attempts to find the workspace root directory by looking for Cargo.toml
 /// with workspace configuration.
+#[cfg(feature = "trace-tests")]
 fn find_workspace_root() -> std::path::PathBuf {
     let mut current = std::env::current_dir().expect("Failed to get current directory");
 
@@ -122,10 +133,12 @@ fn find_workspace_root() -> std::path::PathBuf {
 }
 
 #[cfg(test)]
+#[cfg(feature = "trace-tests")]
 mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "trace-tests")]
     fn test_find_workspace_root() {
         let root = find_workspace_root();
         assert!(root.join("Cargo.toml").exists());
@@ -137,6 +150,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "trace-tests")]
     fn test_ensure_traces_exist() {
         // Get the tests directory path using manifest root
         let manifest_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
@@ -145,7 +159,8 @@ mod tests {
         // This test will actually run the trace generation if needed
         ensure_traces_exist(&tests_dir);
 
-        // Verify that all required files now exist (in tests directory)
+        // Verify that all required files now exist (in tests/data directory)
+        let data_dir = tests_dir.join("data");
         let required_files = [
             "ether100M_synth10K_std.ltbin.gz",
             "ether10M_synth10K_std.ltbin.gz",
@@ -159,7 +174,7 @@ mod tests {
         ];
 
         for file in &required_files {
-            let file_path = tests_dir.join(file);
+            let file_path = data_dir.join(file);
             assert!(
                 file_path.exists(),
                 "Required trace file missing: {}",

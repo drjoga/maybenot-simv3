@@ -1,10 +1,15 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{SimulatorArgs, sim_advanced};
-use maybenot_simulatorv3::{
-    load_topology_from_file, load_topology_from_str, modify_toml, parse_trace, sim,
-};
-use std::fs;
+use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim};
 use std::{str::FromStr, time::Duration};
+
+#[cfg(feature = "trace-tests")]
+use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_str, modify_toml, sim_advanced};
+#[cfg(feature = "trace-tests")]
+use std::fs;
+
+#[cfg(feature = "trace-tests")]
+#[allow(dead_code)]
+mod common;
 
 #[test_log::test]
 fn full_trace_compare() {
@@ -199,15 +204,19 @@ fn simulator_example_use() {
     // received a normal packet at 9420 ms
 }
 
+#[cfg(feature = "trace-tests")]
 use std::time::Instant;
 
+#[cfg(feature = "trace-tests")]
 //const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
 const SIM_EVENT_COUNTS: [usize; 1] = [10_000];
+#[cfg(feature = "trace-tests")]
 const CONFIG_FILES: [&str; 3] = [
     "/tests/cfg/maybenot_baseline_test.toml",
     "/tests/cfg/maybenot_fast_test.toml",
     "/tests/cfg/maybenot_complex_test.toml",
 ];
+#[cfg(feature = "trace-tests")]
 //HiTraceTput takes very long to load, so not included by default.
 const LINK_TYPES: [(&str, &str, &str); 2] = [
     (
@@ -215,16 +224,18 @@ const LINK_TYPES: [(&str, &str, &str); 2] = [
         "Link:0::type:FixedTput::tput_bps:100000000",
         "",
     ),
-    //("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/ether100M_synth40M.ltbin.gz", "/tests/ether100M_synth40M.ltbin.gz"),
+    //("HiTraceTput", "Link:0::type:HiTraceTput::trace_file:tests/data/ether100M_synth40M.ltbin.gz", "/tests/data/ether100M_synth40M.ltbin.gz"),
     (
         "StdTraceTput",
-        "Link:0::type:StdTraceTput::trace_file:tests/ether100M_synth10K_std.ltbin.gz",
-        "/tests/ether100M_synth10K_std.ltbin.gz",
+        "Link:0::type:StdTraceTput::trace_file:tests/data/ether100M_synth10K_std.ltbin.gz",
+        "/tests/data/ether100M_synth10K_std.ltbin.gz",
     ),
 ];
 
 #[test_log::test]
+#[cfg(feature = "trace-tests")]
 fn v3_multi_run_like() {
+    common::setup_traces();
     const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
 
     let toml_path = env!("CARGO_MANIFEST_DIR").to_string();

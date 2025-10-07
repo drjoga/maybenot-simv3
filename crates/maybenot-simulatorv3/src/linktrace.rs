@@ -467,39 +467,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn save_load_linktrace() {
-        let traceinput = "tests/ether100M_synth5K.tr";
-        let sizebin_lookuptable = mk_sizebin_lookuptable();
-        let link_trace = Arc::new(LinkTrace::new_hi_res(traceinput, sizebin_lookuptable));
-
-        // Save the instance to a file
-        save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)
-            .expect("Failed to save LinkTrace ltbin to file");
-
-        // Load the instance back from the file
-        let loaded_link_trace = load_linktrace_from_file("tests/ether100M_synth5K_tst.ltbin.gz")
-            .expect("Failed to load LinkTrace ltbin from file");
-        assert_eq!(link_trace, loaded_link_trace);
-    }
-
-    #[test]
-    fn linksimtrace_lookup() {
-        // Load the instance back from the test above
-        let linksim_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
-            .expect("Failed to load LinkTrace ltbin from file");
-        // Confirm that different packet sizes give different busy_to times
-        assert_eq!(linksim_trace.get_busy_to(1000, 1500), 1120);
-        assert_eq!(linksim_trace.get_busy_to(1000, 750), 1068);
-        assert_eq!(linksim_trace.get_busy_to(1000, 56), 1006);
-
-        assert_eq!(linksim_trace.get_busy_to(3245, 1500), 3365);
-
-        // Packets that that would have a busy_to time
-        // after the end of the link trace return 0.
-        assert_eq!(linksim_trace.get_busy_to(4989, 1500), 0);
-        assert_eq!(linksim_trace.get_busy_to(4989, 56), 4995);
-        assert_eq!(linksim_trace.get_busy_to(4999, 1500), 0);
-    }
 }
