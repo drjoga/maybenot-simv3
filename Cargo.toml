@@ -29,8 +29,10 @@ members = [
     "benches",
     # fuzzing
     "fuzz",
-    # v3 configurable simulator 
+    # v3 configurable simulator
     "crates/maybenot-simulatorv3",
+    # automation tasks (test data generation, etc.)
+    "xtask",
 ]
 
 [workspace.lints.rust]

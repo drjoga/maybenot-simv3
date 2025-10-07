@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Test data generation script for maybenot-simulatorv3
+# Uses the xtask-linktrace automation tool to generate synthetic network traces
+
 # Define sizebins and binpktsizes
 sizebins_2="0,129,1501"
 binpktsizes_2="128,1500"
@@ -12,45 +15,45 @@ binpktsizes_21="48, 64, 80, 96, 112, 128, 144, 160, 192, 240, 288, 368, 448, 512
 
 
 # Create std_res ether100M_10K trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether100M_synth_10K_std.tr" \
     --linecount 10000\
     --preset "stdres_ether100M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-std \
+cargo xtask-linktrace create-tracebin-std \
     --bw-tracefile "ether100M_synth_10K_std.tr" \
     --save-file "ether100M_synth10K_std" \
 
 
 # Create std_res ether10M_10K trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether10M_synth_10K_std.tr" \
     --linecount 10000\
     --preset "stdres_ether10M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-std \
+cargo xtask-linktrace create-tracebin-std \
     --bw-tracefile "ether10M_synth_10K_std.tr" \
     --save-file "ether10M_synth10K_std" \
 
 
 # Create std_res test100K_2M trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "test100K_synth_2M_std.tr" \
     --linecount 2000000\
     --preset "stdres_test100K"
 
-cargo run --release --bin linktrace_util -- create-tracebin-std \
+cargo xtask-linktrace create-tracebin-std \
     --bw-tracefile "test100K_synth_2M_std.tr" \
     --save-file "test100K_synth2M_std" \
 
 
 # Create ether100M_5K trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether100M_synth5K.tr" \
     --linecount 5000\
     --preset "hires_ether100M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether100M_synth5K.tr" \
     --save-file "ether100M_synth5K" \
     --sizebins "$sizebins_21" \
@@ -58,18 +61,18 @@ cargo run --release --bin linktrace_util -- create-tracebin-hi \
 
 
 # Create ether100M_5M trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether100M_synth5M.tr.gz" \
     --linecount 5000000\
     --preset "hires_ether100M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether100M_synth5M.tr.gz" \
     --save-file "ether100M_synth5M" \
     --sizebins "$sizebins_2" \
     --binpktsizes "$binpktsizes_2"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether100M_synth5M.tr.gz" \
     --save-file "ether100M_synth5M_21bins" \
     --sizebins "$sizebins_21" \
@@ -77,12 +80,12 @@ cargo run --release --bin linktrace_util -- create-tracebin-hi \
 
 
 # Create ether100M_10M trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether100M_synth10M.tr.gz" \
     --linecount 10000000\
     --preset "hires_ether100M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether100M_synth10M.tr.gz" \
     --save-file "ether100M_synth10M" \
     --sizebins "$sizebins_2" \
@@ -90,12 +93,12 @@ cargo run --release --bin linktrace_util -- create-tracebin-hi \
 
 
 # Create ether10M_5M trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether10M_synth5M.tr.gz" \
     --linecount 5000000\
     --preset "hires_ether10M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether10M_synth5M.tr.gz" \
     --save-file "ether10M_synth5M" \
     --sizebins "$sizebins_2" \
@@ -103,12 +106,12 @@ cargo run --release --bin linktrace_util -- create-tracebin-hi \
 
 
 # Create ether100M_40M trace and corresponding simplex binary trace
-cargo run --release --bin linktrace_util -- create-synthlinktrace \
+cargo xtask-linktrace create-synthlinktrace \
     --save-file "ether100M_synth40M.tr.gz" \
     --linecount 40000000\
     --preset "hires_ether100M"
 
-cargo run --release --bin linktrace_util -- create-tracebin-hi \
+cargo xtask-linktrace create-tracebin-hi \
     --bw-tracefile "ether100M_synth40M.tr.gz" \
     --save-file "ether100M_synth40M" \
     --sizebins "$sizebins_2" \

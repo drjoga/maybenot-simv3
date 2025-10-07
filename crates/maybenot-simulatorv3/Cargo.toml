@@ -10,10 +10,6 @@ keywords.workspace = true
 categories.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "linktrace_util"
-path = "src/bin/linktrace_util.rs"
-
 [lints]
 workspace = true
 
