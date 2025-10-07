@@ -1,5 +1,5 @@
-use crate::mbn_nodes::MBNNode;
-use crate::mbn_nodes::{MbnState, ScheduledAction};
+use crate::maybenot_nodes::MaybenotNode;
+use crate::maybenot_nodes::{MaybenotState, ScheduledAction};
 use crate::topology::NetworkTopology;
 use crate::{SimEvent, SimQueue, SimulatorArgs};
 use log::debug;
@@ -71,17 +71,17 @@ pub fn peek_blocked_exp(
     }
 }
 
-/// Initialize MBN nodes with MbnState for simulation
-pub fn initialize_mbn_sim_states(
+/// Initialize Maybenot nodes with MaybenotState for simulation
+pub fn initialize_maybenot_sim_states(
     topology: &NetworkTopology,
     machines_client: &[Machine],
     machines_server: &[Machine],
     current_time: Instant,
     args: &SimulatorArgs,
 ) {
-    // Initialize client MBN node using trait abstraction
-    let client_mbn: &dyn MBNNode = topology.get_mbn_client();
-    let new_state = MbnState::new(
+    // Initialize client Maybenot node using trait abstraction
+    let client_maybenot: &dyn MaybenotNode = topology.get_maybenot_client();
+    let new_state = MaybenotState::new(
         machines_client.to_vec(),
         current_time,
         args.max_padding_frac_client,
@@ -90,11 +90,11 @@ pub fn initialize_mbn_sim_states(
         args.client_integration.clone(),
         args.insecure_rng_seed,
     );
-    *client_mbn.get_sim_state().borrow_mut() = new_state;
+    *client_maybenot.get_sim_state().borrow_mut() = new_state;
 
-    // Initialize relay MBN node using trait abstraction
-    let relay_mbn: &dyn MBNNode = topology.get_mbn_server();
-    let new_state = MbnState::new(
+    // Initialize relay Maybenot node using trait abstraction
+    let relay_maybenot: &dyn MaybenotNode = topology.get_maybenot_server();
+    let new_state = MaybenotState::new(
         machines_server.to_vec(),
         current_time,
         args.max_padding_frac_server,
@@ -105,11 +105,11 @@ pub fn initialize_mbn_sim_states(
         // to avoid the same seed for both client and server
         args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
-    *relay_mbn.get_sim_state().borrow_mut() = new_state;
+    *relay_maybenot.get_sim_state().borrow_mut() = new_state;
 }
 
-// Generic helper functions for MBN operations
-pub fn mbn_trigger_update<T: MBNNode>(
+// Generic helper functions for Maybenot operations
+pub fn maybenot_trigger_update<T: MaybenotNode>(
     node: &T,
     s_event: &SimEvent,
     current_time: &Instant,
@@ -222,7 +222,7 @@ pub fn mbn_trigger_update<T: MBNNode>(
     }
 }
 
-pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<SimEvent> {
+pub fn maybenot_do_internal_timer<T: MaybenotNode>(node: &T, target: Instant) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut machine: Option<MachineId> = None;
 
@@ -251,7 +251,10 @@ pub fn mbn_do_internal_timer<T: MBNNode>(node: &T, target: Instant) -> Option<Si
     })
 }
 
-pub fn mbn_do_scheduled_action<T: MBNNode>(node: &T, target: Instant) -> Option<SimEvent> {
+pub fn maybenot_do_scheduled_action<T: MaybenotNode>(
+    node: &T,
+    target: Instant,
+) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
     let mut a: Option<ScheduledAction> = None;
 

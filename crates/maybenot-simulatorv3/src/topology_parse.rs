@@ -1,6 +1,6 @@
 use crate::links::LinkType;
 use crate::linktrace::load_linktrace_from_file;
-use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
+use crate::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
 use crate::nodes::NodeType;
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use serde::Deserialize;
@@ -77,7 +77,7 @@ pub struct ForwardingRule {
 /// ```toml
 /// [[Node]]
 /// id = 0
-/// type = "ClientMBN"
+/// type = "ClientMaybenot"
 /// coreside_out = 0
 ///
 /// [[Link]]  
@@ -148,10 +148,10 @@ pub fn build_networktopology_from_config(
 ) -> Result<NetworkTopology, String> {
     let mut topology = NetworkTopology::new(config.clone());
 
-    // Find and validate client and traffic server nodes
+    // Find and validate client and destination nodes
     let mut client_id: Option<usize> = None;
     let mut mb_server: Option<usize> = None;
-    let mut traffic_server_id: Option<usize> = None;
+    let mut destination_id: Option<usize> = None;
 
     for node_config in &config.nodes {
         match node_config.node_type.as_str() {
@@ -164,7 +164,7 @@ pub fn build_networktopology_from_config(
                 }
                 client_id = Some(node_config.id);
             }
-            "ClientMBN" => {
+            "ClientMaybenot" => {
                 if client_id.is_some() {
                     return Err(
                         "Network error: Multiple Client nodes found. Only one is allowed."
@@ -174,53 +174,53 @@ pub fn build_networktopology_from_config(
                 client_id = Some(node_config.id);
                 topology.mb_client = node_config.id;
             }
-            "RelayMBN" => {
+            "RelayMaybenot" => {
                 if mb_server.is_some() {
                     return Err(
-                        "Network error: Multiple RelayMBN nodes found. Only one is allowed."
+                        "Network error: Multiple RelayMaybenot nodes found. Only one is allowed."
                             .to_string(),
                     );
                 }
                 mb_server = Some(node_config.id);
             }
 
-            "TrafficServerBasic" => {
-                if traffic_server_id.is_some() {
-                    return Err("Network error: Multiple TrafficServerBasic nodes found. Only one is allowed.".to_string());
+            "DestinationBasic" => {
+                if destination_id.is_some() {
+                    return Err("Network error: Multiple DestinationBasic nodes found. Only one is allowed.".to_string());
                 }
-                traffic_server_id = Some(node_config.id);
+                destination_id = Some(node_config.id);
             }
 
-            "RelayMBNtserver" => {
+            "RelayMaybenotDestination" => {
                 if mb_server.is_some() {
                     return Err(
-                        "Network error: Multiple MBN server nodes found. Only one is allowed."
+                        "Network error: Multiple Maybenot server nodes found. Only one is allowed."
                             .to_string(),
                     );
                 }
-                if traffic_server_id.is_some() {
+                if destination_id.is_some() {
                     return Err(
-                        "Network error: Multiple traffic server nodes found. Only one is allowed."
+                        "Network error: Multiple destination nodes found. Only one is allowed."
                             .to_string(),
                     );
                 }
                 mb_server = Some(node_config.id);
-                traffic_server_id = Some(node_config.id); // RelayMBNtserver acts as both
+                destination_id = Some(node_config.id); // RelayMaybenotDestination acts as both
             }
 
             _ => {} // Other node types are fine
         }
     }
 
-    // Ensure we have exactly one client and one traffic server
+    // Ensure we have exactly one client and one destination
     let client = client_id.ok_or_else(|| {
         "Network error: No Client node found. Exactly one is required.".to_string()
     })?;
-    let traffic_server = traffic_server_id.ok_or_else(|| "Network error: No traffic server node found. Exactly one TrafficServerBasic or RelayMBNtserver is required.".to_string())?;
+    let destination = destination_id.ok_or_else(|| "Network error: No destination node found. Exactly one DestinationBasic or RelayMaybenotDestination is required.".to_string())?;
 
-    // Set the client and traffic server IDs
+    // Set the client and destination IDs
     topology.client = client;
-    topology.traffic_server = traffic_server;
+    topology.destination = destination;
 
     // Set MB fields
     if let Some(mb_server_id) = mb_server {
@@ -401,7 +401,7 @@ pub fn create_node(
     edgeside_out: Option<usize>,
     params: &HashMap<String, String>,
 ) -> Result<NodeType, String> {
-    use crate::nodes::{ClientBasic, RouterBasic, TrafficServerBasic};
+    use crate::nodes::{ClientBasic, DestinationBasic, RouterBasic};
 
     match node_type {
         "ClientBasic" => {
@@ -419,16 +419,16 @@ pub fn create_node(
                 edgeside_out_val,
             )))
         }
-        "TrafficServerBasic" => {
-            let edgeside = edgeside_out.ok_or("TrafficServerBasic requires edgeside_out")?;
-            Ok(NodeType::TrafficServerBasic(TrafficServerBasic::new(
+        "DestinationBasic" => {
+            let edgeside = edgeside_out.ok_or("DestinationBasic requires edgeside_out")?;
+            Ok(NodeType::DestinationBasic(DestinationBasic::new(
                 id, edgeside,
             )))
         }
-        "ClientMBN" => {
-            let coreside = coreside_out.ok_or("ClientMBN requires coreside_out")?;
+        "ClientMaybenot" => {
+            let coreside = coreside_out.ok_or("ClientMaybenot requires coreside_out")?;
 
-            Ok(NodeType::ClientMBN(ClientMBN::new(
+            Ok(NodeType::ClientMaybenot(ClientMaybenot::new(
                 id,
                 coreside,
                 Vec::new(),
@@ -439,12 +439,12 @@ pub fn create_node(
                 None,
             )))
         }
-        "RelayMBN" => {
-            let coreside_out_val = coreside_out.ok_or("RelayMBN requires coreside_out")?;
-            let edgeside_in_val = edgeside_in.ok_or("RelayMBN requires edgeside_in")?;
-            let edgeside_out_val = edgeside_out.ok_or("RelayMBN requires edgeside_out")?;
+        "RelayMaybenot" => {
+            let coreside_out_val = coreside_out.ok_or("RelayMaybenot requires coreside_out")?;
+            let edgeside_in_val = edgeside_in.ok_or("RelayMaybenot requires edgeside_in")?;
+            let edgeside_out_val = edgeside_out.ok_or("RelayMaybenot requires edgeside_out")?;
 
-            Ok(NodeType::RelayMBN(RelayMBN::new(
+            Ok(NodeType::RelayMaybenot(RelayMaybenot::new(
                 id,
                 coreside_out_val,
                 edgeside_in_val,
@@ -457,30 +457,34 @@ pub fn create_node(
                 None,
             )))
         }
-        "RelayMBNtserver" => {
-            // RelayMBNtserver uses edgeside_in and edgeside_out
-            let edgeside_out_val = edgeside_out.ok_or("RelayMBNtserver requires edgeside_out")?;
-            let edgeside_in_val = edgeside_in.ok_or("RelayMBNtserver requires edgeside_in")?;
+        "RelayMaybenotDestination" => {
+            // RelayMaybenotDestination uses edgeside_in and edgeside_out
+            let edgeside_out_val =
+                edgeside_out.ok_or("RelayMaybenotDestination requires edgeside_out")?;
+            let edgeside_in_val =
+                edgeside_in.ok_or("RelayMaybenotDestination requires edgeside_in")?;
 
-            // Parse ts_prop_us parameter specific to RelayMBNtserver
-            let ts_prop_us = params
-                .get("ts_prop_us")
+            // Parse destination_prop_us parameter specific to RelayMaybenotDestination
+            let destination_prop_us = params
+                .get("destination_prop_us")
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(Duration::from_micros)
                 .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
 
-            Ok(NodeType::RelayMBNtserver(RelayMBNtserver::new(
-                id,
-                edgeside_in_val,
-                edgeside_out_val,
-                Vec::new(),
-                0.0,
-                0.0,
-                false,
-                None,
-                None,
-                ts_prop_us,
-            )))
+            Ok(NodeType::RelayMaybenotDestination(
+                RelayMaybenotDestination::new(
+                    id,
+                    edgeside_in_val,
+                    edgeside_out_val,
+                    Vec::new(),
+                    0.0,
+                    0.0,
+                    false,
+                    None,
+                    None,
+                    destination_prop_us,
+                ),
+            ))
         }
         _ => Err(format!("Unknown node type: {}", node_type)),
     }

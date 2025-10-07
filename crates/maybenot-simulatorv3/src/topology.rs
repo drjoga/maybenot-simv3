@@ -1,5 +1,5 @@
 use crate::links::LinkType;
-use crate::mbn_nodes::MBNNode;
+use crate::maybenot_nodes::MaybenotNode;
 use crate::nodes::NodeType;
 use crate::topology_parse::{NetworkConfig, build_networktopology_from_config};
 
@@ -48,7 +48,7 @@ pub struct NetworkTopology {
     pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
     pub client: usize,
-    pub traffic_server: usize,
+    pub destination: usize,
     pub has_mb: bool,
     pub mb_client: usize,
     pub mb_server: usize,
@@ -61,7 +61,7 @@ impl NetworkTopology {
             nodes: Vec::new(),
             routes: Vec::new(),
             client: 0,
-            traffic_server: 0,
+            destination: 0,
             has_mb: false,
             mb_client: 0,
             mb_server: 0,
@@ -84,18 +84,18 @@ impl NetworkTopology {
         self.nodes.len() - 1
     }
 
-    pub fn get_mbn_client(&self) -> &dyn MBNNode {
+    pub fn get_maybenot_client(&self) -> &dyn MaybenotNode {
         match &self.nodes[self.mb_client] {
-            NodeType::ClientMBN(client) => client,
-            _ => panic!("MBN client node not found or wrong type"),
+            NodeType::ClientMaybenot(client) => client,
+            _ => panic!("Maybenot client node not found or wrong type"),
         }
     }
 
-    pub fn get_mbn_server(&self) -> &dyn MBNNode {
+    pub fn get_maybenot_server(&self) -> &dyn MaybenotNode {
         match &self.nodes[self.mb_server] {
-            NodeType::RelayMBN(server) => server,
-            NodeType::RelayMBNtserver(server) => server,
-            _ => panic!("MBN server node not found or wrong type"),
+            NodeType::RelayMaybenot(server) => server,
+            NodeType::RelayMaybenotDestination(server) => server,
+            _ => panic!("Maybenot server node not found or wrong type"),
         }
     }
 }

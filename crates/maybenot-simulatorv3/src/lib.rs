@@ -2,8 +2,8 @@ pub mod integration;
 pub mod linkbundle;
 pub mod links;
 pub mod linktrace;
-pub mod mbn_helpers;
-pub mod mbn_nodes;
+pub mod maybenot_helpers;
+pub mod maybenot_nodes;
 pub mod nodes;
 pub mod topology;
 pub mod topology_parse;
@@ -30,7 +30,7 @@ use topology::{NetworkLinkState, NetworkTopology};
 use traffic_parse::EventKind;
 
 use maybenot::{Machine, TriggerEvent};
-use mbn_helpers::initialize_mbn_sim_states;
+use maybenot_helpers::initialize_maybenot_sim_states;
 
 /// Represents a single network event in the Maybenot simulation.
 ///
@@ -120,7 +120,7 @@ impl SimEvent {
         };
         let link = linkstate.get_link(self.link_id).unwrap();
         // Adjust formatting so field lengths are appropriate for example line below
-        // NormalSent at 25 μs (pkt 5, node 2 TrafficServerBasic, link 0 n2->n1) P:F B:F R:F
+        // NormalSent at 25 μs (pkt 5, node 2 DestinationBasic, link 0 n2->n1) P:F B:F R:F
         format!(
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
             self.format_event_compact(),
@@ -257,15 +257,15 @@ impl SimQueue {
         if self.heap.iter().any(|e| e.packet_id < usize::MAX) {
             return false;
         }
-        // check MBN node blocking queues if they exist
+        // check Maybenot node blocking queues if they exist
         if topology.has_mb {
-            let client_mbn = topology.get_mbn_client();
-            if !client_mbn.get_queue_normal().borrow().is_empty() {
+            let client_maybenot = topology.get_maybenot_client();
+            if !client_maybenot.get_queue_normal().borrow().is_empty() {
                 return false;
             }
 
-            let relay_mbn = topology.get_mbn_server();
-            if !relay_mbn.get_queue_normal().borrow().is_empty() {
+            let relay_maybenot = topology.get_maybenot_server();
+            if !relay_maybenot.get_queue_normal().borrow().is_empty() {
                 return false;
             }
         }
@@ -508,9 +508,9 @@ pub fn sim_advanced(
     // put the mocked current time at the first event
     let mut current_time = si.earliest_event_instant;
 
-    // Initialize MBN nodes with MbnState if they exist
+    // Initialize Maybenot nodes with MaybenotState if they exist
     if topology.has_mb {
-        initialize_mbn_sim_states(
+        initialize_maybenot_sim_states(
             topology,
             machines_client,
             machines_server,
@@ -519,8 +519,8 @@ pub fn sim_advanced(
         );
     }
 
-    let client_mbn = topology.has_mb.then(|| topology.get_mbn_client());
-    let relay_mbn = topology.has_mb.then(|| topology.get_mbn_server());
+    let client_maybenot = topology.has_mb.then(|| topology.get_maybenot_client());
+    let relay_maybenot = topology.has_mb.then(|| topology.get_maybenot_server());
 
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
@@ -544,16 +544,16 @@ pub fn sim_advanced(
             _ => {}
         }
 
-        if let Some(client_mbn) = client_mbn {
-            if let Some(blocking_until) = client_mbn.get_sim_state().borrow().blocking_until {
+        if let Some(client_maybenot) = client_maybenot {
+            if let Some(blocking_until) = client_maybenot.get_sim_state().borrow().blocking_until {
                 debug!(
                     "sim(): client is blocked until time {:#?}",
                     blocking_until.duration_since(si.zero_instant)
                 );
             }
         }
-        if let Some(relay_mbn) = relay_mbn {
-            if let Some(blocking_until) = relay_mbn.get_sim_state().borrow().blocking_until {
+        if let Some(relay_maybenot) = relay_maybenot {
+            if let Some(blocking_until) = relay_maybenot.get_sim_state().borrow().blocking_until {
                 debug!(
                     "sim(): server is blocked until time {:#?}",
                     blocking_until.duration_since(si.zero_instant)
@@ -566,13 +566,14 @@ pub fn sim_advanced(
         // Handle event at node
         topology.nodes[next.node_id].handle_event(&next, topology, link_state, si, sq);
 
-        // Call trigger_update on MBN nodes after handling the event
+        // Call trigger_update on Maybenot nodes after handling the event
         if topology.has_mb {
             if next.node_id == topology.mb_client {
-                if let Some(client_mbn) = client_mbn {
+                if let Some(client_maybenot) = client_maybenot {
                     debug!("sim(): trigger @client framework {:?}", next.event);
-                    let reporting_delay = client_mbn.get_sim_state().borrow().reporting_delay();
-                    client_mbn.trigger_update(
+                    let reporting_delay =
+                        client_maybenot.get_sim_state().borrow().reporting_delay();
+                    client_maybenot.trigger_update(
                         &next,
                         &(current_time + reporting_delay),
                         sq,
@@ -580,10 +581,10 @@ pub fn sim_advanced(
                     );
                 }
             } else if next.node_id == topology.mb_server {
-                if let Some(relay_mbn) = relay_mbn {
+                if let Some(relay_maybenot) = relay_maybenot {
                     debug!("sim(): trigger @server framework {:?}", next.event);
-                    let reporting_delay = relay_mbn.get_sim_state().borrow().reporting_delay();
-                    relay_mbn.trigger_update(
+                    let reporting_delay = relay_maybenot.get_sim_state().borrow().reporting_delay();
+                    relay_maybenot.trigger_update(
                         &next,
                         &(current_time + reporting_delay),
                         sq,
@@ -640,8 +641,8 @@ fn pick_next(
     current_time: Instant,
 ) -> Option<SimEvent> {
     if topology.has_mb {
-        // Complex MBN scheduling: must consider queue, timers, actions, and blocking
-        pick_next_mbn(si, sq, topology, current_time)
+        // Complex Maybenot scheduling: must consider queue, timers, actions, and blocking
+        pick_next_maybenot(si, sq, topology, current_time)
     } else {
         // Simple case: just process queue events in timestamp order
         sq.pop()
@@ -655,23 +656,23 @@ fn pick_next(
 // 2. Defense machine scheduled actions (padding/blocking)
 // 3. Defense machine internal timers
 // 4. Blocking period expiry events
-fn pick_next_mbn(
+fn pick_next_maybenot(
     si: &SimInfo,
     sq: &mut SimQueue,
     topology: &NetworkTopology,
     current_time: Instant,
 ) -> Option<SimEvent> {
-    let client_mbn = topology.get_mbn_client();
-    let relay_mbn = topology.get_mbn_server();
+    let client_maybenot = topology.get_maybenot_client();
+    let relay_maybenot = topology.get_maybenot_server();
 
-    // Collect scheduled actions and internal timers from MBN nodes
+    // Collect scheduled actions and internal timers from Maybenot nodes
     let mut min_scheduled_action = Duration::MAX;
-    let mut action_node = client_mbn;
+    let mut action_node = client_maybenot;
     let mut min_internal_timer = Duration::MAX;
-    let mut timer_node = client_mbn;
+    let mut timer_node = client_maybenot;
 
-    // Check client MBN node
-    let state = client_mbn.get_sim_state().borrow();
+    // Check client Maybenot node
+    let state = client_maybenot.get_sim_state().borrow();
 
     // Check scheduled actions
     for action in state.scheduled_action.iter().flatten() {
@@ -695,8 +696,8 @@ fn pick_next_mbn(
     let client_blocking_until = state.blocking_until;
     drop(state);
 
-    // Check server MBN node
-    let state = relay_mbn.get_sim_state().borrow();
+    // Check server Maybenot node
+    let state = relay_maybenot.get_sim_state().borrow();
 
     // Check scheduled actions
     for action in state.scheduled_action.iter().flatten() {
@@ -704,7 +705,7 @@ fn pick_next_mbn(
             let duration = action.time.duration_since(current_time);
             if duration < min_scheduled_action {
                 min_scheduled_action = duration;
-                action_node = relay_mbn;
+                action_node = relay_maybenot;
             }
         }
     }
@@ -715,7 +716,7 @@ fn pick_next_mbn(
             let duration = timer.duration_since(current_time);
             if duration < min_internal_timer {
                 min_internal_timer = duration;
-                timer_node = relay_mbn;
+                timer_node = relay_maybenot;
             }
         }
     }
@@ -797,9 +798,9 @@ fn pick_next_mbn(
 
         // Clear blocking state from the appropriate node
         if blocking_is_client {
-            client_mbn.get_sim_state().borrow_mut().blocking_until = None;
+            client_maybenot.get_sim_state().borrow_mut().blocking_until = None;
         } else {
-            relay_mbn.get_sim_state().borrow_mut().blocking_until = None;
+            relay_maybenot.get_sim_state().borrow_mut().blocking_until = None;
         }
 
         let e = SimEvent {

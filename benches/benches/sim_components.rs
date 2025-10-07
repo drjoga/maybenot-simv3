@@ -12,9 +12,9 @@ use rand::Rng;
 //const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
 const SIM_EVENT_COUNTS: [usize; 1] = [10_000];
 const CONFIG_FILES: [&str; 3] = [
-    "/benches/topologies/mbn_baseline_bench.toml",
-    "/benches/topologies/mbn_fast_bench.toml",
-    "/benches/topologies/mbn_complex_bench.toml",
+    "/benches/topologies/maybenot_baseline_bench.toml",
+    "/benches/topologies/maybenot_fast_bench.toml",
+    "/benches/topologies/maybenot_complex_bench.toml",
 ];
 
 fn v3_single_simulator_run(c: &mut Criterion) {

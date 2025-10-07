@@ -1,18 +1,18 @@
 # Faster configuration for simulatorv3
-# Client -> Relay with inbuilt TrafficServer
+# Client -> Relay with inbuilt Destination
 
 # Node definitions
 [[Node]]
 id = 0
-type = "ClientMBN"
+type = "ClientMaybenot"
 coreside_out = 1
 
 [[Node]]
 id = 1
-type = "RelayMBNtserver"
+type = "RelayMaybenotDestination"
 edgeside_out = 0
 edgeside_in = 1
-ts_prop_us = 10_000
+destination_prop_us = 10_000
 
 # Link 0: from node 1 to node 0 (Relay -> Client)
 [[Link]]

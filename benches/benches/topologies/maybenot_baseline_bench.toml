@@ -1,22 +1,22 @@
-# Basieline test configuration for simulatorv3
-# Client -> Relay -> TrafficServer
+# Baseline test configuration for simulatorv3
+# Client -> Relay -> DestinationBasic
 
 # Node definitions
 [[Node]]
 id = 0
-type = "ClientMBN"
+type = "ClientMaybenot"
 coreside_out = 2
 
 [[Node]]
 id = 1
-type = "RelayMBN"
+type = "RelayMaybenot"
 coreside_out = 3
 edgeside_out = 1
 edgeside_in = 2
 
 [[Node]]
 id = 2
-type = "TrafficServerBasic"
+type = "DestinationBasic"
 edgeside_out = 0
 
 # Link definitions

@@ -1,5 +1,5 @@
 use crate::links::LinkType;
-use crate::mbn_nodes::{ClientMBN, RelayMBN, RelayMBNtserver};
+use crate::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use crate::{SimEvent, SimInfo, SimQueue};
 use log::debug;
@@ -11,10 +11,10 @@ use std::time::Duration;
 pub enum NodeType {
     ClientBasic(ClientBasic),
     RouterBasic(RouterBasic),
-    TrafficServerBasic(TrafficServerBasic),
-    ClientMBN(ClientMBN),
-    RelayMBN(RelayMBN),
-    RelayMBNtserver(RelayMBNtserver),
+    DestinationBasic(DestinationBasic),
+    ClientMaybenot(ClientMaybenot),
+    RelayMaybenot(RelayMaybenot),
+    RelayMaybenotDestination(RelayMaybenotDestination),
 }
 
 impl NodeType {
@@ -29,12 +29,16 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(node) => node.handle_event(s_event, topology, linkstate, si, sq),
             NodeType::RouterBasic(node) => node.handle_event(s_event, topology, linkstate, si, sq),
-            NodeType::TrafficServerBasic(node) => {
+            NodeType::DestinationBasic(node) => {
                 node.handle_event(s_event, topology, linkstate, si, sq)
             }
-            NodeType::ClientMBN(node) => node.handle_event(s_event, topology, linkstate, si, sq),
-            NodeType::RelayMBN(node) => node.handle_event(s_event, topology, linkstate, si, sq),
-            NodeType::RelayMBNtserver(node) => {
+            NodeType::ClientMaybenot(node) => {
+                node.handle_event(s_event, topology, linkstate, si, sq)
+            }
+            NodeType::RelayMaybenot(node) => {
+                node.handle_event(s_event, topology, linkstate, si, sq)
+            }
+            NodeType::RelayMaybenotDestination(node) => {
                 node.handle_event(s_event, topology, linkstate, si, sq)
             }
         }
@@ -44,10 +48,10 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(node) => node.id,
             NodeType::RouterBasic(node) => node.id,
-            NodeType::TrafficServerBasic(node) => node.id,
-            NodeType::ClientMBN(node) => node.id,
-            NodeType::RelayMBN(node) => node.id,
-            NodeType::RelayMBNtserver(node) => node.id,
+            NodeType::DestinationBasic(node) => node.id,
+            NodeType::ClientMaybenot(node) => node.id,
+            NodeType::RelayMaybenot(node) => node.id,
+            NodeType::RelayMaybenotDestination(node) => node.id,
         }
     }
 
@@ -55,12 +59,14 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(node) => node.coreside_out,
             NodeType::RouterBasic(node) => node.coreside_out,
-            NodeType::TrafficServerBasic(_) => {
-                panic!("TrafficServerBasic does not have a coreside link")
+            NodeType::DestinationBasic(_) => {
+                panic!("DestinationBasic does not have a coreside link")
             }
-            NodeType::ClientMBN(node) => node.coreside_out,
-            NodeType::RelayMBN(node) => node.coreside_out,
-            NodeType::RelayMBNtserver(_) => panic!("RelayMBNtserver does not have a coreside link"),
+            NodeType::ClientMaybenot(node) => node.coreside_out,
+            NodeType::RelayMaybenot(node) => node.coreside_out,
+            NodeType::RelayMaybenotDestination(_) => {
+                panic!("RelayMaybenotDestination does not have a coreside link")
+            }
         }
     }
 
@@ -68,10 +74,10 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(_) => panic!("ClientBasic does not have an edgeside link"),
             NodeType::RouterBasic(node) => node.edgeside_out,
-            NodeType::TrafficServerBasic(node) => node.edgeside_out,
-            NodeType::ClientMBN(_) => panic!("ClientMBN does not have an edgeside link"),
-            NodeType::RelayMBN(node) => node.edgeside_out,
-            NodeType::RelayMBNtserver(node) => node.edgeside_out,
+            NodeType::DestinationBasic(node) => node.edgeside_out,
+            NodeType::ClientMaybenot(_) => panic!("ClientMaybenot does not have an edgeside link"),
+            NodeType::RelayMaybenot(node) => node.edgeside_out,
+            NodeType::RelayMaybenotDestination(node) => node.edgeside_out,
         }
     }
 
@@ -79,12 +85,12 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(_) => panic!("ClientBasic does not have an edgeside link"),
             NodeType::RouterBasic(_) => panic!("RouterBasic does not have edgeside_in"),
-            NodeType::TrafficServerBasic(_) => {
-                panic!("TrafficServerBasic does not have edgeside_in")
+            NodeType::DestinationBasic(_) => {
+                panic!("DestinationBasic does not have edgeside_in")
             }
-            NodeType::ClientMBN(_) => panic!("ClientMBN does not have an edgeside link"),
-            NodeType::RelayMBN(node) => node.edgeside_in,
-            NodeType::RelayMBNtserver(node) => node.edgeside_in,
+            NodeType::ClientMaybenot(_) => panic!("ClientMaybenot does not have an edgeside link"),
+            NodeType::RelayMaybenot(node) => node.edgeside_in,
+            NodeType::RelayMaybenotDestination(node) => node.edgeside_in,
         }
     }
 
@@ -92,10 +98,10 @@ impl NodeType {
         match self {
             NodeType::ClientBasic(_) => "ClientBasic",
             NodeType::RouterBasic(_) => "RouterBasic",
-            NodeType::TrafficServerBasic(_) => "TrafficServerBasic",
-            NodeType::ClientMBN(_) => "ClientMBN",
-            NodeType::RelayMBN(_) => "RelayMBN",
-            NodeType::RelayMBNtserver(_) => "RelayMBNtserver",
+            NodeType::DestinationBasic(_) => "DestinationBasic",
+            NodeType::ClientMaybenot(_) => "ClientMaybenot",
+            NodeType::RelayMaybenot(_) => "RelayMaybenot",
+            NodeType::RelayMaybenotDestination(_) => "RelayMaybenotDestination",
         }
     }
 }
@@ -105,7 +111,7 @@ pub fn check_dependent_packets(
     si: &SimInfo,
     sq: &mut SimQueue,
     outgoing_link: &LinkType,
-    ts_to_relay_extra_us: u64,
+    destination_to_relay_extra_us: u64,
 ) {
     debug!("\tqueue {:#?} tx_depend check", TriggerEvent::NormalRecv);
 
@@ -118,7 +124,7 @@ pub fn check_dependent_packets(
                 new_pktidx, delta, event_kind
             );
             let additional_duration =
-                Duration::from_nanos(*delta as u64 + ts_to_relay_extra_us * 1000);
+                Duration::from_nanos(*delta as u64 + destination_to_relay_extra_us * 1000);
 
             sq.push(SimEvent {
                 event: TriggerEvent::NormalSent,
@@ -334,12 +340,12 @@ impl RouterBasic {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct TrafficServerBasic {
+pub struct DestinationBasic {
     pub id: usize,
     pub edgeside_out: usize,
 }
 
-impl TrafficServerBasic {
+impl DestinationBasic {
     pub fn new(id: usize, edgeside_out: usize) -> Self {
         Self { id, edgeside_out }
     }
@@ -364,7 +370,7 @@ impl TrafficServerBasic {
             }
             _ => {
                 panic!(
-                    "TrafficServerBasic cannot handle s_event: {:?}",
+                    "DestinationBasic cannot handle s_event: {:?}",
                     s_event.event
                 );
             }
@@ -391,21 +397,30 @@ mod tests {
         assert_eq!(router.type_name(), "RouterBasic");
 
         let server =
-            create_node("TrafficServerBasic", 3, None, None, Some(0), &empty_params).unwrap();
+            create_node("DestinationBasic", 3, None, None, Some(0), &empty_params).unwrap();
         assert_eq!(server.node_id(), 3);
-        assert_eq!(server.type_name(), "TrafficServerBasic");
+        assert_eq!(server.type_name(), "DestinationBasic");
 
-        // Test new MBN node types - these require current_time parameter
-        let mut mbn_params = HashMap::new();
-        mbn_params.insert("current_time".to_string(), "0".to_string()); // 0 nanoseconds from now
+        // Test new Maybenot node types - these require current_time parameter
+        let mut maybenot_params = HashMap::new();
+        maybenot_params.insert("current_time".to_string(), "0".to_string()); // 0 nanoseconds from now
 
-        let client_mbn = create_node("ClientMBN", 4, Some(2), None, None, &mbn_params).unwrap();
-        assert_eq!(client_mbn.node_id(), 4);
-        assert_eq!(client_mbn.type_name(), "ClientMBN");
+        let client_maybenot =
+            create_node("ClientMaybenot", 4, Some(2), None, None, &maybenot_params).unwrap();
+        assert_eq!(client_maybenot.node_id(), 4);
+        assert_eq!(client_maybenot.type_name(), "ClientMaybenot");
 
-        let relay_mbn = create_node("RelayMBN", 5, Some(2), Some(3), Some(3), &mbn_params).unwrap();
-        assert_eq!(relay_mbn.node_id(), 5);
-        assert_eq!(relay_mbn.type_name(), "RelayMBN");
+        let relay_maybenot = create_node(
+            "RelayMaybenot",
+            5,
+            Some(2),
+            Some(3),
+            Some(3),
+            &maybenot_params,
+        )
+        .unwrap();
+        assert_eq!(relay_maybenot.node_id(), 5);
+        assert_eq!(relay_maybenot.type_name(), "RelayMaybenot");
 
         let invalid = create_node("InvalidType", 6, None, None, None, &empty_params);
         assert!(invalid.is_err());

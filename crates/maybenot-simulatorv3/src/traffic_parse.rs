@@ -111,8 +111,8 @@ pub enum EventKind {
 ///
 /// # Usage in Simulation
 ///
-/// 1. `client_simq_push` and `trafficserver_simq_push` events seed the simulation
-/// 2. When a receive event processes, it triggers its `dependent_tx` events  
+/// 1. `client_simq_push` and `destination_simq_push` events seed the simulation
+/// 2. When a receive event processes, it triggers its `dependent_tx` events
 /// 3. Dependent events are scheduled with appropriate delays from their triggers
 #[derive(Debug, Clone)]
 pub struct TrafficTraceData {
@@ -122,7 +122,7 @@ pub struct TrafficTraceData {
 
     /// Client receive events that did not have a qualifying client send dependency.
     /// These represent server-initiated communications (pushes, notifications, etc.).
-    pub trafficserver_simq_push: Vec<PacketEvent>,
+    pub destination_simq_push: Vec<PacketEvent>,
 
     /// Dependency mapping: `dependent_tx[recv_packet_id]` contains all events triggered by that receive.
     /// Each tuple is `(dependent_packet_id, time_delta_ns, event_kind)`.
@@ -150,7 +150,7 @@ pub struct TrafficTraceData {
 ///   `2×ttrace_ts_to_c_delay_ns` before receive time
 /// - **Match found**: Server response depends on that client send → recorded as
 ///   dependency  
-/// - **No match**: Server-initiated event → goes to `trafficserver_simq_push`
+/// - **No match**: Server-initiated event → goes to `destination_simq_push`
 ///
 /// # Arguments
 ///
@@ -163,7 +163,7 @@ pub struct TrafficTraceData {
 ///
 /// [`TrafficTraceData`] containing:
 /// - `client_simq_push`: Initial client requests (no dependencies)  
-/// - `trafficserver_simq_push`: Server-initiated events (no dependencies)
+/// - `destination_simq_push`: Server-initiated events (no dependencies)
 /// - `dependent_tx`: Dependency mapping `[recv_id] → [(send_id, delay, kind)]`
 ///
 pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTraceData {
@@ -220,15 +220,15 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
         }
     }
 
-    // Process trafficserver events: for each client receive event, try to find
+    // Process destination events: for each client receive event, try to find
     // the most recent client send event that occurred at or before (recv time -
     // 2 * ttrace_ts_to_c_delay_ns). If found, record that as a dependency;
-    // otherwise, mark the receive as a simQ push for trafficserver.
+    // otherwise, mark the receive as a simQ push for destination.
     let client_sends: Vec<&PacketEvent> = pkt_events
         .iter()
         .filter(|e| e.kind == EventKind::CliSend)
         .collect();
-    let mut trafficserver_simq_push = Vec::new();
+    let mut destination_simq_push = Vec::new();
     for pkt_event in &pkt_events {
         if pkt_event.kind == EventKind::CliReceive {
             let boundary = pkt_event.time_ns - (2 * ttrace_ts_to_c_delay_ns);
@@ -248,13 +248,13 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
                 } else {
                     let mut adjusted_event = *pkt_event;
                     adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
-                    trafficserver_simq_push.push(adjusted_event);
+                    destination_simq_push.push(adjusted_event);
                 }
             } else {
                 // Fix since some traces start with 0,r or time < which is messy,
                 let mut adjusted_event = *pkt_event;
                 adjusted_event.time_ns -= ttrace_ts_to_c_delay_ns;
-                trafficserver_simq_push.push(adjusted_event);
+                destination_simq_push.push(adjusted_event);
             }
         }
     }
@@ -272,11 +272,11 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
 
     debug!(
         "{:#?}\n{:#?}\n{:#?}\n",
-        client_simq_push, trafficserver_simq_push, dependent_tx
+        client_simq_push, destination_simq_push, dependent_tx
     );
     TrafficTraceData {
         client_simq_push,
-        trafficserver_simq_push,
+        destination_simq_push,
         dependent_tx,
     }
 }
@@ -287,7 +287,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     let mut pkt_events: Vec<PacketEvent> = traffic.client_simq_push.clone();
     pkt_events.extend(
         traffic
-            .trafficserver_simq_push
+            .destination_simq_push
             .clone()
             .into_iter()
             .map(|mut pkt_event| {
@@ -386,7 +386,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     }
 
     println!("\nInitial webserver simQ push events:");
-    for event in &traffic.trafficserver_simq_push {
+    for event in &traffic.destination_simq_push {
         println!(
             "cli_recv  [#{:5}  @{:7}]   webserver_send simQ_push",
             event.packet_id, event.time_ns
@@ -469,14 +469,14 @@ pub fn fill_simq(
         sq.push(simul_event);
     }
 
-    for event in &traffic_events.trafficserver_simq_push {
+    for event in &traffic_events.destination_simq_push {
         let event_instant = get_event_instant(si, event);
         let simul_event = SimEvent {
             event: TriggerEvent::NormalSent,
             time: event_instant,
             packet_id: event.packet_id,
-            node_id: topology.traffic_server, // TrafficServer node index
-            link_id: topology.nodes[topology.traffic_server].get_edgeside_out_id(), // TrafficServer->Relay link
+            node_id: topology.destination, // Destination node index
+            link_id: topology.nodes[topology.destination].get_edgeside_out_id(), // Destination->Relay link
             contains_padding: false,
             bypass: false,
             replace: false,

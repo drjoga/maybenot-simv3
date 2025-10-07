@@ -59,7 +59,7 @@ fn run_sim(
         56000000,s,100
         100000000,s,100";
 
-    let config_file = "tests/mbn_baseline_test.toml";
+    let config_file = "tests/maybenot_baseline_test.toml";
     let delay = Duration::from_millis(5);
 
     //Read in config path to toml_str
@@ -83,7 +83,7 @@ fn run_sim(
     let mut trace = sim_advanced(&[m], &[], &topology, &mut linkstate, &si, &mut sq, &args);
 
     if !only_client {
-        trace.retain(|e| e.node_id == topology.get_mbn_server().node_id());
+        trace.retain(|e| e.node_id == topology.get_maybenot_server().node_id());
     }
 
     for event in &trace {

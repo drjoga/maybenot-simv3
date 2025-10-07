@@ -99,24 +99,24 @@ pub struct NetworkTopology {
 
     // Special node indices
     pub client: usize,                        // Traffic source node
-    pub traffic_server: usize,                // Traffic destination node
+    pub destination: usize,                // Traffic destination node
     pub has_mb: bool,                         // Are Maybenot nodes present?
-    pub mb_client: usize,                     // Client MBN node index
-    pub mb_server: usize,                     // Server/relay MBN node index
+    pub mb_client: usize,                     // Client Maybenot node index
+    pub mb_server: usize,                     // Server/relay Maybenot node index
 }
 ```
 
 **Key Methods**:
 - `get_outlink(node_id, in_link)` - Routing lookup
-- `get_mbn_client()` / `get_mbn_server()` - Access Maybenot nodes as trait objects
+- `get_maybenot_client()` / `get_maybenot_server()` - Access Maybenot nodes as trait objects
 
 **Node Types** (see `src/nodes.rs:11`):
 - `ClientBasic` - Simple traffic source
 - `RouterBasic` - Packet forwarding
-- `TrafficServerBasic` - Simple traffic destination
-- `ClientMBN` - Client with Maybenot framework
-- `RelayMBN` - Relay with Maybenot framework
-- `RelayMBNtserver` - Combined relay+traffic-server with Maybenot
+- `DestinationBasic` - Simple traffic destination
+- `ClientMaybenot` - Client with Maybenot framework
+- `RelayMaybenot` - Relay with Maybenot framework
+- `RelayMaybenotdestination` - Combined relay+traffic-server with Maybenot
 
 **Routing**: `routes[node_id][incoming_link_id] = Some(outgoing_link_id)` defines forwarding rules.
 
@@ -241,9 +241,9 @@ pub struct BinDist {
 
 ### Maybenot Node State
 
-**`MbnState`** (`src/mbn_nodes.rs:59`) - Per-node Maybenot framework state:
+**`MaybenotState`** (`src/maybenot_nodes.rs:59`) - Per-node Maybenot framework state:
 ```rust
-pub struct MbnState<M, R> {
+pub struct MaybenotState<M, R> {
     pub framework: Framework<M, R>,             // Maybenot framework instance
     pub scheduled_action: Vec<Option<ScheduledAction>>,   // Per-machine action timers
     pub scheduled_internal_timer: Vec<Option<Instant>>,   // Per-machine internal timers
@@ -254,7 +254,7 @@ pub struct MbnState<M, R> {
 }
 ```
 
-**`ScheduledAction`** (`src/mbn_nodes.rs:52`) - Pending defense action:
+**`ScheduledAction`** (`src/maybenot_nodes.rs:52`) - Pending defense action:
 ```rust
 pub struct ScheduledAction {
     pub action: TriggerAction,  // SendPadding, BlockOutgoing, etc.
@@ -262,7 +262,7 @@ pub struct ScheduledAction {
 }
 ```
 
-**Traffic Queues**: MBN nodes maintain blocked packet queues:
+**Traffic Queues**: Maybenot nodes maintain blocked packet queues:
 - `queue_normal: RefCell<VecDeque<SimEvent>>` - Blocked normal traffic
 - `queue_padding: RefCell<VecDeque<SimEvent>>` - Blocked padding traffic
 
@@ -306,7 +306,7 @@ pub struct NetworkConfig {
 ```rust
 pub struct NodeConfig {
     pub id: usize,
-    pub node_type: String,                 // "ClientMBN", "RelayMBN", etc.
+    pub node_type: String,                 // "ClientMaybenot", "RelayMaybenot", etc.
     pub ts_to_relay_extra_us: Option<u64>, // Extra delay for packet generation
 }
 ```
@@ -331,7 +331,7 @@ pub struct LinkConfig {
 ### Main Loop (`sim_advanced()` in `src/lib.rs:490`)
 
 ```
-1. Initialize MBN nodes (if present) with framework instances
+1. Initialize Maybenot nodes (if present) with framework instances
 2. Set current_time = earliest_event_instant
 
 LOOP while pick_next() returns event:
@@ -340,34 +340,34 @@ LOOP while pick_next() returns event:
        - Routes packet through topology
        - Updates link states
        - Queues dependent packets
-    5. IF event at MBN node: trigger_update(event, ...)
+    5. IF event at Maybenot node: trigger_update(event, ...)
        - framework.trigger_events() → actions
        - Schedule actions (padding, blocking, timers)
-       - Update MBN state
+       - Update Maybenot state
     6. IF output filter passes: append event to trace
     7. Check termination conditions
 ```
 
-### Event Selection (`pick_next_mbn()` in `src/lib.rs:658`)
+### Event Selection (`pick_next_maybenot()` in `src/lib.rs:658`)
 
 Chooses next event from **4 concurrent sources** (when Maybenot nodes present):
 
-1. **Blocking expiry** - `blocking_until` from MBN nodes
+1. **Blocking expiry** - `blocking_until` from Maybenot nodes
 2. **Queue events** - `sq.heap` (network packets)
-3. **Internal timers** - `scheduled_internal_timer` from MBN nodes
-4. **Scheduled actions** - `scheduled_action` from MBN nodes (padding, blocking)
+3. **Internal timers** - `scheduled_internal_timer` from Maybenot nodes
+4. **Scheduled actions** - `scheduled_action` from Maybenot nodes (padding, blocking)
 
 **Priority**: Earliest timestamp wins. Tie-breaking favors blocking > queue > timers > actions.
 
 ### Node Event Handling
 
-**Basic Nodes** (`ClientBasic`, `RouterBasic`, `TrafficServerBasic`):
+**Basic Nodes** (`ClientBasic`, `RouterBasic`, `DestinationBasic`):
 - Receive packet on incoming link
 - Route to outgoing link via `topology.routes`
 - Call `make_network_receive_from_sent()` to schedule receive event
 - Check `dependent_tx` for triggered packets
 
-**MBN Nodes** (`ClientMBN`, `RelayMBN`, `RelayMBNtserver`):
+**Maybenot Nodes** (`ClientMaybenot`, `RelayMaybenot`, `RelayMaybenotDestination`):
 - All basic node functionality
 - **Plus**: Maybenot framework integration
 - Blocking queue management
@@ -390,10 +390,10 @@ SimEvent → NodeType.handle_event()
 SimEvent → Link.sample() → mutates NetworkLinkState
   ↓
 SimEvent → dependent_tx lookup → new SimEvents → SimQueue
-  ↓ (if MBN node)
+  ↓ (if Maybenot node)
 TriggerEvent → Framework.trigger_events()
   ↓
-TriggerAction → ScheduledAction → MbnState
+TriggerAction → ScheduledAction → MaybenotState
   ↓ pick_next()
 SimEvent → output trace
 ```
@@ -405,9 +405,9 @@ sim_advanced() requires:
   │    └─ from maybenot crate (serialized defense state machines)
   ├─ topology: &NetworkTopology
   │    ├─ nodes: Vec<NodeType>
-  │    │    ├─ Basic nodes (ClientBasic, RouterBasic, TrafficServerBasic)
-  │    │    └─ MBN nodes (ClientMBN, RelayMBN, RelayMBNtserver)
-  │    │         └─ contains: RefCell<MbnState>
+  │    │    ├─ Basic nodes (ClientBasic, RouterBasic, DestinationBasic)
+  │    │    └─ Maybenot nodes (ClientMaybenot, RelayMaybenot, RelayMaybenotdestination)
+  │    │         └─ contains: RefCell<MaybenotState>
   │    │              └─ framework: Framework<Vec<Machine>, RngSource>
   │    └─ Built from: NetworkConfig (TOML)
   ├─ link_state: &mut NetworkLinkState
@@ -491,7 +491,7 @@ args.insecure_rng_seed = Some(42);  // Fixed seed
 ### Optimizations
 - **Precomputed busy_to matrix** for `HiTraceTputLink` (trades memory for speed)
 - **Enum dispatch** for nodes/links (no vtable overhead)
-- **RefCell interior mutability** for MBN state (avoids clone-modify-replace)
+- **RefCell interior mutability** for Maybenot state (avoids clone-modify-replace)
 - **Arc<LinkTrace>** for shared traces across parallel runs
 
 ### Memory
@@ -525,5 +525,5 @@ Shows event selection, framework triggers, and state transitions.
 ## Further Reading
 
 - **Core Maybenot**: See `crates/maybenot/README.md` for framework details
-- **TOML configs**: Example files in crate root (`basic_test.toml`, `mbn_test.toml`)
+- **TOML configs**: Example files in crate root (`basic_test.toml`, `maybenot_test.toml`)
 - **Traffic traces**: See `traffic_parse::traffic_trace_prepare()` for dependency analysis algorithm

@@ -13,7 +13,7 @@ fn full_trace_compare() {
 
     // Use the same network configuration as the bench
     //let (topology, mut linkstate) = Network::from_toml_file("basic_test.toml").unwrap();
-    let (topology, mut linkstate) = load_topology_from_file("mbn_test.toml").unwrap();
+    let (topology, mut linkstate) = load_topology_from_file("maybenot_test.toml").unwrap();
 
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
@@ -146,7 +146,7 @@ fn simulator_example_use() {
 
     // The network model for simulating the network between the client and the
     // server. Currently just a delay.
-    let (topology, mut linkstate) = load_topology_from_file("mbn_test.toml").unwrap();
+    let (topology, mut linkstate) = load_topology_from_file("maybenot_test.toml").unwrap();
 
     //let network = Network::new(Duration::from_millis(10), None);
 
@@ -202,9 +202,9 @@ use std::time::Instant;
 //const SIM_EVENT_COUNTS: [usize; 3] = [5_000, 10_000, 20_000];
 const SIM_EVENT_COUNTS: [usize; 1] = [10_000];
 const CONFIG_FILES: [&str; 3] = [
-    "/tests/mbn_baseline_test.toml",
-    "/tests/mbn_fast_test.toml",
-    "/tests/mbn_complex_test.toml",
+    "/tests/maybenot_baseline_test.toml",
+    "/tests/maybenot_fast_test.toml",
+    "/tests/maybenot_complex_test.toml",
 ];
 //HiTraceTput takes very long to load, so not included by default.
 const LINK_TYPES: [(&str, &str, &str); 2] = [

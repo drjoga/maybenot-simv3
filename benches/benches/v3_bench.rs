@@ -15,9 +15,9 @@ use rayon::prelude::*;
 const SIM_EVENT_COUNTS: [usize; 1] = [10_000];
 
 const CONFIG_FILES: [&str; 3] = [
-    "/benches/topologies/mbn_baseline_bench.toml",
-    "/benches/topologies/mbn_fast_bench.toml",
-    "/benches/topologies/mbn_complex_bench.toml",
+    "/benches/topologies/maybenot_baseline_bench.toml",
+    "/benches/topologies/maybenot_fast_bench.toml",
+    "/benches/topologies/maybenot_complex_bench.toml",
 ];
 const LINK_TYPES: [(&str, &str, &str); 3] = [
     (

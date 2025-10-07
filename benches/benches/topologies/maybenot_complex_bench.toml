@@ -1,40 +1,40 @@
-# Complex test configuration for maybenot-simulatorv3
-# Network topology: Client -> WLAN -> Starlink -> Relay -> TrafficServer
+# Complex test configuration for simulatorv3
+# Client -> WLAN -> Slink -> Relay -> TrafficSrvr
 
 # Node definitions
 [[Node]]
 id = 0
-type = "ClientMBN"
-coreside_out = 0  # Client sends via link 0 to WLAN
+type = "ClientMaybenot"
+coreside_out = 0  # Client sends via 0 to WLAN
 
 #WLAN
 [[Node]]
 id = 1
 type = "RouterBasic"
-coreside_out = 1   # WLAN sends via link 1 to Starlink
-edgeside_out = 4   # WLAN sends via link 4 to Client
-edgeside_in = 0    # WLAN receives via link 0 from Client
+coreside_out = 1   # WLAN sends via 1 to Slink
+edgeside_out = 4   # WLAN sends via 4 to Client
+edgeside_in = 0    # WLAN recvs via 0 from Client
 
 #Starlink
 [[Node]]
 id = 2
 type = "RouterBasic"
-coreside_out = 2   # Starlink sends via link 2 to Relay
-edgeside_out = 5   # Starlink sends via link 5 to WLAN
-edgeside_in = 1    # Starlink receives via link 1 from WLAN
+coreside_out = 2   # Slink sends via 2 to Relay
+edgeside_out = 5   # Slink sends via 5 to WLAN
+edgeside_in = 1    # Slink recvs via 1 from WLAN
 
 #VPN Relay
 [[Node]]
 id = 3
-type = "RelayMBN"
-coreside_out = 3   # Relay sends via link 3 to TrafficServer
-edgeside_out = 6   # Relay sends via link 6 to Starlink
-edgeside_in = 2    # Relay receives via link 2 from Starlink
+type = "RelayMaybenot"
+coreside_out = 3   # sends via 3 to DestinationBasic
+edgeside_out = 6   # sends via 6 to Slink
+edgeside_in = 2    # recvs via 2 from Slink
 
 [[Node]]
 id = 4
-type = "TrafficServerBasic"
-edgeside_out = 7   # TrafficServer sends via link 7 to Relay
+type = "DestinationBasic"
+edgeside_out = 7   # sends via link 7 to Relay
 
 # Link definitions
 # Forward direction links (0->1->2->3->4)
@@ -45,16 +45,16 @@ from = 0  # Client
 to = 1    # WLAN
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 1
+prop_us = 2_000
 
-# Link 1: from WLAN to Starlink
+# Link 1: from WLAN to Slink
 [[Link]]
 id = 1
 from = 1  # WLAN
 to = 2    # Starlink
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 1
+prop_us = 2_000
 
 # Link 2: from Starlink to Relay
 [[Link]]
@@ -63,16 +63,16 @@ from = 2  # Starlink
 to = 3    # Relay
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 3
+prop_us = 6_000
 
-# Link 3: from Relay to TrafficServer
+# Link 3: from Relay to DestinationBasic
 [[Link]]
 id = 3
 from = 3  # Relay
-to = 4    # TrafficServer
+to = 4    # DestinationBasic
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 5
+prop_us = 10_000
 
 # Return direction links (4->3->2->1->0)
 # Link 4: from WLAN to Client
@@ -82,7 +82,7 @@ from = 1  # WLAN
 to = 0    # Client
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 1
+prop_us = 2_000
 
 # Link 5: from Starlink to WLAN
 [[Link]]
@@ -91,7 +91,7 @@ from = 2  # Starlink
 to = 1    # WLAN
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 1
+prop_us = 2_000
 
 # Link 6: from Relay to Starlink
 [[Link]]
@@ -100,23 +100,23 @@ from = 3  # Relay
 to = 2    # Starlink
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 3
+prop_us = 6_000
 
-# Link 7: from TrafficServer to Relay
+# Link 7: from DestinationBasic to Relay
 [[Link]]
 id = 7
-from = 4  # TrafficServer
+from = 4  # DestinationBasic
 to = 3    # Relay
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 5
+prop_us = 10_000
 
 # Routing rules for WLAN node (id = 1)
 [[Route]]
 node_id = 1
 forwarding_rules = [
-    { in_link = 0, out_link = 1 },  # Client -> Starlink
-    { in_link = 5, out_link = 4 }   # Starlink -> Client
+    { in_link = 0, out_link = 1 },  # Cli -> Slink
+    { in_link = 5, out_link = 4 }   # Slink -> Cli
 ]
 
 # Routing rules for Starlink node (id = 2)
@@ -131,6 +131,6 @@ forwarding_rules = [
 [[Route]]
 node_id = 3
 forwarding_rules = [
-    { in_link = 2, out_link = 3 },  # Starlink -> TrafficServer
-    { in_link = 7, out_link = 6 }   # TrafficServer -> Starlink
+    { in_link = 2, out_link = 3 },  # Slink -> TSrv
+    { in_link = 7, out_link = 6 }   # TSrv -> link
 ]

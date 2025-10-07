@@ -1,5 +1,7 @@
 use crate::integration::Integration;
-use crate::mbn_helpers::{mbn_do_internal_timer, mbn_do_scheduled_action, mbn_trigger_update};
+use crate::maybenot_helpers::{
+    maybenot_do_internal_timer, maybenot_do_scheduled_action, maybenot_trigger_update,
+};
 use crate::nodes::check_dependent_packets;
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use crate::{SimEvent, SimInfo, SimQueue};
@@ -56,7 +58,7 @@ pub struct ScheduledAction {
 
 /// The state of the client, or relay in the simulator.
 #[derive(Debug, Clone)]
-pub struct MbnState<M, R> {
+pub struct MaybenotState<M, R> {
     /// an instance of the Maybenot framework
     pub framework: Framework<M, R>,
     /// scheduled action timers
@@ -73,7 +75,7 @@ pub struct MbnState<M, R> {
     pub integration: Option<Integration>,
 }
 
-impl<M> MbnState<M, RngSource>
+impl<M> MaybenotState<M, RngSource>
 where
     M: AsRef<[Machine]>,
 {
@@ -142,7 +144,11 @@ where
 // 2. Queued for later (blocked, non-bypassable)
 // 3. Bypassed through blocking (blocked but bypassable)
 // 4. Replaced with queued normal traffic (padding with replace=true)
-pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(node: &T, s_event: SimEvent, sq: &mut SimQueue) {
+pub fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
+    node: &T,
+    s_event: SimEvent,
+    sq: &mut SimQueue,
+) {
     let sim_state = node.get_sim_state().borrow();
     let blocking_bypassable = sim_state.blocking_bypassable;
     let blocking_until = sim_state.blocking_until;
@@ -210,7 +216,7 @@ pub fn mbn_handle_tunnel_sent_creation<T: MBNNode>(node: &T, s_event: SimEvent, 
 // Two drainage strategies are supported:
 // 1. Time-ordered: Events drain in chronological order by original timestamp
 // 2. Type-ordered: All normal packets first, then all padding packets
-pub fn mbn_release_blocked_events<T: MBNNode>(
+pub fn maybenot_release_blocked_events<T: MaybenotNode>(
     node: &T,
     sq: &mut SimQueue,
     current_time: Instant,
@@ -283,9 +289,9 @@ pub fn mbn_release_blocked_events<T: MBNNode>(
     }
 }
 
-// Trait for MBN nodes to enable generic implementations
-pub trait MBNNode {
-    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>>;
+// Trait for Maybenot nodes to enable generic implementations
+pub trait MaybenotNode {
+    fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>>;
     fn node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>>;
@@ -304,16 +310,16 @@ pub trait MBNNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClientMBN {
+pub struct ClientMaybenot {
     pub id: usize,
     pub coreside_out: usize,
-    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
     pub queue_normal: RefCell<VecDeque<SimEvent>>,
 }
 
-impl MBNNode for ClientMBN {
-    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
+impl MaybenotNode for ClientMaybenot {
+    fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
 
@@ -340,20 +346,20 @@ impl MBNNode for ClientMBN {
         sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
-        mbn_trigger_update(self, s_event, current_time, sq, topology)
+        maybenot_trigger_update(self, s_event, current_time, sq, topology)
     }
 
     fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_internal_timer(self, target)
+        maybenot_do_internal_timer(self, target)
     }
 
     fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_scheduled_action(self, target)
+        maybenot_do_scheduled_action(self, target)
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-impl ClientMBN {
+impl ClientMaybenot {
     pub fn new(
         id: usize,
         coreside_out: usize,
@@ -364,7 +370,7 @@ impl ClientMBN {
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
-        let sim_state = RefCell::new(MbnState::new(
+        let sim_state = RefCell::new(MaybenotState::new(
             machines,
             Instant::now(),
             max_padding_frac,
@@ -407,7 +413,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::PaddingSent { .. } => {
@@ -425,7 +431,7 @@ impl ClientMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::TunnelSent => {
@@ -463,7 +469,12 @@ impl ClientMBN {
             TriggerEvent::BlockingEnd => {
                 let mut state = self.sim_state.borrow_mut();
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
+                maybenot_release_blocked_events(
+                    self,
+                    sq,
+                    s_event.time,
+                    state.drain_blocked_by_time,
+                );
 
                 // Clear blocking state
                 state.blocking_until = None;
@@ -475,18 +486,18 @@ impl ClientMBN {
 }
 
 #[derive(Debug, Clone)]
-pub struct RelayMBN {
+pub struct RelayMaybenot {
     pub id: usize,
     pub coreside_out: usize,
     pub edgeside_in: usize,
     pub edgeside_out: usize,
-    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
     pub queue_normal: RefCell<VecDeque<SimEvent>>,
 }
 
-impl MBNNode for RelayMBN {
-    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
+impl MaybenotNode for RelayMaybenot {
+    fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
 
@@ -513,19 +524,19 @@ impl MBNNode for RelayMBN {
         sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
-        mbn_trigger_update(self, s_event, current_time, sq, topology)
+        maybenot_trigger_update(self, s_event, current_time, sq, topology)
     }
 
     fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_internal_timer(self, target)
+        maybenot_do_internal_timer(self, target)
     }
 
     fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_scheduled_action(self, target)
+        maybenot_do_scheduled_action(self, target)
     }
 }
 
-impl RelayMBN {
+impl RelayMaybenot {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: usize,
@@ -539,7 +550,7 @@ impl RelayMBN {
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
-        let sim_state = RefCell::new(MbnState::new(
+        let sim_state = RefCell::new(MaybenotState::new(
             machines,
             Instant::now(),
             max_padding_frac,
@@ -615,7 +626,7 @@ impl RelayMBN {
                     sq.push(new_s_event);
                 } else {
                     panic!(
-                        "RelayMBN received NormalRecv on unexpected link index: {}",
+                        "RelayMaybenot received NormalRecv on unexpected link index: {}",
                         s_event.link_id
                     );
                 }
@@ -641,10 +652,10 @@ impl RelayMBN {
                         debug_note: None,
                     };
                     // Use blocking-aware logic to decide whether to queue immediately or block
-                    mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                    maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
                 } else {
                     panic!(
-                        "RelayMBN received NormalRecv on unexpected link index: {}",
+                        "RelayMaybenot received NormalRecv on unexpected link index: {}",
                         s_event.link_id
                     );
                 }
@@ -665,7 +676,7 @@ impl RelayMBN {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::TunnelSent => {
@@ -675,7 +686,12 @@ impl RelayMBN {
             TriggerEvent::BlockingEnd => {
                 let mut state = self.sim_state.borrow_mut();
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
+                maybenot_release_blocked_events(
+                    self,
+                    sq,
+                    s_event.time,
+                    state.drain_blocked_by_time,
+                );
 
                 // Clear blocking state
                 state.blocking_until = None;
@@ -687,18 +703,18 @@ impl RelayMBN {
 }
 
 #[derive(Debug, Clone)]
-pub struct RelayMBNtserver {
+pub struct RelayMaybenotDestination {
     pub id: usize,
     pub edgeside_in: usize,
     pub edgeside_out: usize,
-    pub sim_state: RefCell<MbnState<Vec<Machine>, RngSource>>,
+    pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
     pub queue_normal: RefCell<VecDeque<SimEvent>>,
-    pub ts_prop_us: Duration,
+    pub destination_prop_us: Duration,
 }
 
-impl MBNNode for RelayMBNtserver {
-    fn get_sim_state(&self) -> &RefCell<MbnState<Vec<Machine>, RngSource>> {
+impl MaybenotNode for RelayMaybenotDestination {
+    fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
 
@@ -725,19 +741,19 @@ impl MBNNode for RelayMBNtserver {
         sq: &mut SimQueue,
         topology: &NetworkTopology,
     ) {
-        mbn_trigger_update(self, s_event, current_time, sq, topology)
+        maybenot_trigger_update(self, s_event, current_time, sq, topology)
     }
 
     fn do_internal_timer(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_internal_timer(self, target)
+        maybenot_do_internal_timer(self, target)
     }
 
     fn do_scheduled_action(&self, target: Instant) -> Option<SimEvent> {
-        mbn_do_scheduled_action(self, target)
+        maybenot_do_scheduled_action(self, target)
     }
 }
 
-impl RelayMBNtserver {
+impl RelayMaybenotDestination {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: usize,
@@ -749,9 +765,9 @@ impl RelayMBNtserver {
         drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
-        ts_prop_us: Duration,
+        destination_prop_us: Duration,
     ) -> Self {
-        let sim_state = RefCell::new(MbnState::new(
+        let sim_state = RefCell::new(MaybenotState::new(
             machines,
             Instant::now(),
             max_padding_frac,
@@ -768,7 +784,7 @@ impl RelayMBNtserver {
             sim_state,
             queue_padding: RefCell::new(VecDeque::new()),
             queue_normal: RefCell::new(VecDeque::new()),
-            ts_prop_us,
+            destination_prop_us,
         }
     }
 
@@ -804,18 +820,18 @@ impl RelayMBNtserver {
 
             TriggerEvent::NormalRecv => {
                 debug!(
-                    "\tqueue {:#?} tx_depend check RelayMBNtserver",
+                    "\tqueue {:#?} tx_depend check RelayMaybenotDestination",
                     TriggerEvent::NormalRecv
                 );
                 let mut timeadjusted_event = s_event.clone();
-                timeadjusted_event.time += self.ts_prop_us; // Add delay to trafficserver
+                timeadjusted_event.time += self.destination_prop_us; // Add delay to destination
                 let outgoing_link = &linkstate.links[self.edgeside_out];
                 check_dependent_packets(
                     &timeadjusted_event,
                     si,
                     sq,
                     outgoing_link,
-                    self.ts_prop_us.as_micros() as u64,
+                    self.destination_prop_us.as_micros() as u64,
                 );
             }
 
@@ -836,7 +852,7 @@ impl RelayMBNtserver {
                         debug_note: None,
                     };
                     // Use blocking-aware logic to decide whether to queue immediately or block
-                    mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                    maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
                 }
                 // Ignore coreside NormalSent (shouldn't happen)
             }
@@ -856,7 +872,7 @@ impl RelayMBNtserver {
                     debug_note: None,
                 };
                 // Use blocking-aware logic to decide whether to queue immediately or block
-                mbn_handle_tunnel_sent_creation(self, forward_s_event, sq);
+                maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
             TriggerEvent::TunnelSent => {
@@ -866,7 +882,12 @@ impl RelayMBNtserver {
             TriggerEvent::BlockingEnd => {
                 let mut state = self.sim_state.borrow_mut();
                 // Release any queued events with current time
-                mbn_release_blocked_events(self, sq, s_event.time, state.drain_blocked_by_time);
+                maybenot_release_blocked_events(
+                    self,
+                    sq,
+                    s_event.time,
+                    state.drain_blocked_by_time,
+                );
 
                 // Clear blocking state
                 state.blocking_until = None;

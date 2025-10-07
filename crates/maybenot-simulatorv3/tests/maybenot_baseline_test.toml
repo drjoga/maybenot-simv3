@@ -1,33 +1,33 @@
-# Basic test configuration for maybenot-simulatorv3
-# Network topology: Client -> Relay -> TrafficServer
+# Baseline test configuration for maybenot-simulatorv3
+# Network topology: Client -> Relay -> Destination
 
 # Node definitions
 [[Node]]
 id = 0
-type = "ClientMBN"
+type = "ClientMaybenot"
 coreside_out = 2
 
 [[Node]]
 id = 1
-type = "RelayMBN"
+type = "RelayMaybenot"
 coreside_out = 3
 edgeside_out = 1
 edgeside_in = 2
 
 [[Node]]
 id = 2
-type = "TrafficServerBasic"
+type = "DestinationBasic"
 edgeside_out = 0
 
 # Link definitions
-# Link 0: from node 2 to node 1 (TrafficServer -> Relay)
+# Link 0: from node 2 to node 1 (Destination -> Relay)
 [[Link]]
 id = 0
 from = 2
 to = 1
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 10_000
+prop_us = 5
 
 # Link 1: from node 1 to node 0 (Relay -> Client)
 [[Link]]
@@ -36,7 +36,7 @@ from = 1
 to = 0
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 10_000
+prop_us = 5
 
 # Link 2: from node 0 to node 1 (Client -> Relay)
 [[Link]]
@@ -45,23 +45,23 @@ from = 0
 to = 1
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 10_000
+prop_us = 5
 
-# Link 3: from node 1 to node 2 (Relay -> TrafficServer)
+# Link 3: from node 1 to node 2 (Relay -> Destination)
 [[Link]]
 id = 3
 from = 1
 to = 2
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
-prop_us = 10_000
+prop_us = 5
 
 # Routing rules for the Relay node (id = 1)
 [[Route]]
 node_id = 1
-# Traffic coming from node 0 (Client) goes out via link 3 (to TrafficServer)
-# Traffic coming from node 2 (TrafficServer) goes out via link 1 (to Client)
+# Traffic coming from node 0 (Client) goes out via link 3 (to Destination)
+# Traffic coming from node 2 (Destination) goes out via link 1 (to Client)
 forwarding_rules = [
-    { in_link = 2, out_link = 3 },  # Client->Relay traffic goes to TrafficServer
-    { in_link = 0, out_link = 1 }   # TrafficServer->Relay traffic goes to Client
+    { in_link = 2, out_link = 3 },  # Client->Relay traffic goes to Destination
+    { in_link = 0, out_link = 1 }   # Destination->Relay traffic goes to Client
 ]
