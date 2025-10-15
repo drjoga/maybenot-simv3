@@ -1,5 +1,5 @@
 use crate::links::LinkType;
-use crate::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
+use crate::topology::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use crate::{SimEvent, SimInfo, SimQueue};
 use log::debug;
@@ -445,7 +445,7 @@ impl DestinationBasic {
 mod tests {
     #[test]
     fn test_node_factory() {
-        use crate::topology_parse::create_node;
+        use crate::topology::parse::create_node;
         use std::collections::HashMap;
 
         let empty_params = HashMap::new();

@@ -1,10 +1,9 @@
 use std::fs;
 use std::time::Duration;
 
-use maybenot_simulatorv3::topology_parse::build_network_topology_from_config;
 use maybenot_simulatorv3::{
-    SimulatorArgs, load_topology_from_file, load_topology_from_str, modify_toml, parse_trace,
-    sim_advanced,
+    SimulatorArgs, build_network_topology_from_config, load_topology_from_file,
+    load_topology_from_str, modify_toml, parse_trace, sim_advanced,
 };
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};

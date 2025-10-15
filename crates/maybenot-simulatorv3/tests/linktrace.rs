@@ -1,6 +1,6 @@
 #[cfg(feature = "trace-tests")]
-use maybenot_simulatorv3::linktrace::{
-    LinkTrace, load_linktrace_from_file, save_linktrace_to_file,
+use maybenot_simulatorv3::links::{
+    LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file,
 };
 #[cfg(feature = "trace-tests")]
 use std::sync::Arc;
@@ -11,7 +11,7 @@ mod common;
 
 // Helper function to create sizebin lookup table for tests
 #[cfg(feature = "trace-tests")]
-fn mk_sizebin_lookuptable() -> maybenot_simulatorv3::linktrace::SizebinLookupTable {
+fn mk_sizebin_lookuptable() -> SizebinLookupTable {
     let boundaries = [
         0, 49, 65, 81, 97, 113, 129, 145, 161, 193, 241, 289, 369, 449, 513, 577, 705, 849, 1009,
         1201, 1421, 1501,
@@ -20,7 +20,7 @@ fn mk_sizebin_lookuptable() -> maybenot_simulatorv3::linktrace::SizebinLookupTab
         48, 64, 80, 96, 112, 128, 144, 160, 192, 240, 288, 368, 448, 512, 576, 704, 848, 1008,
         1200, 1420, 1500,
     ];
-    maybenot_simulatorv3::linktrace::SizebinLookupTable::new(&boundaries, &bin_pkt_sizes)
+    SizebinLookupTable::new(&boundaries, &bin_pkt_sizes)
 }
 
 #[test]

@@ -75,7 +75,7 @@ pub fn run_test_sim_toml(
     // TODO: Should be generalized away by separating trace_destination_client_delay and sim_destination_client_delay
     if matches!(
         topology.nodes[topology.mb_server],
-        maybenot_simulatorv3::nodes::NodeType::RelayMaybenotDestination(_)
+        maybenot_simulatorv3::topology::NodeType::RelayMaybenotDestination(_)
     ) {
         // Iterate over the SimEvents in the queue and adjust the time for
         // destination events

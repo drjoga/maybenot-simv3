@@ -1,7 +1,6 @@
-use crate::links::LinkType;
-use crate::linktrace::load_linktrace_from_file;
-use crate::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
-use crate::nodes::NodeType;
+use crate::links::{LinkType, load_linktrace_from_file};
+use crate::topology::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
+use crate::topology::nodes::NodeType;
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -401,7 +400,7 @@ pub fn create_node(
     edgeside_out: Option<usize>,
     params: &HashMap<String, String>,
 ) -> Result<NodeType, String> {
-    use crate::nodes::{ClientBasic, DestinationBasic, RouterBasic};
+    use crate::topology::nodes::{ClientBasic, DestinationBasic, RouterBasic};
 
     match node_type {
         "ClientBasic" => {

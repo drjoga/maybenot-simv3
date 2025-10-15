@@ -1,6 +1,6 @@
-use crate::maybenot_nodes::MaybenotNode;
-use crate::maybenot_nodes::{MaybenotState, ScheduledAction};
 use crate::topology::NetworkTopology;
+use crate::topology::maybenot_nodes::MaybenotNode;
+use crate::topology::maybenot_nodes::{MaybenotState, ScheduledAction};
 use crate::{SimEvent, SimInfo, SimQueue, SimulatorArgs};
 use log::debug;
 use maybenot::{Machine, MachineId, Timer, TriggerAction, TriggerEvent};

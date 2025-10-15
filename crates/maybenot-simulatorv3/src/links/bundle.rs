@@ -1,4 +1,4 @@
-use crate::linktrace::LinkTrace;
+use crate::links::trace::LinkTrace;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -103,7 +103,7 @@ impl fmt::Display for LinkBundle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::linktrace::LinkTrace;
+    use crate::links::trace::LinkTrace;
 
     fn create_dummy_linktrace() -> LinkTrace {
         let trace_data = "100\n200\n300";

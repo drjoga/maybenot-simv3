@@ -1,6 +1,12 @@
-use std::{cmp::max, sync::Arc, time::Duration};
+// Submodules
+pub mod bundle;
+pub mod trace;
 
-use crate::linktrace::LinkTrace;
+// Re-exports
+pub use bundle::{LinkBundle, load_linkbundle_from_file, save_linkbundle_to_file};
+pub use trace::{LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file};
+
+use std::{cmp::max, sync::Arc, time::Duration};
 
 /////// High-performance enum-based link dispatch
 #[derive(Debug, Clone)]

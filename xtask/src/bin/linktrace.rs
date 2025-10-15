@@ -5,12 +5,9 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 
-use maybenot_simulatorv3::linktrace::{
-    LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file,
-};
-
-use maybenot_simulatorv3::linkbundle::{
-    LinkBundle, load_linkbundle_from_file, save_linkbundle_to_file,
+use maybenot_simulatorv3::links::{
+    LinkBundle, LinkTrace, SizebinLookupTable, load_linkbundle_from_file, load_linktrace_from_file,
+    save_linkbundle_to_file, save_linktrace_to_file,
 };
 
 #[derive(Parser)]

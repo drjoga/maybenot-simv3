@@ -2,7 +2,7 @@ use crate::integration::Integration;
 use crate::maybenot_helpers::{
     maybenot_do_internal_timer, maybenot_do_scheduled_action, maybenot_trigger_update,
 };
-use crate::nodes::check_dependent_packets;
+use crate::topology::nodes::check_dependent_packets;
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use crate::{SimEvent, SimInfo, SimQueue};
 use log::debug;
@@ -456,7 +456,9 @@ impl ClientMaybenot {
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
+                crate::topology::nodes::make_network_receive_from_sent(
+                    s_event, topology, linkstate, si, sq,
+                );
             }
 
             TriggerEvent::TunnelRecv => {
@@ -484,7 +486,7 @@ impl ClientMaybenot {
                 let outgoing_link_id = topology.nodes[s_event.node_id].get_coreside_out_id();
                 let outgoing_link = &linkstate.links[outgoing_link_id];
 
-                crate::nodes::check_dependent_packets(s_event, si, sq, outgoing_link, 0);
+                crate::topology::nodes::check_dependent_packets(s_event, si, sq, outgoing_link, 0);
             }
 
             TriggerEvent::BlockingEnd => {
@@ -657,7 +659,7 @@ impl RelayMaybenot {
                     .get_outlink(s_event.node_id, s_event.link_id)
                     .unwrap();
                 if outlink == self.coreside_out {
-                    crate::nodes::forward_network_receive_from_receive(
+                    crate::topology::nodes::forward_network_receive_from_receive(
                         s_event, topology, linkstate, si, sq,
                     );
                 } else if outlink == self.edgeside_out {
@@ -685,7 +687,7 @@ impl RelayMaybenot {
 
             TriggerEvent::NormalSent => {
                 if s_event.link_id == self.coreside_out {
-                    crate::nodes::make_network_receive_from_sent(
+                    crate::topology::nodes::make_network_receive_from_sent(
                         s_event, topology, linkstate, si, sq,
                     );
                 } else if s_event.link_id == self.edgeside_out {
@@ -731,7 +733,9 @@ impl RelayMaybenot {
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
+                crate::topology::nodes::make_network_receive_from_sent(
+                    s_event, topology, linkstate, si, sq,
+                );
             }
 
             TriggerEvent::BlockingEnd => {
@@ -959,7 +963,9 @@ impl RelayMaybenotDestination {
             }
 
             TriggerEvent::TunnelSent => {
-                crate::nodes::make_network_receive_from_sent(s_event, topology, linkstate, si, sq);
+                crate::topology::nodes::make_network_receive_from_sent(
+                    s_event, topology, linkstate, si, sq,
+                );
             }
 
             TriggerEvent::BlockingEnd => {
