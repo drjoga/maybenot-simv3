@@ -8,3 +8,4 @@ fuzz/seeds/
 *.ltbin
 *.tr.gz
 *.tr
+/plans
