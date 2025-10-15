@@ -1,75 +1,10 @@
 use crate::maybenot_nodes::MaybenotNode;
 use crate::maybenot_nodes::{MaybenotState, ScheduledAction};
 use crate::topology::NetworkTopology;
-use crate::{SimEvent, SimQueue, SimulatorArgs};
+use crate::{SimEvent, SimInfo, SimQueue, SimulatorArgs};
 use log::debug;
 use maybenot::{Machine, MachineId, Timer, TriggerAction, TriggerEvent};
 use std::time::{Duration, Instant};
-
-pub fn peek_scheduled_action(
-    scheduled_c: &[Option<ScheduledAction>],
-    scheduled_s: &[Option<ScheduledAction>],
-    current_time: Instant,
-) -> Duration {
-    // there are at most one scheduled action per machine, so we can just
-    // iterate over all of them quickly
-    let mut earliest = Duration::MAX;
-
-    for a in scheduled_c.iter().flatten() {
-        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
-            earliest = a.time.duration_since(current_time);
-        }
-    }
-    for a in scheduled_s.iter().flatten() {
-        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
-            earliest = a.time.duration_since(current_time);
-        }
-    }
-
-    earliest
-}
-
-pub fn peek_scheduled_internal_timer(
-    internal_c: &[Option<Instant>],
-    internal_s: &[Option<Instant>],
-    current_time: Instant,
-) -> Duration {
-    // there are at most one internal event per machine, so we can just
-    // iterate over all of them quickly
-    let mut earliest = Duration::MAX;
-
-    for t in internal_c.iter().flatten() {
-        if *t >= current_time && t.duration_since(current_time) < earliest {
-            earliest = t.duration_since(current_time);
-        }
-    }
-    for t in internal_s.iter().flatten() {
-        if *t >= current_time && t.duration_since(current_time) < earliest {
-            earliest = t.duration_since(current_time);
-        }
-    }
-
-    earliest
-}
-
-pub fn peek_blocked_exp(
-    blocking_c: Option<Instant>,
-    blocking_s: Option<Instant>,
-    current_time: Instant,
-) -> (Duration, bool) {
-    match (blocking_c, blocking_s) {
-        (Some(c), Some(s)) => {
-            if c < s {
-                (c.duration_since(current_time), true)
-            } else {
-                (s.duration_since(current_time), false)
-            }
-        }
-        (Some(c), None) => (c.duration_since(current_time), true),
-        (None, Some(s)) => (s.duration_since(current_time), false),
-        (None, None) => (Duration::MAX, true),
-    }
-}
 
 /// Initialize Maybenot nodes with MaybenotState for simulation
 pub fn initialize_maybenot_sim_states(
@@ -106,6 +41,210 @@ pub fn initialize_maybenot_sim_states(
         args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
     *relay_maybenot.get_sim_state().borrow_mut() = new_state;
+}
+
+// Advanced event scheduling for Maybenot defense simulation.
+//
+// This function implements the core scheduling algorithm that coordinates:
+// 1. Network packet events from the simulation queue
+// 2. Defense machine scheduled actions (padding/blocking)
+// 3. Defense machine internal timers
+// 4. Blocking period expiry events
+pub fn pick_next_maybenot(
+    si: &SimInfo,
+    sq: &mut SimQueue,
+    topology: &NetworkTopology,
+    current_time: Instant,
+) -> Option<SimEvent> {
+    let client_maybenot = topology.get_maybenot_client();
+    let relay_maybenot = topology.get_maybenot_server();
+
+    // Collect scheduled actions and internal timers from Maybenot nodes
+    let mut min_scheduled_action = Duration::MAX;
+    let mut action_node = client_maybenot;
+    let mut min_internal_timer = Duration::MAX;
+    let mut timer_node = client_maybenot;
+
+    // Check client Maybenot node
+    let state = client_maybenot.get_sim_state().borrow();
+
+    // Check scheduled actions
+    for action in state.scheduled_action.iter().flatten() {
+        if action.time >= current_time {
+            let duration = action.time.duration_since(current_time);
+            if duration < min_scheduled_action {
+                min_scheduled_action = duration;
+            }
+        }
+    }
+
+    // Check internal timers
+    for timer in state.scheduled_internal_timer.iter().flatten() {
+        if *timer >= current_time {
+            let duration = timer.duration_since(current_time);
+            if duration < min_internal_timer {
+                min_internal_timer = duration;
+            }
+        }
+    }
+    let client_blocking_until = state.blocking_until;
+    drop(state);
+
+    // Check server Maybenot node
+    let state = relay_maybenot.get_sim_state().borrow();
+
+    // Check scheduled actions
+    for action in state.scheduled_action.iter().flatten() {
+        if action.time >= current_time {
+            let duration = action.time.duration_since(current_time);
+            if duration < min_scheduled_action {
+                min_scheduled_action = duration;
+                action_node = relay_maybenot;
+            }
+        }
+    }
+
+    // Check internal timers
+    for timer in state.scheduled_internal_timer.iter().flatten() {
+        if *timer >= current_time {
+            let duration = timer.duration_since(current_time);
+            if duration < min_internal_timer {
+                min_internal_timer = duration;
+                timer_node = relay_maybenot;
+            }
+        }
+    }
+    let server_blocking_until = state.blocking_until;
+    drop(state);
+
+    // Check blocking expiry
+    let (min_blocking, blocking_is_client) = match (client_blocking_until, server_blocking_until) {
+        (Some(c), Some(s)) => {
+            if c < s {
+                (c.duration_since(current_time), true)
+            } else {
+                (s.duration_since(current_time), false)
+            }
+        }
+        (Some(c), None) => (c.duration_since(current_time), true),
+        (None, Some(s)) => (s.duration_since(current_time), false),
+        (None, None) => (Duration::MAX, true),
+    };
+
+    // Check queue
+    let queue_next = sq.peek();
+    let queue_duration = match queue_next {
+        Some(event) => event.time.duration_since(current_time),
+        None => Duration::MAX,
+    };
+
+    // Debug output
+    if min_scheduled_action == Duration::MAX {
+        debug!("\tpick_next(): peek_scheduled_action = None");
+    } else {
+        debug!(
+            "\tpick_next(): peek_scheduled_action = {:?}",
+            min_scheduled_action
+        );
+    }
+
+    if min_internal_timer == Duration::MAX {
+        debug!("\tpick_next(): peek_scheduled_internal_timer = None");
+    } else {
+        debug!(
+            "\tpick_next(): peek_scheduled_internal_timer = {:?}",
+            min_internal_timer
+        );
+    }
+
+    if min_blocking == Duration::MAX {
+        debug!("\tpick_next(): peek_blocked_exp = None");
+    } else {
+        debug!("\tpick_next(): peek_blocked_exp = {:?}", min_blocking);
+    }
+
+    if queue_duration == Duration::MAX {
+        debug!("\tpick_next(): peek_queue = None");
+    } else {
+        debug!(
+            "\tpick_next(): peek_queue = {}",
+            queue_next.unwrap().display_relative(si)
+        );
+    }
+
+    // No next event?
+    if min_scheduled_action == Duration::MAX
+        && min_internal_timer == Duration::MAX
+        && min_blocking == Duration::MAX
+        && queue_duration == Duration::MAX
+    {
+        return None;
+    }
+
+    // Pick the earliest event
+
+    // Blocking expiry is earliest
+    if min_blocking <= min_scheduled_action
+        && min_blocking <= min_internal_timer
+        && min_blocking <= queue_duration
+    {
+        debug!("\tpick_next(): picked blocking");
+
+        // Clear blocking state from the appropriate node
+        if blocking_is_client {
+            client_maybenot.get_sim_state().borrow_mut().blocking_until = None;
+        } else {
+            relay_maybenot.get_sim_state().borrow_mut().blocking_until = None;
+        }
+
+        let e = SimEvent {
+            event: TriggerEvent::BlockingEnd,
+            time: current_time + min_blocking,
+            packet_id: usize::MAX,
+            node_id: if blocking_is_client {
+                topology.mb_client
+            } else {
+                topology.mb_server
+            },
+            link_id: if blocking_is_client {
+                topology.nodes[topology.mb_client].get_coreside_out_id()
+            } else {
+                topology.nodes[topology.mb_server].get_edgeside_out_id()
+            },
+            bypass: false,
+            replace: false,
+            contains_padding: false,
+            q_sequence_nr: 0,
+            #[cfg(debug_assertions)]
+            debug_note: None,
+        };
+        return Some(e);
+    }
+
+    // Queue is next
+    if queue_duration <= min_scheduled_action && queue_duration <= min_internal_timer {
+        debug!("\tpick_next(): picked queue");
+        return sq.pop();
+    }
+
+    // Internal timer is next
+    if min_internal_timer <= min_scheduled_action {
+        debug!("\tpick_next(): picked internal timer");
+        let target_time = current_time + min_internal_timer;
+
+        if let Some(event) = timer_node.do_internal_timer(target_time) {
+            return Some(event);
+        }
+    }
+
+    // Scheduled action is last
+    debug!("\tpick_next(): picked scheduled action");
+    let target_time = current_time + min_scheduled_action;
+
+    if let Some(event) = action_node.do_scheduled_action(target_time) {
+        return Some(event);
+    }
+    None
 }
 
 // Generic helper functions for Maybenot operations
