@@ -17,7 +17,6 @@ fn full_trace_compare() {
     const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
 
     // Use the same network configuration as the bench
-    //let (topology, mut linkstate) = Network::from_toml_file("tests/cfg/basic_test.toml").unwrap();
     let (topology, mut linkstate) =
         load_topology_from_file("tests/cfg/maybenot_test.toml").unwrap();
 

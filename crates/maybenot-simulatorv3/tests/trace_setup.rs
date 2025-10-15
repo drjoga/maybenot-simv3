@@ -12,9 +12,9 @@ pub fn setup_traces() {
     ensure_traces_exist(&tests_dir);
 }
 
-/// Ensures all required trace files exist for testing.
-/// This is a fallback mechanism in case the build script didn't run
-/// or failed to generate the required files.
+/// Ensures all required trace files exist for testing. This is a fallback
+/// mechanism in case the build script didn't run or failed to generate the
+/// required files.
 pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
     INIT.call_once(|| {
         let required_trace_files = [
@@ -106,8 +106,8 @@ pub fn ensure_traces_exist(tests_dir: &std::path::Path) {
     });
 }
 
-/// Attempts to find the workspace root directory by looking for Cargo.toml
-/// with workspace configuration.
+/// Attempts to find the workspace root directory by looking for Cargo.toml with
+/// workspace configuration.
 #[cfg(feature = "trace-tests")]
 fn find_workspace_root() -> std::path::PathBuf {
     let mut current = std::env::current_dir().expect("Failed to get current directory");

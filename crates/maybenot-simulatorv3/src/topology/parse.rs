@@ -107,11 +107,13 @@ pub fn load_topology_from_file<P: AsRef<Path>>(
 ///
 /// # Arguments
 ///
-/// * `toml_str` - TOML configuration string containing Node and Link definitions
+/// * `toml_str` - TOML configuration string containing Node and Link
+///   definitions
 ///
 /// # Returns
 ///
-/// * `Ok((NetworkTopology, NetworkLinkstate))` - Parsed and validated network configuration
+/// * `Ok((NetworkTopology, NetworkLinkstate))` - Parsed and validated network
+///   configuration
 /// * `Err(String)` - Detailed error message with parsing failure details
 ///
 /// # Error Conditions
@@ -336,9 +338,9 @@ pub fn convert_toml_params(params: &HashMap<String, toml::Value>) -> HashMap<Str
     result
 }
 
-/// Load propagation delays from a text file
-/// File format: one integer per line representing microseconds of propagation delay
-/// Line number corresponds to millisecond of simulation time (starting from 0)
+/// Load propagation delays from a text file, File format: one integer per line
+/// representing microseconds of propagation delay Line number corresponds to
+/// millisecond of simulation time (starting from 0)
 pub fn load_propagation_file<P: AsRef<Path>>(path: P) -> Result<Vec<u64>, String> {
     let file = fs::File::open(&path).map_err(|e| {
         format!(
@@ -463,7 +465,8 @@ pub fn create_node(
             let edgeside_in_val =
                 edgeside_in.ok_or("RelayMaybenotDestination requires edgeside_in")?;
 
-            // Parse destination_prop_us parameter specific to RelayMaybenotDestination
+            // Parse destination_prop_us parameter specific to
+            // RelayMaybenotDestination
             let destination_prop_us = params
                 .get("destination_prop_us")
                 .and_then(|s| s.parse::<u64>().ok())
@@ -588,12 +591,14 @@ pub fn create_link(
     }
 }
 
-/// Modify TOML configuration by applying parameter changes specified in modifier string.
+/// Modify TOML configuration by applying parameter changes specified in
+/// modifier string.
 ///
 /// # Arguments
 /// * `toml_in` - Input TOML configuration string
-/// * `modifier_string` - Modifications in format: "SectionType:ID::param1:value1::param2:value2\n..."
-///   Supported SectionTypes: "Node", "Link"
+/// * `modifier_string` - Modifications in format:
+///   "SectionType:ID::param1:value1::param2:value2\n..." Supported
+///   SectionTypes: "Node", "Link"
 ///
 /// # Example
 /// ```
@@ -703,8 +708,9 @@ pub fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, Strin
     toml::to_string_pretty(&toml_value).map_err(|e| format!("Failed to serialize TOML: {}", e))
 }
 
-// Modifies the prop_us parameter for Link instances that use fixed propagation in a TOML string.
-// Links with prop_us_file (time-dependent propagation) are left unchanged.
+// Modifies the prop_us parameter for Link instances that use fixed propagation
+// in a TOML string. Links with prop_us_file (time-dependent propagation) are
+// left unchanged.
 pub fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
     // Parse input TOML into a mutable value
     let mut toml_value: toml::Value =
@@ -727,8 +733,8 @@ pub fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
             .as_table_mut()
             .unwrap_or_else(|| panic!("Link entry is not a table"));
 
-        // Only modify links that have prop_us (fixed propagation)
-        // Skip links that have prop_us_file (time-dependent propagation)
+        // Only modify links that have prop_us (fixed propagation) Skip links
+        // that have prop_us_file (time-dependent propagation)
         if link_table.contains_key("prop_us") && !link_table.contains_key("prop_us_file") {
             link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
         }

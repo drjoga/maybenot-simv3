@@ -8,7 +8,8 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
-// Inline helper to serialize Vec<Arc<LinkTrace>> by serializing a Vec<&LinkTrace>
+// Inline helper to serialize Vec<Arc<LinkTrace>> by serializing a
+// Vec<&LinkTrace>
 fn serialize_vec_arc<S>(vec: &[Arc<LinkTrace>], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -18,7 +19,8 @@ where
     vec_inner.serialize(serializer)
 }
 
-// Inline helper to deserialize Vec<Arc<LinkTrace>> by deserializing a Vec<LinkTrace>
+// Inline helper to deserialize Vec<Arc<LinkTrace>> by deserializing a
+// Vec<LinkTrace>
 fn deserialize_vec_arc<'de, D>(deserializer: D) -> Result<Vec<Arc<LinkTrace>>, D::Error>
 where
     D: serde::Deserializer<'de>,

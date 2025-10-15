@@ -207,8 +207,8 @@ impl HiTraceTputLink {
         let mut queueing_delay_duration = Duration::default();
         let this_packet_duration;
 
-        // Depending on whether the current time slot is after the previous packet finished,
-        // choose the lookup parameters and compute durations.
+        // Depending on whether the current time slot is after the previous
+        // packet finished, choose the lookup parameters and compute durations.
         if self.next_busy_to <= current_time_slot {
             // For simplex operation, use the single trace
             busy_to = self.linktrace.get_busy_to(current_time_slot, pkt_size);
@@ -291,13 +291,15 @@ impl StdTraceTputLink {
         let current_time_slot = current_duration.as_millis() as usize;
         let current_slot_ns_position: u64 = (current_duration.as_nanos() % 1_000_000) as u64;
 
-        // Note: Timing calculation code below is intricate, order between statements can matter.
-        // Establish if the packet will have to queue, or can start sending immediately
+        // Note: Timing calculation code below is intricate, order between
+        // statements can matter. Establish if the packet will have to queue, or
+        // can start sending immediately
         let packet_sees_queuing = self.next_busy_to > current_time_slot
             || ((self.next_busy_to == current_time_slot)
                 && (self.busy_ns_in_slot > current_slot_ns_position));
 
-        // If we are in a new slot after network having been idle, reset busy_ns_in_slot
+        // If we are in a new slot after network having been idle, reset
+        // busy_ns_in_slot
         if self.next_busy_to < current_time_slot {
             self.busy_ns_in_slot = 0
         };
@@ -320,7 +322,8 @@ impl StdTraceTputLink {
         let mut this_packet_duration_ns = 0_u64;
         let mut slot_boundaries_crossed = 0_u64;
 
-        // Cross into new slot(s) until the remaining packet bytes fits in the slot
+        // Cross into new slot(s) until the remaining packet bytes fits in the
+        // slot
         while remaining_pkt_size > bytes_to_slot_end {
             this_packet_duration_ns += ns_to_slot_end;
             remaining_pkt_size -= bytes_to_slot_end;
@@ -336,13 +339,15 @@ impl StdTraceTputLink {
             ns_to_slot_end = 1_000_000;
         }
 
-        // We are now at the slot which allows the last byte of the packet to be sent
+        // We are now at the slot which allows the last byte of the packet to be
+        // sent
         let ns_to_send_remaining = ((remaining_pkt_size as f64 / self.bw_trace[slot_index] as f64)
             * 1e6_f64)
             .round() as u64;
         this_packet_duration_ns += ns_to_send_remaining;
 
-        // Either we are in the first slot, or we have moved, this affects send_end_ns calculation
+        // Either we are in the first slot, or we have moved, this affects
+        // send_end_ns calculation
         let last_slot_send_end_ns = if slot_boundaries_crossed == 0 {
             first_slot_start_send_ns + ns_to_send_remaining
         } else {

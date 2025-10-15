@@ -101,7 +101,8 @@ pub enum EventKind {
 /// Result of traffic trace dependency analysis.
 ///
 /// This struct represents the parsed and analyzed traffic trace, separating
-/// events into independent initial events and dependent request-response chains.
+/// events into independent initial events and dependent request-response
+/// chains.
 ///
 /// # Structure
 ///
@@ -113,19 +114,22 @@ pub enum EventKind {
 ///
 /// 1. `client_simq_push` and `destination_simq_push` events seed the simulation
 /// 2. When a receive event processes, it triggers its `dependent_tx` events
-/// 3. Dependent events are scheduled with appropriate delays from their triggers
+/// 3. Dependent events are scheduled with appropriate delays from their
+///    triggers
 #[derive(Debug, Clone)]
 pub struct TrafficTraceData {
-    /// Client send events that did not depend on any prior receive.
-    /// These represent initial client requests that start new communication flows.
+    /// Client send events that did not depend on any prior receive. These
+    /// represent initial client requests that start new communication flows.
     pub client_simq_push: Vec<PacketEvent>,
 
-    /// Client receive events that did not have a qualifying client send dependency.
-    /// These represent server-initiated communications (pushes, notifications, etc.).
+    /// Client receive events that did not have a qualifying client send
+    /// dependency. These represent server-initiated communications (pushes,
+    /// notifications, etc.).
     pub destination_simq_push: Vec<PacketEvent>,
 
-    /// Dependency mapping: `dependent_tx[recv_packet_id]` contains all events triggered by that receive.
-    /// Each tuple is `(dependent_packet_id, time_delta_ns, event_kind)`.
+    /// Dependency mapping: `dependent_tx[recv_packet_id]` contains all events
+    /// triggered by that receive. Each tuple is `(dependent_packet_id,
+    /// time_delta_ns, event_kind)`.
     pub dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 

@@ -69,7 +69,8 @@ pub struct MaybenotState<M, R> {
     pub blocking_until: Option<Instant>,
     /// whether the active blocking bypassable or not
     pub blocking_bypassable: bool,
-    /// whether to drain blocked packets by time or first all normal then padding
+    /// whether to drain blocked packets by time or first all normal then
+    /// padding
     pub drain_blocked_by_time: bool,
     /// integration aspects for this state
     pub integration: Option<Integration>,
@@ -191,7 +192,8 @@ pub fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
             // Below here we could not bypass
             } else if s_event.contains_padding {
                 if s_event.replace && !node.get_queue_normal().borrow().is_empty() {
-                    // If padding_replace and there is a blocked normal packet the padding is replaced, i.e. not enqueued
+                    // If padding_replace and there is a blocked normal packet
+                    // the padding is replaced, i.e. not enqueued
                     debug!("Padding replaced by blocked normal packet, nothing enqueued");
                     return;
                 } else {
@@ -206,7 +208,8 @@ pub fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
             }
         }
     }
-    // Not blocking or past blocking time or bypass fallthrough - add to simulation queue immediately
+    // Not blocking or past blocking time or bypass fallthrough - add to
+    // simulation queue immediately
     debug!("TunnelSent immediately");
     sq.push(s_event);
 }
@@ -233,7 +236,8 @@ pub fn maybenot_release_blocked_events<T: MaybenotNode>(
     );
 
     if drain_blocked_by_time {
-        // Time-wise draining: release packets in chronological order based on their original timestamps
+        // Time-wise draining: release packets in chronological order based on
+        // their original timestamps
         loop {
             // Check the earliest event from each queue
             let earliest_padding = padding_events.front().map(|e| e.time);
@@ -433,7 +437,8 @@ impl ClientMaybenot {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                // Use blocking-aware logic to decide whether to queue immediately or block
+                // Use blocking-aware logic to decide whether to queue
+                // immediately or block
                 maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
@@ -451,7 +456,8 @@ impl ClientMaybenot {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                // Use blocking-aware logic to decide whether to queue immediately or block
+                // Use blocking-aware logic to decide whether to queue
+                // immediately or block
                 maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 
@@ -538,11 +544,14 @@ impl ClientMaybenot {
 #[derive(Debug, Clone)]
 pub struct RelayMaybenot {
     pub id: usize,
-    /// Link ID for forwarding traffic toward the destination (forward direction)
+    /// Link ID for forwarding traffic toward the destination (forward
+    /// direction)
     pub coreside_out: usize,
-    /// Link ID for receiving traffic from the coreside (from destination direction)
+    /// Link ID for receiving traffic from the coreside (from destination
+    /// direction)
     pub edgeside_in: usize,
-    /// Link ID for forwarding traffic and defense actions back toward the client (return direction)
+    /// Link ID for forwarding traffic and defense actions back toward the
+    /// client (return direction)
     pub edgeside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
@@ -789,9 +798,11 @@ impl RelayMaybenot {
 #[derive(Debug, Clone)]
 pub struct RelayMaybenotDestination {
     pub id: usize,
-    /// Link ID for receiving traffic from prior network hops (forward direction)
+    /// Link ID for receiving traffic from prior network hops (forward
+    /// direction)
     pub edgeside_in: usize,
-    /// Link ID for sending response traffic and defense actions back toward the client (return direction)
+    /// Link ID for sending response traffic and defense actions back toward the
+    /// client (return direction)
     pub edgeside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
@@ -923,7 +934,8 @@ impl RelayMaybenotDestination {
             }
 
             TriggerEvent::NormalSent => {
-                // Only handle edgeside NormalSent - convert to TunnelSent with blocking logic
+                // Only handle edgeside NormalSent - convert to TunnelSent with
+                // blocking logic
                 if s_event.link_id == self.edgeside_out {
                     let forward_s_event = SimEvent {
                         event: TriggerEvent::TunnelSent,
@@ -938,7 +950,8 @@ impl RelayMaybenotDestination {
                         #[cfg(debug_assertions)]
                         debug_note: None,
                     };
-                    // Use blocking-aware logic to decide whether to queue immediately or block
+                    // Use blocking-aware logic to decide whether to queue
+                    // immediately or block
                     maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
                 }
                 // Ignore coreside NormalSent (shouldn't happen)
@@ -958,7 +971,8 @@ impl RelayMaybenotDestination {
                     #[cfg(debug_assertions)]
                     debug_note: None,
                 };
-                // Use blocking-aware logic to decide whether to queue immediately or block
+                // Use blocking-aware logic to decide whether to queue
+                // immediately or block
                 maybenot_handle_tunnel_sent_creation(self, forward_s_event, sq);
             }
 

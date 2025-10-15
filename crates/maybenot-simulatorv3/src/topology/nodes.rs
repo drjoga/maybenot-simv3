@@ -404,7 +404,8 @@ impl RouterBasic {
 #[derive(Debug, Copy, Clone)]
 pub struct DestinationBasic {
     pub id: usize,
-    /// Link ID for sending response traffic back toward the client (return direction)
+    /// Link ID for sending response traffic back toward the client (return
+    /// direction)
     pub edgeside_out: usize,
 }
 

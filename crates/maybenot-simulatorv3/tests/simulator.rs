@@ -625,7 +625,8 @@ fn test_bypass_replace_machine() {
     set_replace(&mut m.states[2], true);
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        // padding at 5us is replaced by sending queued up 4,sn, and padding at 7us is replaced by queued up 7,sn
+        // padding at 5us is replaced by sending queued up 4,sn, and padding at
+        // 7us is replaced by queued up 7,sn
         "0,st 3,st 5,st 6,rt 6,rt 7,st",
         Duration::from_micros(5),
         slice::from_ref(&m),

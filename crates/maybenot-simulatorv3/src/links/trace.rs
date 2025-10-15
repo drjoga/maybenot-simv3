@@ -9,12 +9,11 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
 
-/// Link trace
-/// that represent the throughput evolution for a simplex link.
+/// Link trace that represent the throughput evolution for a simplex link.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LinkTrace {
-    // Filename used for linktrace, if trace is read from file.
-    // Otherwise, holds the string used to create the trace (Useful for debugging).
+    // Filename used for linktrace, if trace is read from file. Otherwise, holds
+    // the string used to create the trace (Useful for debugging).
     traceinput: String,
 
     // Throughput trace, used for std_res traces
@@ -23,7 +22,8 @@ pub struct LinkTrace {
     pub is_tput_trace_high_res: bool,
 
     //// Data for High Resolution throughput traces below
-    // The lookuptable to select which busy_to table is appropriate for the packetsize of the specific packet
+    // The lookuptable to select which busy_to table is appropriate for the
+    // packetsize of the specific packet
     sizebin_lookuptable: SizebinLookupTable,
 
     // The busy_to lookupmatrix precomputed from the link traces
@@ -40,18 +40,22 @@ impl LinkTrace {
         Self::new(traceinput, dummy_sizebin, false)
     }
 
-    /// Creates a new `LinkTrace` instance, filling in the trace based on the input string.
-    /// If High Resolution traces, precompute busy_to lookup tables according to packet sizes set as per-bin representative pkt_size values.
+    /// Creates a new `LinkTrace` instance, filling in the trace based on the
+    /// input string. If High Resolution traces, precompute busy_to lookup
+    /// tables according to packet sizes set as per-bin representative pkt_size
+    /// values.
     fn new(
         traceinput: &str,
         sizebin_lookuptable: SizebinLookupTable,
         is_tput_trace_high_res: bool,
     ) -> Self {
         let bw_trace = if traceinput.contains('\n') {
-            // If input contains newlines, assume it's a raw trace string and parse it
+            // If input contains newlines, assume it's a raw trace string and
+            // parse it
             Self::parse_linktrace(traceinput)
         } else if traceinput.contains(r".gz") {
-            // Otherwise, assume it's a filename and read the trace from gzipped file
+            // Otherwise, assume it's a filename and read the trace from gzipped
+            // file
             Self::parse_linktrace(&Self::read_gzipped_linktrace(traceinput))
         } else {
             // Otherwise, assume it's a filename and read the trace from file
@@ -82,11 +86,14 @@ impl LinkTrace {
         }
     }
 
-    /// A function that creates a 2D ndarray where dim1 has the size of the number of items in `sizebin_lookuptable.bin_pktsize_values`
-    /// and where dim2 has the size of the number of items in `bw_trace`.
-    /// The function loops through each `bin_pktsize_value` in an outer loop, and each `bw_trace` value in an inner loop.
-    /// The corresponding `busy_to_mtx` cell is populated with the index of the upcoming `bw_trace` index for which the sum
-    /// of values from current to upcoming `bw_trace` is the same or larger than the `bin_pktsize_value`.
+    /// A function that creates a 2D ndarray where dim1 has the size of the
+    /// number of items in `sizebin_lookuptable.bin_pktsize_values` and where
+    /// dim2 has the size of the number of items in `bw_trace`. The function
+    /// loops through each `bin_pktsize_value` in an outer loop, and each
+    /// `bw_trace` value in an inner loop. The corresponding `busy_to_mtx` cell
+    /// is populated with the index of the upcoming `bw_trace` index for which
+    /// the sum of values from current to upcoming `bw_trace` is the same or
+    /// larger than the `bin_pktsize_value`.
     fn precompute_busy_to_mtx(&self) -> Array2<i32> {
         let num_bins = self.sizebin_lookuptable.bin_pktsize_values.len();
         let num_traces = self.bw_trace.len();
@@ -151,7 +158,8 @@ impl LinkTrace {
         tracestring
     }
 
-    /// Parses the content of a link trace string and returns a vector of integers.
+    /// Parses the content of a link trace string and returns a vector of
+    /// integers.
     fn parse_linktrace(tracestring: &str) -> Vec<i32> {
         // Initialize an empty vector to store the integers
         let mut bw_trace = Vec::new();
@@ -228,35 +236,7 @@ impl fmt::Display for LinkTrace {
         }
     }
 }
-/*
-pub fn mk_start_instant() -> Instant {
-    // Create an arbitary point in time to use as a common time for simulation and link trace handling
-    let start_instant_dt = chrono::DateTime::<Utc>::from_timestamp_millis(1722543211000).unwrap();
 
-    // Convert DateTime<Utc> to SystemTime
-    let start_instant_system_time = SystemTime::from(start_instant_dt);
-
-    // Calculate the duration between the defined start instance and epoch
-    let start_duration_epoch =
-        match start_instant_system_time.duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(_) => Duration::ZERO, // Handle case where system_time is before the UNIX_EPOCH
-        };
-
-    // Get the current time in both representations
-    let now_instant = Instant::now();
-    let now_systime = SystemTime::now();
-
-    // Calculate the duration between the current time and epoch
-    let now_duration_epoch = match now_systime.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => duration,
-        Err(_) => Duration::ZERO, // Handle case where system_time is before the UNIX_EPOCH
-    };
-
-    // return a "static" Instant by fiddling with the durations, as its the only way for Instant manipulation...
-    now_instant - now_duration_epoch + start_duration_epoch
-}
-*/
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SizebinLookupTable {
     boundaries: Vec<i32>,
@@ -338,10 +318,14 @@ impl SizebinLookupTable {
 }
 
 pub fn mk_sizebin_lookuptable() -> SizebinLookupTable {
-    // Boundary values created to minimize binning errors. Minimum change is 16 bytes due to assumed Wireguard tunneling which pads to multiples of 16.
-    // The bin_pktsize_values are used in the computation of the busy_to lookup table. pkt_size value at the upper bin boundary will lead to the
-    // obtained tput for smaller packets to be slightly underestimated as the pktsize used in the computation is overstated by the binning.
-    // Should likely tweak these values as they are currently partly based on wireguard application data size distro from TP.
+    // Boundary values created to minimize binning errors. Minimum change is 16
+    // bytes due to assumed Wireguard tunneling which pads to multiples of 16.
+    // The bin_pktsize_values are used in the computation of the busy_to lookup
+    // table. pkt_size value at the upper bin boundary will lead to the obtained
+    // tput for smaller packets to be slightly underestimated as the pktsize
+    // used in the computation is overstated by the binning. Should likely tweak
+    // these values as they are currently partly based on wireguard application
+    // data size distro from TP.
     let boundaries = [
         0, 49, 65, 81, 97, 113, 129, 145, 161, 193, 241, 289, 369, 449, 513, 577, 705, 849, 1009,
         1201, 1421, 1501,
@@ -419,7 +403,8 @@ mod tests {
         let bin_tput_values = [5, 15, 25, 40];
         let sizebin_lookuptable = SizebinLookupTable::new(&boundaries, &bin_tput_values);
 
-        // This should panic because 50 is outside the maximum boundary value (50)
+        // This should panic because 50 is outside the maximum boundary value
+        // (50)
         sizebin_lookuptable.get_bin_idx(50);
     }
 

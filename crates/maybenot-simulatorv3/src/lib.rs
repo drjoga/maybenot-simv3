@@ -41,9 +41,10 @@ use crate::maybenot_helpers::pick_next_maybenot;
 
 /// Represents a single network event in the Maybenot simulation.
 ///
-/// `SimEvent` is the fundamental unit of simulation, representing packets being sent/received,
-/// defense actions (padding, blocking), and internal timer events. These events flow through
-/// the simulation priority queue and form the output trace.
+/// `SimEvent` is the fundamental unit of simulation, representing packets being
+/// sent/received, defense actions (padding, blocking), and internal timer
+/// events. These events flow through the simulation priority queue and form the
+/// output trace.
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
 pub struct SimEvent {
     /// the actual event
@@ -126,8 +127,9 @@ impl SimEvent {
             -(si.zero_instant.duration_since(self.time).as_micros() as i64)
         };
         let link = linkstate.get_link(self.link_id).unwrap();
-        // Adjust formatting so field lengths are appropriate for example line below
-        // NormalSent at 25 μs (pkt 5, node 2 DestinationBasic, link 0 n2->n1) P:F B:F R:F
+        // Adjust formatting so field lengths are appropriate for example line
+        // below NormalSent at 25 μs (pkt 5, node 2 DestinationBasic, link 0
+        // n2->n1) P:F B:F R:F
         format!(
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
             self.format_event_compact(),
@@ -149,8 +151,8 @@ impl SimEvent {
     }
 }
 
-// A display fmt for SimEvent that shows the event type, time, and packet
-// index as one line and has P:T B:F R:T according to the booleans
+// A display fmt for SimEvent that shows the event type, time, and packet index
+// as one line and has P:T B:F R:T according to the booleans
 impl std::fmt::Display for SimEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -203,11 +205,12 @@ impl SimInfo {
     pub fn new() -> Self {
         let now_time = Instant::now();
         Self {
-            // sq.zero_instant holds the time instant which is used to represent relative
-            // time zero in the traffic trace
+            // sq.zero_instant holds the time instant which is used to represent
+            // relative time zero in the traffic trace
             zero_instant: now_time,
-            // earliest_event_instant is the earliest event time in the queue, used to
-            // calculate relative time in the trace. May be earlier than zero_instant.
+            // earliest_event_instant is the earliest event time in the queue,
+            // used to calculate relative time in the trace. May be earlier than
+            // zero_instant.
             earliest_event_instant: now_time,
             dependent_tx: Vec::new(),
         }
@@ -427,8 +430,9 @@ pub struct SimulatorArgs {
     /// The maximum fraction of blocking for the server's instance of the
     /// Maybenot framework.
     pub max_blocking_frac_server: f64,
-    /// If true, blocked events will be drained based on their original timestamps.
-    /// If false, all normal will be drained first, and then padding.
+    /// If true, blocked events will be drained based on their original
+    /// timestamps. If false, all normal will be drained first, and then
+    /// padding.
     pub drain_blocked_by_time: bool,
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
@@ -639,8 +643,8 @@ pub fn sim_advanced(
     trace
 }
 
-// Selects the next event to process from multiple concurrent sources.
-// This is the core scheduling logic that determines simulation event ordering.
+// Selects the next event to process from multiple concurrent sources. This is
+// the core scheduling logic that determines simulation event ordering.
 fn pick_next(
     si: &SimInfo,
     sq: &mut SimQueue,
