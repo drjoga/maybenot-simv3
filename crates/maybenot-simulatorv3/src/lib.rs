@@ -1,6 +1,7 @@
 pub mod integration;
 pub mod links;
 pub mod maybenot_helpers;
+pub mod settings;
 pub mod topology;
 pub mod traffic_parse;
 
