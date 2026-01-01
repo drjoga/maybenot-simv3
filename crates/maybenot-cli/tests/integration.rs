@@ -1,10 +1,10 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use std::fs;
 use tempfile::tempdir;
 
 #[test]
 fn test_derive_seed_42() {
-    let mut cmd = Command::cargo_bin("maybenot").unwrap();
+    let mut cmd = cargo_bin_cmd!("maybenot");
 
     let output = cmd
         .arg("derive")
@@ -36,7 +36,7 @@ fn test_search_seed_42() {
     let temp_dir = tempdir().unwrap();
     let output_file = temp_dir.path().join("test.def");
 
-    let mut cmd = Command::cargo_bin("maybenot").unwrap();
+    let mut cmd = cargo_bin_cmd!("maybenot");
 
     let output = cmd
         .arg("search")
@@ -77,7 +77,7 @@ fn test_sim_simulate_config() {
     let temp_dir = tempdir().unwrap();
     let output_dir = temp_dir.path().join("sim_output");
 
-    let mut cmd = Command::cargo_bin("maybenot").unwrap();
+    let mut cmd = cargo_bin_cmd!("maybenot");
 
     let output = cmd
         .arg("sim")
