@@ -66,23 +66,23 @@ pub fn run_test_sim_toml(
     let max_trace_length = 3 * max_trace_length;
     let mut args = SimulatorArgs::new(max_trace_length, only_packets);
     args.continue_after_all_normal_packets_processed = false;
-    // The test cases assume the timing from netsimv1, where the client <--> relay/server <--> destination
+    // The test cases assume the timing from netsimv1, where the client <--> relay/server <--> endpoint
     // have two occurences of the link delay, so create that to apply when parsing the trace.
     let adjusted_delay = propagation_delay * 2;
     let (si, mut sq) = make_si_sq(input.to_string(), &topology, adjusted_delay, as_ms);
-    // Check if the topology has a short-circuiting relay maybenot destination
-    // If so, we need to adjust the delay for the destination SimQ events
-    // TODO: Should be generalized away by separating trace_destination_client_delay and sim_destination_client_delay
+    // Check if the topology has a short-circuiting relay maybenot endpoint
+    // If so, we need to adjust the delay for the endpoint SimQ events
+    // TODO: Should be generalized away by separating trace_endpoint_client_delay and sim_endpoint_client_delay
     if matches!(
         topology.nodes[topology.mb_server],
-        maybenot_simulatorv3::topology::NodeType::RelayMaybenotDestination(_)
+        maybenot_simulatorv3::topology::NodeType::RelayMaybenotEndpoint(_)
     ) {
         // Iterate over the SimEvents in the queue and adjust the time for
-        // destination events
+        // endpoint events
         let mut events: Vec<_> = sq.heap.drain().collect();
         for event in events.iter_mut() {
             if event.node_id == topology.mb_server && event.event == TriggerEvent::NormalSent {
-                // Adjust the time by adding the propagation delay destination <--> relay/server
+                // Adjust the time by adding the propagation delay endpoint <--> relay/server
                 event.time += propagation_delay;
             }
         }

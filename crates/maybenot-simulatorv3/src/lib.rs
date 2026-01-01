@@ -129,7 +129,7 @@ impl SimEvent {
         };
         let link = linkstate.get_link(self.link_id).unwrap();
         // Adjust formatting so field lengths are appropriate for example line
-        // below NormalSent at 25 μs (pkt 5, node 2 DestinationBasic, link 0
+        // below NormalSent at 25 μs (pkt 5, node 2 EndpointBasic, link 0
         // n2->n1) P:F B:F R:F
         format!(
             "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",

@@ -4,7 +4,7 @@ pub mod nodes;
 pub mod parse;
 
 // Re-exports
-pub use maybenot_nodes::{ClientMaybenot, MaybenotNode, RelayMaybenot, RelayMaybenotDestination};
+pub use maybenot_nodes::{ClientMaybenot, MaybenotNode, RelayMaybenot, RelayMaybenotEndpoint};
 pub use nodes::NodeType;
 pub use parse::{
     build_network_topology_from_config, build_topology_from_config, load_topology_from_file,
@@ -59,7 +59,7 @@ pub struct NetworkTopology {
     pub nodes: Vec<NodeType>,
     pub routes: Vec<Vec<Option<usize>>>, // routes[node_id][inlink] = Some(outlink) or None
     pub client: usize,
-    pub destination: usize,
+    pub endpoint: usize,
     pub has_mb: bool,
     pub mb_client: usize,
     pub mb_server: usize,
@@ -72,7 +72,7 @@ impl NetworkTopology {
             nodes: Vec::new(),
             routes: Vec::new(),
             client: 0,
-            destination: 0,
+            endpoint: 0,
             has_mb: false,
             mb_client: 0,
             mb_server: 0,
@@ -105,7 +105,7 @@ impl NetworkTopology {
     pub fn get_maybenot_server(&self) -> &dyn MaybenotNode {
         match &self.nodes[self.mb_server] {
             NodeType::RelayMaybenot(server) => server,
-            NodeType::RelayMaybenotDestination(server) => server,
+            NodeType::RelayMaybenotEndpoint(server) => server,
             _ => panic!("Maybenot server node not found or wrong type"),
         }
     }

@@ -12,7 +12,7 @@ const VPN_TOML: &str = include_str!("vpn.toml");
 const TWOHOP_VPN_GUARD_TOML: &str = include_str!("twohop_vpn_guard.toml");
 const TWOHOP_VPN_EXIT_TOML: &str = include_str!("twohop_vpn_exit.toml");
 
-/// VPN topology template: Client (Maybenot) ↔ VPN Server (Maybenot) ↔ Destination
+/// VPN topology template: Client (Maybenot) ↔ VPN Server (Maybenot) ↔ Endpoint
 ///
 /// This creates a simple VPN topology with 3 nodes and 4 bidirectional links.
 /// The client and VPN server both run Maybenot defenses.
@@ -21,12 +21,12 @@ const TWOHOP_VPN_EXIT_TOML: &str = include_str!("twohop_vpn_exit.toml");
 ///
 /// - Node 0: ClientMaybenot
 /// - Node 1: RelayMaybenot (VPN server)
-/// - Node 2: DestinationBasic
+/// - Node 2: EndpointBasic
 ///
 /// # Links (default parameters)
 ///
 /// - Links 0-1: Client ↔ VPN (100 Mbps, 10ms propagation)
-/// - Links 2-3: VPN ↔ Destination (1 Gbps, 5ms propagation)
+/// - Links 2-3: VPN ↔ Endpoint (1 Gbps, 5ms propagation)
 ///
 /// # Example
 ///
@@ -67,9 +67,9 @@ pub mod vpn_links {
     pub const CLIENT_UPSTREAM: usize = 0;
     /// VPN Server → Client (downstream)
     pub const CLIENT_DOWNSTREAM: usize = 1;
-    /// VPN Server → Destination (upstream)
+    /// VPN Server → Endpoint (upstream)
     pub const VPN_UPSTREAM: usize = 2;
-    /// Destination → VPN Server (downstream)
+    /// Endpoint → VPN Server (downstream)
     pub const VPN_DOWNSTREAM: usize = 3;
 }
 
@@ -83,13 +83,13 @@ pub mod vpn_links {
 /// - Node 0: ClientMaybenot
 /// - Node 1: RelayMaybenot (Guard/first hop)
 /// - Node 2: RouterBasic (Exit/second hop)
-/// - Node 3: DestinationBasic
+/// - Node 3: EndpointBasic
 ///
 /// # Links (default parameters)
 ///
 /// - Links 0-1: Client ↔ Guard (100 Mbps, 10ms propagation)
 /// - Links 2-3: Guard ↔ Exit (1 Gbps, 5ms propagation)
-/// - Links 4-5: Exit ↔ Destination (1 Gbps, 5ms propagation)
+/// - Links 4-5: Exit ↔ Endpoint (1 Gbps, 5ms propagation)
 ///
 /// # Example
 ///
@@ -132,13 +132,13 @@ impl TwoHopVpnGuardSetting {
 /// - Node 0: ClientMaybenot
 /// - Node 1: RouterBasic (Guard/first hop)
 /// - Node 2: RelayMaybenot (Exit/second hop)
-/// - Node 3: DestinationBasic
+/// - Node 3: EndpointBasic
 ///
 /// # Links (default parameters)
 ///
 /// - Links 0-1: Client ↔ Guard (100 Mbps, 10ms propagation)
 /// - Links 2-3: Guard ↔ Exit (1 Gbps, 5ms propagation)
-/// - Links 4-5: Exit ↔ Destination (1 Gbps, 5ms propagation)
+/// - Links 4-5: Exit ↔ Endpoint (1 Gbps, 5ms propagation)
 ///
 /// # Example
 ///
@@ -183,8 +183,8 @@ pub mod twohop_vpn_links {
     pub const GUARD_UPSTREAM: usize = 2;
     /// Second hop → First hop (downstream)
     pub const GUARD_DOWNSTREAM: usize = 3;
-    /// Second hop → Destination (upstream)
+    /// Second hop → Endpoint (upstream)
     pub const EXIT_UPSTREAM: usize = 4;
-    /// Destination → Second hop (downstream)
+    /// Endpoint → Second hop (downstream)
     pub const EXIT_DOWNSTREAM: usize = 5;
 }

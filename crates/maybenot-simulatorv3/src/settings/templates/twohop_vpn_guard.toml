@@ -1,5 +1,5 @@
 # 2-hop VPN topology with Maybenot on Guard
-# Client <-> Guard (Maybenot) <-> Exit (Basic) <-> Destination
+# Client <-> Guard (Maybenot) <-> Exit (Basic) <-> Endpoint
 
 [[Node]]
 id = 0
@@ -22,7 +22,7 @@ edgeside_out = 3
 
 [[Node]]
 id = 3
-type = "DestinationBasic"
+type = "EndpointBasic"
 edgeside_out = 5
 
 [[Link]]

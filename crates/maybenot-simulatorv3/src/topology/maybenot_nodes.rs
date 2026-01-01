@@ -320,13 +320,13 @@ pub trait MaybenotNode {
 ///
 /// In the simulator, nodes have directional links defined by their position in
 /// the network:
-/// - **coreside**: Links toward the destination (core of the network, away from
+/// - **coreside**: Links toward the endpoint (core of the network, away from
 ///   edge)
 /// - **edgeside**: Links toward the client (edge of the network, back toward
 ///   origin)
 ///
 /// Client nodes originate traffic and send defense actions (padding, blocking)
-/// toward the destination, so they only have `coreside_out`.
+/// toward the endpoint, so they only have `coreside_out`.
 ///
 /// # Defense Action Link
 ///
@@ -336,7 +336,7 @@ pub trait MaybenotNode {
 #[derive(Debug, Clone)]
 pub struct ClientMaybenot {
     pub id: usize,
-    /// Link ID for outgoing traffic and defense actions toward the destination (forward direction)
+    /// Link ID for outgoing traffic and defense actions toward the endpoint (forward direction)
     pub coreside_out: usize,
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
@@ -521,17 +521,17 @@ impl ClientMaybenot {
 ///
 /// Relay nodes sit in the middle of the network path and forward traffic
 /// bidirectionally:
-/// - **coreside_out**: Forwards traffic toward the destination (away from
+/// - **coreside_out**: Forwards traffic toward the endpoint (away from
 ///   client)
-/// - **edgeside_in**: Receives traffic from coreside (from destination
+/// - **edgeside_in**: Receives traffic from coreside (from endpoint
 ///   direction)
 /// - **edgeside_out**: Forwards traffic back toward the client (return path)
 ///
 /// Traffic flow through a relay:
 /// ```text
-/// Client --> Relay --[coreside_out]--> Destination
-///            Relay <-[edgeside_in]---- Destination
-/// Client <-[edgeside_out]-- Relay <--- Destination
+/// Client --> Relay --[coreside_out]--> Endpoint
+///            Relay <-[edgeside_in]---- Endpoint
+/// Client <-[edgeside_out]-- Relay <--- Endpoint
 /// ```
 ///
 /// # Defense Action Link
@@ -544,10 +544,10 @@ impl ClientMaybenot {
 #[derive(Debug, Clone)]
 pub struct RelayMaybenot {
     pub id: usize,
-    /// Link ID for forwarding traffic toward the destination (forward
+    /// Link ID for forwarding traffic toward the endpoint (forward
     /// direction)
     pub coreside_out: usize,
-    /// Link ID for receiving traffic from the coreside (from destination
+    /// Link ID for receiving traffic from the coreside (from endpoint
     /// direction)
     pub edgeside_in: usize,
     /// Link ID for forwarding traffic and defense actions back toward the
@@ -766,37 +766,37 @@ impl RelayMaybenot {
     }
 }
 
-/// A Maybenot-enabled relay+destination combined node that receives traffic and
+/// A Maybenot-enabled relay+endpoint combined node that receives traffic and
 /// responds with defenses.
 ///
 /// # Network Topology Directionality
 ///
-/// This node type combines relay and destination functionality. It sits at the
+/// This node type combines relay and endpoint functionality. It sits at the
 /// end of the network path (core side) and only handles traffic in the return
 /// direction:
 /// - **edgeside_in**: Receives traffic from the coreside (from prior hops)
 /// - **edgeside_out**: Sends response traffic and defense actions back toward
 ///   the client
 ///
-/// Traffic flow for a relay-destination:
+/// Traffic flow for a relay-endpoint:
 /// ```text
-/// Client --> ... --> RelayMaybenotDestination (receives on edgeside_in)
-/// Client <-[edgeside_out]-- RelayMaybenotDestination (sends response + defense)
+/// Client --> ... --> RelayMaybenotEndpoint (receives on edgeside_in)
+/// Client <-[edgeside_out]-- RelayMaybenotEndpoint (sends response + defense)
 /// ```
 ///
 /// # Defense Action Link
 ///
-/// For RelayMaybenotDestination, all Maybenot defense actions (padding,
+/// For RelayMaybenotEndpoint, all Maybenot defense actions (padding,
 /// blocking) are sent on the **edgeside_out** link (back toward the client).
 /// This is returned by `get_action_link_id()`.
 ///
 /// # Implementation Note
 ///
-/// Unlike DestinationBasic, this node includes an internal
-/// `destination_prop_us` delay to simulate processing time at the destination
+/// Unlike EndpointBasic, this node includes an internal
+/// `endpoint_prop_us` delay to simulate processing time at the endpoint
 /// before responding.
 #[derive(Debug, Clone)]
-pub struct RelayMaybenotDestination {
+pub struct RelayMaybenotEndpoint {
     pub id: usize,
     /// Link ID for receiving traffic from prior network hops (forward
     /// direction)
@@ -807,11 +807,11 @@ pub struct RelayMaybenotDestination {
     pub sim_state: RefCell<MaybenotState<Vec<Machine>, RngSource>>,
     pub queue_padding: RefCell<VecDeque<SimEvent>>,
     pub queue_normal: RefCell<VecDeque<SimEvent>>,
-    /// Propagation delay simulating destination processing time
-    pub destination_prop_us: Duration,
+    /// Propagation delay simulating endpoint processing time
+    pub endpoint_prop_us: Duration,
 }
 
-impl MaybenotNode for RelayMaybenotDestination {
+impl MaybenotNode for RelayMaybenotEndpoint {
     fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>> {
         &self.sim_state
     }
@@ -851,7 +851,7 @@ impl MaybenotNode for RelayMaybenotDestination {
     }
 }
 
-impl RelayMaybenotDestination {
+impl RelayMaybenotEndpoint {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: usize,
@@ -863,7 +863,7 @@ impl RelayMaybenotDestination {
         drain_blocked_by_time: bool,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
-        destination_prop_us: Duration,
+        endpoint_prop_us: Duration,
     ) -> Self {
         let sim_state = RefCell::new(MaybenotState::new(
             machines,
@@ -882,7 +882,7 @@ impl RelayMaybenotDestination {
             sim_state,
             queue_padding: RefCell::new(VecDeque::new()),
             queue_normal: RefCell::new(VecDeque::new()),
-            destination_prop_us,
+            endpoint_prop_us,
         }
     }
 
@@ -918,18 +918,18 @@ impl RelayMaybenotDestination {
 
             TriggerEvent::NormalRecv => {
                 debug!(
-                    "\tqueue {:#?} tx_depend check RelayMaybenotDestination",
+                    "\tqueue {:#?} tx_depend check RelayMaybenotEndpoint",
                     TriggerEvent::NormalRecv
                 );
                 let mut timeadjusted_event = s_event.clone();
-                timeadjusted_event.time += self.destination_prop_us; // Add delay to destination
+                timeadjusted_event.time += self.endpoint_prop_us; // Add delay to endpoint
                 let outgoing_link = &linkstate.links[self.edgeside_out];
                 check_dependent_packets(
                     &timeadjusted_event,
                     si,
                     sq,
                     outgoing_link,
-                    self.destination_prop_us.as_micros() as u64,
+                    self.endpoint_prop_us.as_micros() as u64,
                 );
             }
 

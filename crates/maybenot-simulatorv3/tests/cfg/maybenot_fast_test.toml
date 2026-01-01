@@ -1,5 +1,5 @@
 # Test for faster configuration for maybenot-simulatorv3
-# Network topology: Client -> Relay with inbuilt Destination
+# Network topology: Client -> Relay with inbuilt Endpoint
 
 # Node definitions
 [[Node]]
@@ -9,11 +9,11 @@ coreside_out = 1
 
 [[Node]]
 id = 1
-type = "RelayMaybenotDestination"
+type = "RelayMaybenotEndpoint"
 edgeside_out = 0
 edgeside_in = 1
-#destination_prop_us = 10_000
-destination_prop_us = 5
+#endpoint_prop_us = 10_000
+endpoint_prop_us = 5
 
 # Link 0: from node 1 to node 0 (Relay -> Client)
 [[Link]]

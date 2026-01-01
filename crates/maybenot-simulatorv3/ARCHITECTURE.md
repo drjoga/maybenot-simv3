@@ -99,7 +99,7 @@ pub struct NetworkTopology {
 
     // Special node indices
     pub client: usize,                        // Traffic source node
-    pub destination: usize,                // Traffic destination node
+    pub endpoint: usize,                   // Traffic endpoint node
     pub has_mb: bool,                         // Are Maybenot nodes present?
     pub mb_client: usize,                     // Client Maybenot node index
     pub mb_server: usize,                     // Server/relay Maybenot node index
@@ -113,10 +113,10 @@ pub struct NetworkTopology {
 **Node Types** (see `src/nodes.rs:11`):
 - `ClientBasic` - Simple traffic source
 - `RouterBasic` - Packet forwarding
-- `DestinationBasic` - Simple traffic destination
+- `EndpointBasic` - Simple traffic endpoint
 - `ClientMaybenot` - Client with Maybenot framework
 - `RelayMaybenot` - Relay with Maybenot framework
-- `RelayMaybenotdestination` - Combined relay+traffic-server with Maybenot
+- `RelayMaybenotEndpoint` - Combined relay+traffic-server with Maybenot
 
 **Routing**: `routes[node_id][incoming_link_id] = Some(outgoing_link_id)` defines forwarding rules.
 
@@ -361,13 +361,13 @@ Chooses next event from **4 concurrent sources** (when Maybenot nodes present):
 
 ### Node Event Handling
 
-**Basic Nodes** (`ClientBasic`, `RouterBasic`, `DestinationBasic`):
+**Basic Nodes** (`ClientBasic`, `RouterBasic`, `EndpointBasic`):
 - Receive packet on incoming link
 - Route to outgoing link via `topology.routes`
 - Call `make_network_receive_from_sent()` to schedule receive event
 - Check `dependent_tx` for triggered packets
 
-**Maybenot Nodes** (`ClientMaybenot`, `RelayMaybenot`, `RelayMaybenotDestination`):
+**Maybenot Nodes** (`ClientMaybenot`, `RelayMaybenot`, `RelayMaybenotEndpoint`):
 - All basic node functionality
 - **Plus**: Maybenot framework integration
 - Blocking queue management
@@ -405,8 +405,8 @@ sim_advanced() requires:
   │    └─ from maybenot crate (serialized defense state machines)
   ├─ topology: &NetworkTopology
   │    ├─ nodes: Vec<NodeType>
-  │    │    ├─ Basic nodes (ClientBasic, RouterBasic, DestinationBasic)
-  │    │    └─ Maybenot nodes (ClientMaybenot, RelayMaybenot, RelayMaybenotdestination)
+  │    │    ├─ Basic nodes (ClientBasic, RouterBasic, EndpointBasic)
+  │    │    └─ Maybenot nodes (ClientMaybenot, RelayMaybenot, RelayMaybenotEndpoint)
   │    │         └─ contains: RefCell<MaybenotState>
   │    │              └─ framework: Framework<Vec<Machine>, RngSource>
   │    └─ Built from: NetworkConfig (TOML)

@@ -1,5 +1,5 @@
 # Basic test configuration for maybenot-simulatorv3
-# Network topology: Client -> Relay -> Destination
+# Network topology: Client -> Relay -> Endpoint
 
 # Node definitions
 [[Node]]
@@ -16,11 +16,11 @@ edgeside_in = 2
 
 [[Node]]
 id = 2
-type = "DestinationBasic"
+type = "EndpointBasic"
 edgeside_out = 0
 
 # Link definitions
-# Link 0: from node 2 to node 1 (Destination -> Relay)
+# Link 0: from node 2 to node 1 (Endpoint -> Relay)
 [[Link]]
 id = 0
 from = 2
@@ -47,7 +47,7 @@ type = "FixedTput"
 tput_bps = 100_000_000_000_000
 prop_us = 10_000
 
-# Link 3: from node 1 to node 2 (Relay -> Destination)
+# Link 3: from node 1 to node 2 (Relay -> Endpoint)
 [[Link]]
 id = 3
 from = 1
@@ -59,9 +59,9 @@ prop_us = 10_000
 # Routing rules for the Relay node (id = 1)
 [[Route]]
 node_id = 1
-# Traffic coming from node 0 (Client) goes out via link 3 (to Destination)
-# Traffic coming from node 2 (Destination) goes out via link 1 (to Client)
+# Traffic coming from node 0 (Client) goes out via link 3 (to Endpoint)
+# Traffic coming from node 2 (Endpoint) goes out via link 1 (to Client)
 forwarding_rules = [
-    { in_link = 2, out_link = 3 },  # Client->Relay traffic goes to Destination
-    { in_link = 0, out_link = 1 }   # Destination->Relay traffic goes to Client
+    { in_link = 2, out_link = 3 },  # Client->Relay traffic goes to Endpoint
+    { in_link = 0, out_link = 1 }   # Endpoint->Relay traffic goes to Client
 ]

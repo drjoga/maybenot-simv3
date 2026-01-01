@@ -1,4 +1,4 @@
-# VPN topology: Client <-> VPN Server <-> Destination
+# VPN topology: Client <-> VPN Server <-> Endpoint
 
 [[Node]]
 id = 0
@@ -14,7 +14,7 @@ edgeside_out = 1
 
 [[Node]]
 id = 2
-type = "DestinationBasic"
+type = "EndpointBasic"
 edgeside_out = 3
 
 [[Link]]

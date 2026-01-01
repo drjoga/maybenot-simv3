@@ -1,5 +1,5 @@
 # Complex test configuration for maybenot-simulatorv3
-# Network topology: Client -> WLAN -> Starlink -> Relay -> Destination
+# Network topology: Client -> WLAN -> Starlink -> Relay -> Endpoint
 
 # Node definitions
 [[Node]]
@@ -27,14 +27,14 @@ edgeside_in = 1    # Starlink receives via link 1 from WLAN
 [[Node]]
 id = 3
 type = "RelayMaybenot"
-coreside_out = 3   # Relay sends via link 3 to Destination
+coreside_out = 3   # Relay sends via link 3 to Endpoint
 edgeside_out = 6   # Relay sends via link 6 to Starlink
 edgeside_in = 2    # Relay receives via link 2 from Starlink
 
 [[Node]]
 id = 4
-type = "DestinationBasic"
-edgeside_out = 7   # Destination sends via link 7 to Relay
+type = "EndpointBasic"
+edgeside_out = 7   # Endpoint sends via link 7 to Relay
 
 # Link definitions
 # Forward direction links (0->1->2->3->4)
@@ -65,11 +65,11 @@ type = "FixedTput"
 tput_bps = 100_000_000_000_000
 prop_us = 3
 
-# Link 3: from Relay to Destination
+# Link 3: from Relay to Endpoint
 [[Link]]
 id = 3
 from = 3  # Relay
-to = 4    # Destination
+to = 4    # Endpoint
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
 prop_us = 5
@@ -102,10 +102,10 @@ type = "FixedTput"
 tput_bps = 100_000_000_000_000
 prop_us = 3
 
-# Link 7: from Destination to Relay
+# Link 7: from Endpoint to Relay
 [[Link]]
 id = 7
-from = 4  # Destination
+from = 4  # Endpoint
 to = 3    # Relay
 type = "FixedTput"
 tput_bps = 100_000_000_000_000
@@ -131,6 +131,6 @@ forwarding_rules = [
 [[Route]]
 node_id = 3
 forwarding_rules = [
-    { in_link = 2, out_link = 3 },  # Starlink -> Destination
-    { in_link = 7, out_link = 6 }   # Destination -> Starlink
+    { in_link = 2, out_link = 3 },  # Starlink -> Endpoint
+    { in_link = 7, out_link = 6 }   # Endpoint -> Starlink
 ]

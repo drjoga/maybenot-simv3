@@ -1,5 +1,5 @@
 use crate::links::{LinkType, load_linktrace_from_file};
-use crate::topology::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotDestination};
+use crate::topology::maybenot_nodes::{ClientMaybenot, RelayMaybenot, RelayMaybenotEndpoint};
 use crate::topology::nodes::NodeType;
 use crate::topology::{NetworkLinkState, NetworkTopology};
 use serde::Deserialize;
@@ -149,10 +149,10 @@ pub fn build_network_topology_from_config(
 ) -> Result<NetworkTopology, String> {
     let mut topology = NetworkTopology::new(config.clone());
 
-    // Find and validate client and destination nodes
+    // Find and validate client and endpoint nodes
     let mut client_id: Option<usize> = None;
     let mut mb_server: Option<usize> = None;
-    let mut destination_id: Option<usize> = None;
+    let mut endpoint_id: Option<usize> = None;
 
     for node_config in &config.nodes {
         match node_config.node_type.as_str() {
@@ -185,43 +185,46 @@ pub fn build_network_topology_from_config(
                 mb_server = Some(node_config.id);
             }
 
-            "DestinationBasic" => {
-                if destination_id.is_some() {
-                    return Err("Network error: Multiple DestinationBasic nodes found. Only one is allowed.".to_string());
+            "EndpointBasic" => {
+                if endpoint_id.is_some() {
+                    return Err(
+                        "Network error: Multiple EndpointBasic nodes found. Only one is allowed."
+                            .to_string(),
+                    );
                 }
-                destination_id = Some(node_config.id);
+                endpoint_id = Some(node_config.id);
             }
 
-            "RelayMaybenotDestination" => {
+            "RelayMaybenotEndpoint" => {
                 if mb_server.is_some() {
                     return Err(
                         "Network error: Multiple Maybenot server nodes found. Only one is allowed."
                             .to_string(),
                     );
                 }
-                if destination_id.is_some() {
+                if endpoint_id.is_some() {
                     return Err(
-                        "Network error: Multiple destination nodes found. Only one is allowed."
+                        "Network error: Multiple endpoint nodes found. Only one is allowed."
                             .to_string(),
                     );
                 }
                 mb_server = Some(node_config.id);
-                destination_id = Some(node_config.id); // RelayMaybenotDestination acts as both
+                endpoint_id = Some(node_config.id); // RelayMaybenotEndpoint acts as both
             }
 
             _ => {} // Other node types are fine
         }
     }
 
-    // Ensure we have exactly one client and one destination
+    // Ensure we have exactly one client and one endpoint
     let client = client_id.ok_or_else(|| {
         "Network error: No Client node found. Exactly one is required.".to_string()
     })?;
-    let destination = destination_id.ok_or_else(|| "Network error: No destination node found. Exactly one DestinationBasic or RelayMaybenotDestination is required.".to_string())?;
+    let endpoint = endpoint_id.ok_or_else(|| "Network error: No endpoint node found. Exactly one EndpointBasic or RelayMaybenotEndpoint is required.".to_string())?;
 
-    // Set the client and destination IDs
+    // Set the client and endpoint IDs
     topology.client = client;
-    topology.destination = destination;
+    topology.endpoint = endpoint;
 
     // Set MB fields
     if let Some(mb_server_id) = mb_server {
@@ -402,7 +405,7 @@ pub fn create_node(
     edgeside_out: Option<usize>,
     params: &HashMap<String, String>,
 ) -> Result<NodeType, String> {
-    use crate::topology::nodes::{ClientBasic, DestinationBasic, RouterBasic};
+    use crate::topology::nodes::{ClientBasic, EndpointBasic, RouterBasic};
 
     match node_type {
         "ClientBasic" => {
@@ -420,11 +423,9 @@ pub fn create_node(
                 edgeside_out_val,
             )))
         }
-        "DestinationBasic" => {
-            let edgeside = edgeside_out.ok_or("DestinationBasic requires edgeside_out")?;
-            Ok(NodeType::DestinationBasic(DestinationBasic::new(
-                id, edgeside,
-            )))
+        "EndpointBasic" => {
+            let edgeside = edgeside_out.ok_or("EndpointBasic requires edgeside_out")?;
+            Ok(NodeType::EndpointBasic(EndpointBasic::new(id, edgeside)))
         }
         "ClientMaybenot" => {
             let coreside = coreside_out.ok_or("ClientMaybenot requires coreside_out")?;
@@ -458,35 +459,33 @@ pub fn create_node(
                 None,
             )))
         }
-        "RelayMaybenotDestination" => {
-            // RelayMaybenotDestination uses edgeside_in and edgeside_out
+        "RelayMaybenotEndpoint" => {
+            // RelayMaybenotEndpoint uses edgeside_in and edgeside_out
             let edgeside_out_val =
-                edgeside_out.ok_or("RelayMaybenotDestination requires edgeside_out")?;
+                edgeside_out.ok_or("RelayMaybenotEndpoint requires edgeside_out")?;
             let edgeside_in_val =
-                edgeside_in.ok_or("RelayMaybenotDestination requires edgeside_in")?;
+                edgeside_in.ok_or("RelayMaybenotEndpoint requires edgeside_in")?;
 
-            // Parse destination_prop_us parameter specific to
-            // RelayMaybenotDestination
-            let destination_prop_us = params
-                .get("destination_prop_us")
+            // Parse endpoint_prop_us parameter specific to
+            // RelayMaybenotEndpoint
+            let endpoint_prop_us = params
+                .get("endpoint_prop_us")
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(Duration::from_micros)
                 .unwrap_or(Duration::from_micros(0)); // Default to 0us if not specified
 
-            Ok(NodeType::RelayMaybenotDestination(
-                RelayMaybenotDestination::new(
-                    id,
-                    edgeside_in_val,
-                    edgeside_out_val,
-                    Vec::new(),
-                    0.0,
-                    0.0,
-                    false,
-                    None,
-                    None,
-                    destination_prop_us,
-                ),
-            ))
+            Ok(NodeType::RelayMaybenotEndpoint(RelayMaybenotEndpoint::new(
+                id,
+                edgeside_in_val,
+                edgeside_out_val,
+                Vec::new(),
+                0.0,
+                0.0,
+                false,
+                None,
+                None,
+                endpoint_prop_us,
+            )))
         }
         _ => Err(format!("Unknown node type: {}", node_type)),
     }
