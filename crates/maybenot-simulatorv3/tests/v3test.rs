@@ -22,7 +22,7 @@ fn full_trace_compare() {
 
     // Parse the trace with the same parameters as the bench
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let (si, mut sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
 
     // 30097 gives 10000 client events, with basic toml to be used in benching to get comparable times
     //let output_trace = sim(&[], &[], &mut input_trace, &mut sim_network, 30097, true);
@@ -161,7 +161,7 @@ fn simulator_example_use() {
     // a way that the client is ensured to get the packets in the same order and
     // at the same time as in the raw trace.
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let (si, mut sq) = parse_trace(raw_trace, &topology, trafserv_to_client_delay);
+    let (si, mut sq) = parse_trace(raw_trace, &topology, trafserv_to_client_delay).unwrap();
 
     // A simple machine that sends one padding packet 20 milliseconds after the
     // first normal packet is sent.
@@ -255,7 +255,8 @@ fn v3_multi_run_like() {
                 // Use load_topology_from_str instead of load_topology_from_file
                 let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
                 let trafserv_to_client_delay = Duration::from_millis(20);
-                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let (si, sq) =
+                    parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
                 let mut output_len = 0;
                 let bench_name = format!(
                     "v3_{:?}K_{}_{},",

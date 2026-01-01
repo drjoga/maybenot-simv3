@@ -5,6 +5,34 @@ use crate::topology::NetworkTopology;
 use crate::{SimEvent, SimInfo, SimQueue};
 use maybenot::TriggerEvent;
 
+/// Errors that can occur during traffic trace parsing.
+#[derive(Debug, Clone)]
+pub enum TraceParseError {
+    /// Invalid timestamp in trace
+    InvalidTimestamp(String),
+    /// Invalid direction field in trace
+    InvalidDirection(String),
+    /// Malformed trace entry
+    MalformedEntry(String),
+    /// Instant underflow when calculating event time
+    InstantUnderflow(i64),
+}
+
+impl std::fmt::Display for TraceParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraceParseError::InvalidTimestamp(s) => write!(f, "Invalid timestamp: {}", s),
+            TraceParseError::InvalidDirection(s) => write!(f, "Invalid direction: {}", s),
+            TraceParseError::MalformedEntry(s) => write!(f, "Malformed trace entry: {}", s),
+            TraceParseError::InstantUnderflow(ns) => {
+                write!(f, "Instant underflow for time_ns: {}", ns)
+            }
+        }
+    }
+}
+
+impl std::error::Error for TraceParseError {}
+
 /// Parses a network traffic trace into simulation events.
 ///
 /// This function converts raw network traces into [`SimInfo`] and [`SimQueue`]
@@ -29,8 +57,15 @@ use maybenot::TriggerEvent;
 ///
 /// # Returns
 ///
-/// * `SimInfo` - Timing baselines and packet dependency information
-/// * `SimQueue` - Priority queue pre-loaded with initial network events
+/// * `Ok((SimInfo, SimQueue))` - Timing baselines and priority queue on success
+/// * `Err(TraceParseError)` - Error if trace parsing fails
+///
+/// # Errors
+///
+/// Returns `TraceParseError` if:
+/// - Timestamp cannot be parsed as u64
+/// - Invalid direction field in trace entry
+/// - Instant underflow occurs during time calculation
 ///
 /// # Dependency Analysis
 ///
@@ -46,7 +81,7 @@ pub fn parse_trace(
     trace: &str,
     topology: &NetworkTopology,
     ttrace_ts_to_c_delay: Duration,
-) -> (SimInfo, SimQueue) {
+) -> Result<(SimInfo, SimQueue), TraceParseError> {
     let mut si = SimInfo::new();
     let mut sq = SimQueue::new();
 
@@ -56,7 +91,10 @@ pub fn parse_trace(
         let parts: Vec<&str> = l.split(',').collect();
         if parts.len() >= 2 {
             // Time in traffic trace is in nanoseconds...
-            let timestamp = parts[0].trim().parse::<u64>().unwrap();
+            let timestamp = parts[0]
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| TraceParseError::InvalidTimestamp(parts[0].to_string()))?;
 
             match parts[1] {
                 "s" | "sn" => {
@@ -71,16 +109,16 @@ pub fn parse_trace(
                     // simulator
                 }
                 _ => {
-                    panic!("invalid direction")
+                    return Err(TraceParseError::InvalidDirection(parts[1].to_string()));
                 }
             }
         }
     }
     let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
 
-    fill_simq(&traffic_events, topology, &mut si, &mut sq);
+    fill_simq(&traffic_events, topology, &mut si, &mut sq)?;
 
-    (si, sq)
+    Ok((si, sq))
 }
 
 /// Code for reading in traffic trace, create depndent_tx, and prefill SimQueue
@@ -177,13 +215,13 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     for (packet_id, token) in s.split_whitespace().enumerate() {
         let parts: Vec<&str> = token.split(',').collect();
         if parts.len() != 2 {
-            eprintln!("Skipping malformed entry: {}", token);
+            warn!("Skipping malformed entry: {}", token);
             continue;
         }
         let time_ns: i64 = match parts[0].parse() {
             Ok(v) => v,
             Err(_) => {
-                eprintln!("Invalid timestamp: {}", parts[0]);
+                warn!("Invalid timestamp: {}", parts[0]);
                 continue;
             }
         };
@@ -191,7 +229,7 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
             "s" | "sn" => EventKind::CliSend,
             "r" | "rn" => EventKind::CliReceive,
             _ => {
-                eprintln!("Unknown kind '{}'", parts[1]);
+                warn!("Unknown kind '{}'", parts[1]);
                 continue;
             }
         };
@@ -366,8 +404,8 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
 
         if !made_progress {
             let remaining_count: usize = remaining_dependencies.iter().map(Vec::len).sum();
-            eprintln!(
-                "Warning: Could not process remaining {} dependencies due to missing events",
+            warn!(
+                "Could not process remaining {} dependencies due to missing events",
                 remaining_count
             );
             break;
@@ -423,9 +461,12 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
 
 /// Helper function to get the event instant based on the zero_instant and the
 /// relative time in the trace, with the trace is in nanoseconds.
-fn get_event_instant(si: &mut SimInfo, pkt_event: &PacketEvent) -> Instant {
+fn get_event_instant(
+    si: &mut SimInfo,
+    pkt_event: &PacketEvent,
+) -> Result<Instant, TraceParseError> {
     if pkt_event.time_ns >= 0 {
-        si.zero_instant + Duration::from_nanos(pkt_event.time_ns as u64)
+        Ok(si.zero_instant + Duration::from_nanos(pkt_event.time_ns as u64))
     } else {
         // Negative offsets can occur due to client receiving at 0,r as in some
         // tests, or it may come from trafserv_to_client_delay being configured
@@ -434,7 +475,7 @@ fn get_event_instant(si: &mut SimInfo, pkt_event: &PacketEvent) -> Instant {
         let early_instant = si
             .zero_instant
             .checked_sub(Duration::from_nanos(-pkt_event.time_ns as u64))
-            .expect("Underflow for Instant");
+            .ok_or(TraceParseError::InstantUnderflow(pkt_event.time_ns))?;
         if si.earliest_event_instant == si.zero_instant {
             // print out notification that transfer to client delay is too low
             warn!(
@@ -445,7 +486,7 @@ fn get_event_instant(si: &mut SimInfo, pkt_event: &PacketEvent) -> Instant {
         if early_instant < si.earliest_event_instant {
             si.earliest_event_instant = early_instant;
         }
-        early_instant
+        Ok(early_instant)
     }
 }
 
@@ -454,9 +495,9 @@ pub fn fill_simq(
     topology: &NetworkTopology,
     si: &mut SimInfo,
     sq: &mut SimQueue,
-) {
+) -> Result<(), TraceParseError> {
     for event in &traffic_events.client_simq_push {
-        let event_instant = get_event_instant(si, event);
+        let event_instant = get_event_instant(si, event)?;
         let simul_event = SimEvent {
             event: TriggerEvent::NormalSent,
             time: event_instant,
@@ -474,7 +515,7 @@ pub fn fill_simq(
     }
 
     for event in &traffic_events.endpoint_simq_push {
-        let event_instant = get_event_instant(si, event);
+        let event_instant = get_event_instant(si, event)?;
         let simul_event = SimEvent {
             event: TriggerEvent::NormalSent,
             time: event_instant,
@@ -492,4 +533,5 @@ pub fn fill_simq(
     }
 
     si.dependent_tx = traffic_events.dependent_tx.clone();
+    Ok(())
 }

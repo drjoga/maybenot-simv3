@@ -73,7 +73,7 @@ fn run_sim(
         .expect("Failed to parse the network configuration from TOML string");
 
     // Parse trace into simulation queue
-    let (si, mut sq) = parse_trace(raw_trace, &topology, 2 * delay);
+    let (si, mut sq) = parse_trace(raw_trace, &topology, 2 * delay).unwrap();
 
     let mut args = SimulatorArgs::new(100, true);
     args.client_integration = client.cloned();

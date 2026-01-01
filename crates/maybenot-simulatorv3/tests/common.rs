@@ -209,7 +209,7 @@ pub fn make_si_sq(
         println!("----------------------------------");
     }
 
-    fill_simq(&traffic_events, topology, &mut si, &mut sq);
+    fill_simq(&traffic_events, topology, &mut si, &mut sq).unwrap();
     (si, sq)
 }
 
