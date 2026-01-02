@@ -118,11 +118,7 @@ fn sim_initialization_components(c: &mut Criterion) {
 
     c.bench_function("parse_trace", |b| {
         b.iter(|| {
-            black_box(parse_trace(
-                EARLY_TRACE,
-                &topology,
-                trafserv_to_client_delay,
-            ).unwrap());
+            black_box(parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap());
         });
     });
 }

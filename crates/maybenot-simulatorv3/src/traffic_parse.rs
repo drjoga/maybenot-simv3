@@ -16,6 +16,8 @@ pub enum TraceParseError {
     MalformedEntry(String),
     /// Instant underflow when calculating event time
     InstantUnderflow(i64),
+    /// Padding packet found in trace
+    PaddingInTrace,
 }
 
 impl std::fmt::Display for TraceParseError {
@@ -27,6 +29,7 @@ impl std::fmt::Display for TraceParseError {
             TraceParseError::InstantUnderflow(ns) => {
                 write!(f, "Instant underflow for time_ns: {}", ns)
             }
+            TraceParseError::PaddingInTrace => write!(f, "Padding in trace, not supported"),
         }
     }
 }
@@ -104,9 +107,7 @@ pub fn parse_trace(
                     oneline.push_str(&format!("{},r ", timestamp));
                 }
                 "sp" | "rp" => {
-                    // TODO: figure out of ignoring is the right thing to do in
-                    // all cases, we might want to support recursive use of the
-                    // simulator
+                    return Err(TraceParseError::PaddingInTrace);
                 }
                 _ => {
                     return Err(TraceParseError::InvalidDirection(parts[1].to_string()));
@@ -534,4 +535,58 @@ pub fn fill_simq(
 
     si.dependent_tx = traffic_events.dependent_tx.clone();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_parse_trace_padding_error() {
+        // Create a trace with padding packet (sp)
+        let trace_with_padding = "0,s\n1000,sp\n2000,r\n";
+
+        // Load a minimal topology for testing
+        let (topology, _) =
+            crate::topology::parse::load_topology_from_file("tests/cfg/basic_test.toml")
+                .expect("Failed to load topology");
+
+        let delay = Duration::from_millis(20);
+
+        // This should return an error because of the padding packet
+        let result = parse_trace(trace_with_padding, &topology, delay);
+
+        assert!(result.is_err());
+        match result {
+            Err(TraceParseError::PaddingInTrace) => {
+                // Expected error
+            }
+            _ => panic!("Expected PaddingInTrace error"),
+        }
+    }
+
+    #[test]
+    fn test_parse_trace_padding_error_rp() {
+        // Create a trace with padding packet (rp)
+        let trace_with_padding = "0,s\n1000,r\n2000,rp\n";
+
+        // Load a minimal topology for testing
+        let (topology, _) =
+            crate::topology::parse::load_topology_from_file("tests/cfg/basic_test.toml")
+                .expect("Failed to load topology");
+
+        let delay = Duration::from_millis(20);
+
+        // This should return an error because of the padding packet
+        let result = parse_trace(trace_with_padding, &topology, delay);
+
+        assert!(result.is_err());
+        match result {
+            Err(TraceParseError::PaddingInTrace) => {
+                // Expected error
+            }
+            _ => panic!("Expected PaddingInTrace error"),
+        }
+    }
 }
