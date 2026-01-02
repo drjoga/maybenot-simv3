@@ -48,7 +48,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
     let config_name = config_file.split('_').nth(1).unwrap();
     let (topology, linkstate) = load_topology_from_file(config_path.clone()).unwrap();
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
     let mut output_len = 0;
     let bench_name = format!("v3_{:?}K_{}_single,", sim_event_count / 1000, config_name);
     c.bench_function(bench_name.as_str(), |b| {
@@ -92,7 +92,7 @@ fn v3_multi_run(c: &mut Criterion) {
                 // Use load_topology_from_str instead of load_topology_from_file
                 let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
                 let trafserv_to_client_delay = Duration::from_millis(20);
-                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
                 let mut output_len = 0;
                 let bench_name = format!(
                     "v3_{:?}K_{}_{},",
@@ -148,7 +148,7 @@ fn v3_multi_ratio3(c: &mut Criterion) {
                 let (topology, linkstate) = load_topology_from_str(&modified_toml).unwrap();
 
                 let trafserv_to_client_delay = Duration::from_millis(20);
-                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
                 let mut out_trace = Vec::new();
                 let mut output_len = 0;
                 let bench_name = format!(
@@ -211,7 +211,7 @@ fn v3_multi_run_parallel(c: &mut Criterion) {
                 let network_config = topology.network_config.clone();
 
                 let trafserv_to_client_delay = Duration::from_millis(20);
-                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
                 let mut args = SimulatorArgs::new(*sim_event_count, true);
                 args.only_client_events = true;
                 args.continue_after_all_normal_packets_processed = false;
@@ -270,7 +270,7 @@ fn v3_multi_run_parallel_ratio3(c: &mut Criterion) {
                 let network_config = topology.network_config.clone();
 
                 let trafserv_to_client_delay = Duration::from_millis(20);
-                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+                let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
                 let mut args = SimulatorArgs::new(*sim_event_count, true);
                 args.only_client_events = true;
                 args.continue_after_all_normal_packets_processed = false;

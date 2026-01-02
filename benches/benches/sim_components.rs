@@ -30,7 +30,7 @@ fn v3_single_simulator_run(c: &mut Criterion) {
     let config_name = config_file.split('_').nth(1).unwrap();
     let (topology, linkstate) = load_topology_from_file(config_path.clone()).unwrap();
     let trafserv_to_client_delay = Duration::from_millis(20);
-    let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+    let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
     let mut output_len = 0;
     let bench_name = format!("v3_{:?}K_{}_single,", sim_event_count / 1000, config_name);
     c.bench_function(bench_name.as_str(), |b| {
@@ -66,7 +66,7 @@ fn v3_multi_run(c: &mut Criterion) {
             let config_name = config_file.split('_').nth(1).unwrap();
             let (topology, linkstate) = load_topology_from_file(config_path.clone()).unwrap();
             let trafserv_to_client_delay = Duration::from_millis(20);
-            let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay);
+            let (si, sq) = parse_trace(EARLY_TRACE, &topology, trafserv_to_client_delay).unwrap();
             let mut output_len = 0;
             let bench_name = format!("v3_{:?}K_{},", sim_event_count / 1000, config_name);
             c.bench_function(bench_name.as_str(), |b| {
@@ -122,7 +122,7 @@ fn sim_initialization_components(c: &mut Criterion) {
                 EARLY_TRACE,
                 &topology,
                 trafserv_to_client_delay,
-            ));
+            ).unwrap());
         });
     });
 }
