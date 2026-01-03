@@ -200,32 +200,49 @@ impl HiTraceTputLink {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
 
-        // Determine the current time slot.
+        // Determine the current time slot and trace length for wrap-around
         let current_time_slot = current_duration.as_micros() as usize;
+        let trace_len = self.linktrace.bw_trace.len();
 
-        let busy_to;
         let mut queueing_delay_duration = Duration::default();
-        let this_packet_duration;
 
-        // Depending on whether the current time slot is after the previous
-        // packet finished, choose the lookup parameters and compute durations.
-        if self.next_busy_to <= current_time_slot {
-            // For simplex operation, use the single trace
-            busy_to = self.linktrace.get_busy_to(current_time_slot, pkt_size);
-            this_packet_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
+        // Determine lookup time based on queueing state
+        let lookup_time = if self.next_busy_to <= current_time_slot {
+            current_time_slot
         } else {
-            // For simplex operation, use the single trace
-            busy_to = self.linktrace.get_busy_to(self.next_busy_to, pkt_size);
+            self.next_busy_to
+        };
+
+        // Wrap lookup time into trace range
+        let wrapped_lookup = lookup_time % trace_len;
+        let raw_busy_to = self.linktrace.get_busy_to(wrapped_lookup, pkt_size);
+
+        // Handle trace end condition with wrap-around
+        let busy_to = if raw_busy_to == 0 {
+            // Packet doesn't fit before trace end - wrap to next cycle
+            let current_cycle = lookup_time / trace_len;
+            let next_cycle_busy_to = self.linktrace.get_busy_to(0, pkt_size);
+
+            if next_cycle_busy_to == 0 {
+                panic!("Packet size {} exceeds total trace capacity", pkt_size);
+            }
+
+            // busy_to is in next cycle
+            (current_cycle + 1) * trace_len + next_cycle_busy_to
+        } else {
+            // Normal case: reconstruct absolute time from wrapped result
+            let current_cycle = lookup_time / trace_len;
+            current_cycle * trace_len + raw_busy_to
+        };
+
+        // Calculate durations
+        let this_packet_duration = if self.next_busy_to <= current_time_slot {
+            Duration::from_micros((busy_to - current_time_slot) as u64)
+        } else {
             queueing_delay_duration =
                 Duration::from_micros((self.next_busy_to - current_time_slot) as u64);
-            this_packet_duration = Duration::from_micros((busy_to - self.next_busy_to) as u64);
-        }
-
-        // Make sure that we are not at the end of the link trace
-        assert_ne!(
-            busy_to, 0,
-            "Packet to be scheduled outside of link trace end"
-        );
+            Duration::from_micros((busy_to - self.next_busy_to) as u64)
+        };
 
         // Update next_busy_to in preparation for the next packet
         self.next_busy_to = busy_to;
@@ -240,6 +257,18 @@ impl HiTraceTputLink {
 
     pub fn reset(&mut self) {
         self.next_busy_to = 0;
+    }
+
+    /// Set a random starting offset in the trace for Monte Carlo simulations.
+    /// This is used by the randomization feature to start traces at different positions.
+    pub fn set_random_offset(&mut self, offset: usize) {
+        let trace_len = self.linktrace.bw_trace.len();
+        self.next_busy_to = offset % trace_len;
+    }
+
+    /// Get the trace length in microseconds.
+    pub fn get_trace_len(&self) -> usize {
+        self.linktrace.bw_trace.len()
     }
 }
 
@@ -287,9 +316,10 @@ impl StdTraceTputLink {
         // pkt_size should come as call parameter, is hardwired for now
         let pkt_size = 1500;
 
-        // Determine the current time slot.
+        // Determine the current time slot and trace length for wrap-around
         let current_time_slot = current_duration.as_millis() as usize;
         let current_slot_ns_position: u64 = (current_duration.as_nanos() % 1_000_000) as u64;
+        let trace_len = self.bw_trace.len();
 
         // Note: Timing calculation code below is intricate, order between
         // statements can matter. Establish if the packet will have to queue, or
@@ -314,8 +344,11 @@ impl StdTraceTputLink {
             self.busy_ns_in_slot
         };
 
+        // Wrap slot_index for trace array access
+        let mut wrapped_slot = slot_index % trace_len;
         let mut ns_to_slot_end = 1_000_000 - first_slot_start_send_ns;
-        let mut bytes_to_slot_end = (ns_to_slot_end * self.bw_trace[slot_index] as u64) / 1_000_000;
+        let mut bytes_to_slot_end =
+            (ns_to_slot_end * self.bw_trace[wrapped_slot] as u64) / 1_000_000;
 
         // Packet transmission take place possibly across multiple slots
         let mut remaining_pkt_size = pkt_size;
@@ -329,21 +362,28 @@ impl StdTraceTputLink {
             remaining_pkt_size -= bytes_to_slot_end;
             slot_boundaries_crossed += 1;
             slot_index += 1;
-            assert!(
-                slot_index < self.bw_trace.len(),
-                "Packet to be scheduled outside of link trace end: slot_index {} >= bw_trace.len() {}",
-                slot_index,
-                self.bw_trace.len()
-            );
-            bytes_to_slot_end = self.bw_trace[slot_index] as u64;
+
+            // Wrap slot_index for trace array access
+            wrapped_slot = slot_index % trace_len;
+
+            // Safety check: prevent infinite loops for pathological cases
+            if slot_boundaries_crossed > trace_len as u64 * 2 {
+                panic!(
+                    "Packet transmission exceeds 2x trace length - likely configuration error. \
+                     Packet size: {}, trace length: {} slots",
+                    pkt_size, trace_len
+                );
+            }
+
+            bytes_to_slot_end = self.bw_trace[wrapped_slot] as u64;
             ns_to_slot_end = 1_000_000;
         }
 
         // We are now at the slot which allows the last byte of the packet to be
         // sent
-        let ns_to_send_remaining = ((remaining_pkt_size as f64 / self.bw_trace[slot_index] as f64)
-            * 1e6_f64)
-            .round() as u64;
+        let ns_to_send_remaining =
+            ((remaining_pkt_size as f64 / self.bw_trace[wrapped_slot] as f64) * 1e6_f64).round()
+                as u64;
         this_packet_duration_ns += ns_to_send_remaining;
 
         // Either we are in the first slot, or we have moved, this affects
@@ -354,7 +394,7 @@ impl StdTraceTputLink {
             ns_to_send_remaining
         };
 
-        // Update the struct values for next invocation
+        // Update the struct values for next invocation (use unwrapped slot_index for state continuity)
         self.next_busy_to = slot_index;
         self.busy_ns_in_slot = last_slot_send_end_ns;
 
@@ -380,5 +420,18 @@ impl StdTraceTputLink {
     pub fn reset(&mut self) {
         self.next_busy_to = 0;
         self.busy_ns_in_slot = 0;
+    }
+
+    /// Set a random starting offset in the trace for Monte Carlo simulations.
+    /// This is used by the randomization feature to start traces at different positions.
+    pub fn set_random_offset(&mut self, offset: usize) {
+        let trace_len = self.bw_trace.len();
+        self.next_busy_to = offset % trace_len;
+        self.busy_ns_in_slot = 0; // Start at slot beginning
+    }
+
+    /// Get the trace length in milliseconds.
+    pub fn get_trace_len(&self) -> usize {
+        self.bw_trace.len()
     }
 }
