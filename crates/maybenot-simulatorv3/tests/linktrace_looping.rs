@@ -1,11 +1,7 @@
 //! Tests for link trace wrap-around (looping) behavior.
 
 #[cfg(feature = "trace-tests")]
-use maybenot_simulatorv3::links::{
-    HiTraceTputLink, StdTraceTputLink, load_linktrace_from_file,
-};
-#[cfg(feature = "trace-tests")]
-use maybenot_simulatorv3::settings::randomize::Randomizable;
+use maybenot_simulatorv3::links::{HiTraceTputLink, StdTraceTputLink, load_linktrace_from_file};
 #[cfg(feature = "trace-tests")]
 use rand::rng;
 #[cfg(feature = "trace-tests")]
@@ -268,8 +264,14 @@ fn test_stdtrace_queueing_across_wrap() {
     let delay3 = link.sample(time);
 
     // Second and third packets should experience queueing delay (should be larger than first)
-    assert!(delay2 >= delay1, "Second packet should have at least as much delay");
-    assert!(delay3 >= delay2, "Third packet should have at least as much delay");
+    assert!(
+        delay2 >= delay1,
+        "Second packet should have at least as much delay"
+    );
+    assert!(
+        delay3 >= delay2,
+        "Third packet should have at least as much delay"
+    );
 }
 
 /// Test that packets scheduled exactly at the trace length boundary work correctly.
@@ -341,8 +343,8 @@ fn test_hitrace_random_offsets() {
     let mut delays2 = Vec::new();
 
     for _ in 0..10 {
-        link1.randomize(&mut rng);
-        link2.randomize(&mut rng);
+        link1.randomize(&mut rng, 0.2);
+        link2.randomize(&mut rng, 0.2);
 
         // Sample at a fixed time and record the delay
         let delay1 = link1.sample(test_time);
@@ -394,7 +396,7 @@ fn test_stdtrace_random_offsets() {
     let mut delays = Vec::new();
 
     for _ in 0..10 {
-        link.randomize(&mut rng);
+        link.randomize(&mut rng, 0.2);
 
         // Sample at a fixed time and record the delay
         let delay = link.sample(test_time);

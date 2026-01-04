@@ -13,6 +13,7 @@ pub use parse::{
 
 use crate::links::LinkType;
 use parse::NetworkConfig;
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkState {
@@ -50,6 +51,22 @@ impl NetworkLinkState {
 
     pub fn links(&self) -> &[LinkType] {
         &self.links
+    }
+
+    /// Clone this linkstate and randomize all link parameters.
+    ///
+    /// This is the recommended method for parallel simulation runs where
+    /// each run should have slightly different network conditions.
+    ///
+    /// The `factor` parameter controls the variation range (e.g., 0.2 = ±20%).
+    /// For fixed throughput links, applies ±factor variation to throughput and propagation delay.
+    /// For trace-based links, randomizes the starting offset in the trace.
+    pub fn clone_randomized<R: Rng>(&self, rng: &mut R, factor: f64) -> Self {
+        let mut cloned = self.clone();
+        for link in &mut cloned.links {
+            link.randomize(rng, factor);
+        }
+        cloned
     }
 }
 

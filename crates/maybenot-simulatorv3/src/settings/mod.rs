@@ -1,102 +1,163 @@
-//! Settings module for creating and configuring network simulation topologies.
+//! Settings module for creating pre-configured network simulation topologies.
 //!
-//! This module provides pre-configured network topologies with fixed node structures
-//! and randomizable link parameters for parallel simulation runs.
+//! This module provides templates for common network topologies used in traffic
+//! analysis defense simulations. Each template returns a (NetworkTopology, NetworkLinkState)
+//! tuple that can be used directly with the simulator.
+//!
+//! # Example
+//!
+//! ```rust
+//! use maybenot_simulatorv3::settings::Setting;
+//! use rand::thread_rng;
+//!
+//! // Create topology and linkstate from template
+//! let (topology, linkstate) = Setting::Vpn.create();
+//!
+//! // Clone and randomize for parallel simulation runs (±20% variation)
+//! let mut rng = thread_rng();
+//! let randomized_linkstate = linkstate.clone_randomized(&mut rng, 0.2);
+//! ```
 
-pub mod randomize;
-pub mod templates;
-
+use crate::links::LinkType;
 use crate::topology::{NetworkLinkState, NetworkTopology};
+use std::time::Duration;
 
-/// A network simulation setting combining topology and link state.
+// Embed TOML files at compile time from templates subfolder
+const VPN_TOML: &str = include_str!("templates/vpn.toml");
+const MULTIHOP_GUARD_TOML: &str = include_str!("templates/multihop_guard.toml");
+const MULTIHOP_EXIT_TOML: &str = include_str!("templates/multihop_exit.toml");
+
+/// Available network topology settings for traffic analysis defense simulations.
 ///
-/// Settings have fixed node structures (determined by the template) but allow
-/// randomization of link parameters (bandwidth, latency) for parallel execution.
+/// Each setting creates a different network topology with varying numbers of
+/// nodes and links. The topologies differ in where Maybenot defenses run.
 ///
 /// # Example
 ///
 /// ```rust
-/// use maybenot_simulatorv3::settings::templates::VpnSetting;
+/// use maybenot_simulatorv3::settings::Setting;
 /// use rand::thread_rng;
 ///
-/// // Create a VPN setting with defaults
-/// let mut setting = VpnSetting::new().unwrap();
+/// // Create topology and linkstate
+/// let (topology, linkstate) = Setting::Vpn.create();
 ///
-/// // Randomize link parameters
+/// // Clone and randomize for parallel runs (±20% variation)
 /// let mut rng = thread_rng();
-/// setting.randomize_link(0, &mut rng).unwrap();
-///
-/// // Get topology and linkstate for simulation
-/// let (topology, mut linkstate) = setting.into_parts();
+/// let randomized_linkstate = linkstate.clone_randomized(&mut rng, 0.2);
 /// ```
-#[derive(Debug)]
-pub struct Setting {
-    topology: NetworkTopology,
-    linkstate: NetworkLinkState,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Setting {
+    /// VPN topology: Client (Maybenot) ↔ Relay (Maybenot) ↔ Endpoint
+    ///
+    /// This creates a simple VPN topology with 3 nodes and 4 bidirectional links.
+    /// The client and relay both run Maybenot defenses.
+    ///
+    /// # Topology
+    ///
+    /// - Node 0: ClientMaybenot
+    /// - Node 1: RelayMaybenot
+    /// - Node 2: EndpointBasic
+    ///
+    /// # Links (default parameters)
+    ///
+    /// - Links 0-1: Client ↔ Relay (100 Mbps, 10ms propagation)
+    /// - Links 2-3: Relay ↔ Endpoint (1 Gbps, 5ms propagation)
+    Vpn,
+
+    /// VPN topology with custom client-relay link parameters.
+    ///
+    /// Same as `Vpn` but with user-specified throughput and round-trip time
+    /// for the client ↔ relay link (links 0 and 1).
+    VpnCustom {
+        /// Throughput in megabits per second for client ↔ relay link
+        mbps: u64,
+        /// Round-trip time for client ↔ relay link (propagation = rtt/2)
+        rtt: Duration,
+    },
+
+    /// Multi-hop topology with Maybenot on Guard node.
+    ///
+    /// This creates a 2-hop topology where the first hop (guard) runs Maybenot
+    /// defenses. The topology has 4 nodes and 6 bidirectional links.
+    ///
+    /// # Topology
+    ///
+    /// - Node 0: ClientMaybenot
+    /// - Node 1: RelayMaybenot (Guard/first hop)
+    /// - Node 2: RouterBasic (Exit/second hop)
+    /// - Node 3: EndpointBasic
+    ///
+    /// # Links (default parameters)
+    ///
+    /// - Links 0-1: Client ↔ Guard (100 Mbps, 10ms propagation)
+    /// - Links 2-3: Guard ↔ Exit (1 Gbps, 5ms propagation)
+    /// - Links 4-5: Exit ↔ Endpoint (1 Gbps, 5ms propagation)
+    MultihopGuard,
+
+    /// Multi-hop topology with Maybenot on Exit node.
+    ///
+    /// This creates a 2-hop topology where the second hop (exit) runs Maybenot
+    /// defenses. The topology has 4 nodes and 6 bidirectional links.
+    ///
+    /// # Topology
+    ///
+    /// - Node 0: ClientMaybenot
+    /// - Node 1: RouterBasic (Guard/first hop)
+    /// - Node 2: RelayMaybenot (Exit/second hop)
+    /// - Node 3: EndpointBasic
+    ///
+    /// # Links (default parameters)
+    ///
+    /// - Links 0-1: Client ↔ Guard (100 Mbps, 10ms propagation)
+    /// - Links 2-3: Guard ↔ Exit (1 Gbps, 5ms propagation)
+    /// - Links 4-5: Exit ↔ Endpoint (1 Gbps, 5ms propagation)
+    MultihopExit,
 }
 
 impl Setting {
-    /// Create a new Setting from topology and linkstate.
-    pub(crate) fn new(topology: NetworkTopology, linkstate: NetworkLinkState) -> Self {
-        Self {
-            topology,
-            linkstate,
-        }
-    }
-
-    /// Get an immutable reference to the topology.
-    pub fn topology(&self) -> &NetworkTopology {
-        &self.topology
-    }
-
-    /// Get a mutable reference to the link state.
+    /// Create a network topology and linkstate with default parameters.
     ///
-    /// Use this to directly modify link parameters before running simulations.
-    pub fn linkstate_mut(&mut self) -> &mut NetworkLinkState {
-        &mut self.linkstate
-    }
-
-    /// Consume the setting and return the topology and linkstate for simulation.
-    pub fn into_parts(self) -> (NetworkTopology, NetworkLinkState) {
-        (self.topology, self.linkstate)
-    }
-
-    /// Randomize a specific link's parameters.
+    /// Returns a tuple of (NetworkTopology, NetworkLinkState) that can be used
+    /// directly with the simulator. The linkstate can be cloned and randomized
+    /// for parallel simulation runs.
     ///
-    /// This modifies the link's throughput and propagation delay within ±20% of
-    /// their original values (for fixed parameters). Trace-based parameters are
-    /// reset for now (future: random offset).
+    /// # Example
     ///
-    /// # Arguments
+    /// ```rust
+    /// use maybenot_simulatorv3::settings::Setting;
     ///
-    /// * `link_id` - The ID of the link to randomize
-    /// * `rng` - Random number generator
+    /// let (topology, linkstate) = Setting::Vpn.create();
+    /// assert_eq!(linkstate.link_count(), 4);
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the link_id is invalid.
-    pub fn randomize_link<R: rand::Rng>(
-        &mut self,
-        link_id: usize,
-        rng: &mut R,
-    ) -> Result<(), String> {
-        use randomize::Randomizable;
+    /// let (topology, linkstate) = Setting::MultihopGuard.create();
+    /// assert_eq!(linkstate.link_count(), 6);
+    /// ```
+    pub fn create(&self) -> (NetworkTopology, NetworkLinkState) {
+        match self {
+            Setting::Vpn | Setting::VpnCustom { .. } => {
+                let (topology, mut linkstate) = crate::load_topology_from_str(VPN_TOML)
+                    .expect("embedded TOML template is valid");
 
-        let link = self
-            .linkstate
-            .get_link_mut(link_id)
-            .ok_or_else(|| format!("Link {} not found", link_id))?;
+                // Apply custom parameters if VpnCustom
+                if let Setting::VpnCustom { mbps, rtt } = self {
+                    // Convert mbps to bps, rtt to one-way propagation delay
+                    let tput_bps = mbps * 1_000_000;
+                    let prop = *rtt / 2;
 
-        link.randomize(rng);
-        Ok(())
-    }
-}
-
-impl Clone for Setting {
-    fn clone(&self) -> Self {
-        Self {
-            topology: self.topology.new_from_config(),
-            linkstate: self.linkstate.clone(),
+                    // Modify links 0 (client upstream) and 1 (client downstream)
+                    for link_id in [0, 1] {
+                        if let Some(LinkType::FixedTput(link)) = linkstate.get_link_mut(link_id) {
+                            link.tput_bps = tput_bps;
+                            link.prop_us = prop;
+                        }
+                    }
+                }
+                (topology, linkstate)
+            }
+            Setting::MultihopGuard => crate::load_topology_from_str(MULTIHOP_GUARD_TOML)
+                .expect("embedded TOML template is valid"),
+            Setting::MultihopExit => crate::load_topology_from_str(MULTIHOP_EXIT_TOML)
+                .expect("embedded TOML template is valid"),
         }
     }
 }

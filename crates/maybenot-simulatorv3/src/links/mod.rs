@@ -6,6 +6,7 @@ pub mod trace;
 pub use bundle::{LinkBundle, load_linkbundle_from_file, save_linkbundle_to_file};
 pub use trace::{LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file};
 
+use rand::Rng;
 use std::{cmp::max, sync::Arc, time::Duration};
 
 /////// High-performance enum-based link dispatch
@@ -97,6 +98,19 @@ impl LinkType {
             LinkType::StdTraceTput(link) => link.reset(),
         }
     }
+
+    /// Randomize link parameters for Monte Carlo simulations.
+    ///
+    /// The `factor` parameter controls the variation range (e.g., 0.2 = ±20%).
+    /// For fixed throughput links, applies ±factor variation to throughput and propagation delay.
+    /// For trace-based links, randomizes the starting offset in the trace.
+    pub fn randomize<R: Rng>(&mut self, rng: &mut R, factor: f64) {
+        match self {
+            LinkType::FixedTput(link) => link.randomize(rng, factor),
+            LinkType::HiTraceTput(link) => link.randomize(rng, factor),
+            LinkType::StdTraceTput(link) => link.randomize(rng, factor),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +172,32 @@ impl FixedTputLink {
         self.next_busy_to_duration = new_busy_to_dur;
 
         queueing_delay_duration + this_packet_duration
+    }
+
+    /// Randomize throughput and propagation delay by ±factor variation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `factor` is negative or greater than 1.0.
+    pub fn randomize<R: Rng>(&mut self, rng: &mut R, factor: f64) {
+        assert!(factor >= 0.0, "factor must be non-negative");
+        assert!(factor <= 1.0, "factor must be at most 1.0");
+
+        // Randomize throughput ±factor
+        let delta = (self.tput_bps as f64 * factor) as u64;
+        let min = self.tput_bps.saturating_sub(delta);
+        let max = self.tput_bps.saturating_add(delta);
+        self.tput_bps = rng.random_range(min..=max);
+
+        // Randomize propagation ±factor if fixed
+        if self.fixed_propagation {
+            let delay_us = self.prop_us.as_micros() as u64;
+            let delta = (delay_us as f64 * factor) as u64;
+            let min = delay_us.saturating_sub(delta);
+            let max = delay_us.saturating_add(delta);
+            self.prop_us = Duration::from_micros(rng.random_range(min..=max));
+        }
+        // Note: Variable propagation (prop_us_vec) randomization not implemented
     }
 }
 
@@ -269,6 +309,31 @@ impl HiTraceTputLink {
     /// Get the trace length in microseconds.
     pub fn get_trace_len(&self) -> usize {
         self.linktrace.bw_trace.len()
+    }
+
+    /// Randomize trace offset and propagation delay for Monte Carlo simulations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `factor` is negative or greater than 1.0.
+    pub fn randomize<R: Rng>(&mut self, rng: &mut R, factor: f64) {
+        assert!(factor >= 0.0, "factor must be non-negative");
+        assert!(factor <= 1.0, "factor must be at most 1.0");
+
+        // Randomize starting offset in trace
+        let trace_len = self.get_trace_len();
+        let random_offset = rng.random_range(0..trace_len);
+        self.set_random_offset(random_offset);
+
+        // Randomize propagation ±factor if fixed
+        if self.fixed_propagation {
+            let delay_us = self.prop_us.as_micros() as u64;
+            let delta = (delay_us as f64 * factor) as u64;
+            let min = delay_us.saturating_sub(delta);
+            let max = delay_us.saturating_add(delta);
+            self.prop_us = Duration::from_micros(rng.random_range(min..=max));
+        }
+        // Note: Variable propagation (prop_us_vec) randomization not implemented
     }
 }
 
@@ -433,5 +498,30 @@ impl StdTraceTputLink {
     /// Get the trace length in milliseconds.
     pub fn get_trace_len(&self) -> usize {
         self.bw_trace.len()
+    }
+
+    /// Randomize trace offset and propagation delay for Monte Carlo simulations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `factor` is negative or greater than 1.0.
+    pub fn randomize<R: Rng>(&mut self, rng: &mut R, factor: f64) {
+        assert!(factor >= 0.0, "factor must be non-negative");
+        assert!(factor <= 1.0, "factor must be at most 1.0");
+
+        // Randomize starting offset in trace
+        let trace_len = self.get_trace_len();
+        let random_offset = rng.random_range(0..trace_len);
+        self.set_random_offset(random_offset);
+
+        // Randomize propagation ±factor if fixed
+        if self.fixed_propagation {
+            let delay_us = self.prop_us.as_micros() as u64;
+            let delta = (delay_us as f64 * factor) as u64;
+            let min = delay_us.saturating_sub(delta);
+            let max = delay_us.saturating_add(delta);
+            self.prop_us = Duration::from_micros(rng.random_range(min..=max));
+        }
+        // Note: Variable propagation (prop_us_vec) randomization not implemented
     }
 }
