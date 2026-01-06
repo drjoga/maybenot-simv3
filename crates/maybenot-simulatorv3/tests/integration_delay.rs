@@ -11,8 +11,8 @@ use maybenot::{
 use maybenot_simulatorv3::{
     SimEvent, SimulatorArgs,
     integration::{BinDist, Integration},
-    load_topology_from_str, sim_advanced,
-    traffic_parse::parse_trace,
+    parse_trace, sim_advanced,
+    topology::load_topology_from_str,
 };
 
 // Modifies the prop_us parameter for Link instances that use fixed propagation

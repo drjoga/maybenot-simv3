@@ -19,7 +19,7 @@
 //! ```
 
 use crate::links::LinkType;
-use crate::topology::{NetworkLinkState, NetworkTopology};
+use crate::topology::{NetworkLinkState, NetworkTopology, load_topology_from_str};
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
@@ -237,8 +237,8 @@ impl Setting {
     pub fn create(&self) -> Result<(NetworkTopology, NetworkLinkState), SettingError> {
         match self {
             Setting::Vpn | Setting::VpnCustom { .. } => {
-                let (topology, mut linkstate) = crate::load_topology_from_str(VPN_TOML)
-                    .map_err(SettingError::InvalidContent)?;
+                let (topology, mut linkstate) =
+                    load_topology_from_str(VPN_TOML).map_err(SettingError::InvalidContent)?;
 
                 // Apply custom parameters if VpnCustom
                 if let Setting::VpnCustom { mbps, rtt } = self {
@@ -256,10 +256,12 @@ impl Setting {
                 }
                 Ok((topology, linkstate))
             }
-            Setting::MultihopGuard => crate::load_topology_from_str(MULTIHOP_GUARD_TOML)
-                .map_err(SettingError::InvalidContent),
-            Setting::MultihopExit => crate::load_topology_from_str(MULTIHOP_EXIT_TOML)
-                .map_err(SettingError::InvalidContent),
+            Setting::MultihopGuard => {
+                load_topology_from_str(MULTIHOP_GUARD_TOML).map_err(SettingError::InvalidContent)
+            }
+            Setting::MultihopExit => {
+                load_topology_from_str(MULTIHOP_EXIT_TOML).map_err(SettingError::InvalidContent)
+            }
             Setting::Custom { path, packet_size } => {
                 // Validate packet_size
                 if *packet_size == 0 || *packet_size > PACKET_SIZE_MAX {
@@ -267,8 +269,8 @@ impl Setting {
                 }
 
                 let content = std::fs::read_to_string(path)?;
-                let (topology, mut linkstate) = crate::load_topology_from_str(&content)
-                    .map_err(SettingError::InvalidContent)?;
+                let (topology, mut linkstate) =
+                    load_topology_from_str(&content).map_err(SettingError::InvalidContent)?;
                 linkstate.packet_size = *packet_size;
                 Ok((topology, linkstate))
             }

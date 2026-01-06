@@ -1,9 +1,9 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim};
+use maybenot_simulatorv3::{parse_trace, sim, topology::load_topology_from_file};
 use std::{str::FromStr, time::Duration};
 
 #[cfg(feature = "trace-tests")]
-use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_str, sim_advanced};
+use maybenot_simulatorv3::{SimulatorArgs, sim_advanced, topology::load_topology_from_str};
 #[cfg(feature = "trace-tests")]
 use std::fs;
 #[cfg(feature = "trace-tests")]

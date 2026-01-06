@@ -1,9 +1,12 @@
 use std::time::Duration;
 
 use maybenot_simulatorv3::{
-    FixedTputLink, HiTraceTputLink, LinkType, SimulatorArgs, StdTraceTputLink,
-    load_linktrace_from_file, load_topology_from_file, parse_trace, settings::PACKET_SIZE_WG,
+    SimulatorArgs,
+    links::{FixedTputLink, HiTraceTputLink, LinkType, StdTraceTputLink, load_linktrace_from_file},
+    parse_trace,
+    settings::PACKET_SIZE_WG,
     sim_advanced,
+    topology::load_topology_from_file,
 };
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};

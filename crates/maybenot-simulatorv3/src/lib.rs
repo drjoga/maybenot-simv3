@@ -5,21 +5,9 @@ pub mod settings;
 pub mod topology;
 pub mod traffic_parse;
 
-// Re-export topology types and functions
-pub use topology::{
-    MaybenotNode, NetworkLinkState, NetworkTopology, NodeType, build_network_topology_from_config,
-    load_topology_from_file, load_topology_from_str,
-};
-
-// Re-export links types and functions
-pub use links::{
-    FixedTputLink, HiTraceTputLink, LinkBundle, LinkTrace, LinkType, SizebinLookupTable,
-    StdTraceTputLink, load_linkbundle_from_file, load_linktrace_from_file, mk_sizebin_lookuptable,
-    save_linkbundle_to_file, save_linktrace_to_file,
-};
-
-// Re-export traffic parsing functions
-pub use traffic_parse::{event_schedule_print, fill_simq, parse_trace, traffic_trace_prepare};
+// Re-export minimal core functionality, the rest is in submodules
+pub use traffic_parse::parse_trace;
+pub use settings::Setting;
 
 use std::{cmp::Ordering, collections::BinaryHeap, time::Instant};
 
@@ -30,7 +18,10 @@ use traffic_parse::EventKind;
 use maybenot::{Machine, TriggerEvent};
 use maybenot_helpers::initialize_maybenot_sim_states;
 
-use crate::maybenot_helpers::pick_next_maybenot;
+use crate::{
+    maybenot_helpers::pick_next_maybenot,
+    topology::{NetworkLinkState, NetworkTopology},
+};
 
 /// Represents a single network event in the Maybenot simulation.
 ///

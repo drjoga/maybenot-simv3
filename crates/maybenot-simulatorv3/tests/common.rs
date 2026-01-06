@@ -3,9 +3,10 @@ use std::time::{Duration, Instant};
 
 use log::debug;
 use maybenot::{Machine, TriggerEvent, action::Action, state::State};
+use maybenot_simulatorv3::topology::load_topology_from_str;
+use maybenot_simulatorv3::traffic_parse::{event_schedule_print, fill_simq, traffic_trace_prepare};
 use maybenot_simulatorv3::{
-    SimEvent, SimInfo, SimQueue, SimulatorArgs, event_schedule_print, fill_simq,
-    load_topology_from_str, sim_advanced, topology::NetworkTopology, traffic_trace_prepare,
+    SimEvent, SimInfo, SimQueue, SimulatorArgs, sim_advanced, topology::NetworkTopology,
 };
 use once_cell::sync::Lazy;
 

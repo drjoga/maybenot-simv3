@@ -3,8 +3,10 @@ use std::time::Duration;
 use toml::Value;
 
 use maybenot_simulatorv3::{
-    SimulatorArgs, build_network_topology_from_config, load_topology_from_file,
-    load_topology_from_str, parse_trace, sim_advanced,
+    SimulatorArgs, parse_trace, sim_advanced,
+    topology::{
+        build_network_topology_from_config, load_topology_from_file, load_topology_from_str,
+    },
 };
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
