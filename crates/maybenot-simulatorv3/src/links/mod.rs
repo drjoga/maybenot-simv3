@@ -18,11 +18,11 @@ pub enum LinkType {
 }
 
 impl LinkType {
-    pub fn sample(&mut self, current_duration: Duration) -> Duration {
+    pub fn sample(&mut self, current_duration: Duration, pkt_size: usize) -> Duration {
         match self {
-            LinkType::FixedTput(link) => link.sample(current_duration),
-            LinkType::HiTraceTput(link) => link.sample(current_duration),
-            LinkType::StdTraceTput(link) => link.sample(current_duration),
+            LinkType::FixedTput(link) => link.sample(current_duration, pkt_size),
+            LinkType::HiTraceTput(link) => link.sample(current_duration, pkt_size),
+            LinkType::StdTraceTput(link) => link.sample(current_duration, pkt_size),
         }
     }
 
@@ -147,10 +147,7 @@ impl FixedTputLink {
         }
     }
 
-    pub fn sample(&mut self, current_duration: Duration) -> Duration {
-        // pkt_size should come as call parameter, is hardwired for now
-        let pkt_size = 1500;
-
+    pub fn sample(&mut self, current_duration: Duration, pkt_size: usize) -> Duration {
         // Calculate the transmission delay for a packet with a given size:
         // this_packet_duration (ns) = (pkt_size * 8 * 1e9) / throughput (bits/s)
         let packet_size_bits = pkt_size * 8;
@@ -236,10 +233,7 @@ impl HiTraceTputLink {
         }
     }
 
-    pub fn sample(&mut self, current_duration: Duration) -> Duration {
-        // pkt_size should come as call parameter, is hardwired for now
-        let pkt_size = 1500;
-
+    pub fn sample(&mut self, current_duration: Duration, pkt_size: usize) -> Duration {
         // Determine the current time slot and trace length for wrap-around
         let current_time_slot = current_duration.as_micros() as usize;
         let trace_len = self.linktrace.bw_trace.len();
@@ -255,13 +249,13 @@ impl HiTraceTputLink {
 
         // Wrap lookup time into trace range
         let wrapped_lookup = lookup_time % trace_len;
-        let raw_busy_to = self.linktrace.get_busy_to(wrapped_lookup, pkt_size);
+        let raw_busy_to = self.linktrace.get_busy_to(wrapped_lookup, pkt_size as i32);
 
         // Handle trace end condition with wrap-around
         let busy_to = if raw_busy_to == 0 {
             // Packet doesn't fit before trace end - wrap to next cycle
             let current_cycle = lookup_time / trace_len;
-            let next_cycle_busy_to = self.linktrace.get_busy_to(0, pkt_size);
+            let next_cycle_busy_to = self.linktrace.get_busy_to(0, pkt_size as i32);
 
             if next_cycle_busy_to == 0 {
                 panic!("Packet size {} exceeds total trace capacity", pkt_size);
@@ -377,10 +371,7 @@ impl StdTraceTputLink {
         }
     }
 
-    pub fn sample(&mut self, current_duration: Duration) -> Duration {
-        // pkt_size should come as call parameter, is hardwired for now
-        let pkt_size = 1500;
-
+    pub fn sample(&mut self, current_duration: Duration, pkt_size: usize) -> Duration {
         // Determine the current time slot and trace length for wrap-around
         let current_time_slot = current_duration.as_millis() as usize;
         let current_slot_ns_position: u64 = (current_duration.as_nanos() % 1_000_000) as u64;
@@ -416,7 +407,7 @@ impl StdTraceTputLink {
             (ns_to_slot_end * self.bw_trace[wrapped_slot] as u64) / 1_000_000;
 
         // Packet transmission take place possibly across multiple slots
-        let mut remaining_pkt_size = pkt_size;
+        let mut remaining_pkt_size = pkt_size as u64;
         let mut this_packet_duration_ns = 0_u64;
         let mut slot_boundaries_crossed = 0_u64;
 

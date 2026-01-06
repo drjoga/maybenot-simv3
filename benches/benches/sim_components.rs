@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use maybenot_simulatorv3::{
     FixedTputLink, HiTraceTputLink, LinkType, SimulatorArgs, StdTraceTputLink,
-    load_linktrace_from_file, load_topology_from_file, parse_trace, sim_advanced,
+    load_linktrace_from_file, load_topology_from_file, parse_trace, settings::PACKET_SIZE_WG,
+    sim_advanced,
 };
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
@@ -300,7 +301,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         b.iter(|| {
             for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt.sample(*duration));
+                black_box(network_lt.sample(*duration, PACKET_SIZE_WG));
                 network_lt.reset();
             }
         })
@@ -325,7 +326,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         b.iter(|| {
             for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt_std.sample(*duration));
+                black_box(network_lt_std.sample(*duration, PACKET_SIZE_WG));
                 network_lt_std.reset();
             }
         })
@@ -350,7 +351,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         b.iter(|| {
             for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_lt_slow.sample(*duration));
+                black_box(network_lt_slow.sample(*duration, PACKET_SIZE_WG));
                 network_lt_slow.reset();
             }
         })
@@ -371,7 +372,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         b.iter(|| {
             for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_ftput.sample(*duration));
+                black_box(network_ftput.sample(*duration, PACKET_SIZE_WG));
             }
         })
     });
@@ -391,7 +392,7 @@ fn simulator_network_sample(c: &mut Criterion) {
         b.iter(|| {
             for duration in durations.iter().take(nr_iter) {
                 // Use black_box to prevent the compiler from optimizing away the call
-                black_box(network_ftput_slow.sample(*duration));
+                black_box(network_ftput_slow.sample(*duration, PACKET_SIZE_WG));
             }
         })
     });

@@ -12,12 +12,16 @@ pub use parse::{
 };
 
 use crate::links::LinkType;
+use crate::settings::PACKET_SIZE_WG;
 use parse::NetworkConfig;
 use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct NetworkLinkState {
     pub links: Vec<LinkType>,
+    /// Packet size in bytes used for transmission delay calculations.
+    /// Default is 1500 (WireGuard MTU). Use 514 for Tor simulations.
+    pub packet_size: usize,
 }
 
 impl Default for NetworkLinkState {
@@ -28,7 +32,10 @@ impl Default for NetworkLinkState {
 
 impl NetworkLinkState {
     pub fn new() -> Self {
-        Self { links: Vec::new() }
+        Self {
+            links: Vec::new(),
+            packet_size: PACKET_SIZE_WG,
+        }
     }
 
     pub fn add_link(&mut self, link: LinkType, id: usize) -> usize {

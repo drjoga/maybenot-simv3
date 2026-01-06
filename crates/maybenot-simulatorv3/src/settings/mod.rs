@@ -25,6 +25,19 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// Default packet size for WireGuard simulations (MTU).
+pub const PACKET_SIZE_WG: usize = 1500;
+
+/// Packet size for Tor cell simulations.
+/// Note: Tor support in the simulator is planned for future work.
+pub const PACKET_SIZE_TOR: usize = 514;
+
+/// Maximum allowed packet size for simulations.
+/// Set to jumbo frame MTU (9000 bytes) as a reasonable upper bound.
+/// Standard Ethernet MTU is 1500, jumbo frames go up to 9000.
+/// Values beyond this are unrealistic for network traffic simulation.
+pub const PACKET_SIZE_MAX: usize = 9000;
+
 /// Error type for setting creation failures.
 #[derive(Debug)]
 pub enum SettingError {
@@ -34,6 +47,8 @@ pub enum SettingError {
     FileReadError(io::Error),
     /// The topology file content is invalid (parse error, invalid config, etc.)
     InvalidContent(String),
+    /// Packet size is invalid (zero or exceeds PACKET_SIZE_MAX).
+    InvalidPacketSize(usize),
 }
 
 impl fmt::Display for SettingError {
@@ -42,6 +57,11 @@ impl fmt::Display for SettingError {
             SettingError::FileNotFound(e) => write!(f, "topology file not found: {}", e),
             SettingError::FileReadError(e) => write!(f, "failed to read topology file: {}", e),
             SettingError::InvalidContent(msg) => write!(f, "invalid topology content: {}", msg),
+            SettingError::InvalidPacketSize(size) => write!(
+                f,
+                "invalid packet size: {} (must be 1-{} bytes)",
+                size, PACKET_SIZE_MAX
+            ),
         }
     }
 }
@@ -50,7 +70,7 @@ impl std::error::Error for SettingError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             SettingError::FileNotFound(e) | SettingError::FileReadError(e) => Some(e),
-            SettingError::InvalidContent(_) => None,
+            SettingError::InvalidContent(_) | SettingError::InvalidPacketSize(_) => None,
         }
     }
 }
@@ -162,18 +182,28 @@ pub enum Setting {
     /// The file must contain valid TOML configuration with Node and Link
     /// definitions.
     ///
+    /// The `packet_size` field allows specifying non-default packet sizes,
+    /// primarily to support Tor cell sizes (514 bytes) instead of the default
+    /// WireGuard MTU (1500 bytes). More comprehensive Tor support is planned
+    /// for future work.
+    ///
     /// # Example
     ///
     /// ```rust,no_run
     /// use maybenot_simulatorv3::settings::Setting;
     /// use std::path::PathBuf;
     ///
-    /// let setting = Setting::Custom { path: PathBuf::from("my_topology.toml") };
+    /// let setting = Setting::Custom {
+    ///     path: PathBuf::from("my_topology.toml"),
+    ///     packet_size: 1500,  // Use 514 for Tor simulations
+    /// };
     /// let (topology, linkstate) = setting.create().unwrap();
     /// ```
     Custom {
         /// Path to the TOML topology file
         path: PathBuf,
+        /// Packet size in bytes (default: 1500 for WireGuard, use 514 for Tor)
+        packet_size: usize,
     },
 }
 
@@ -230,9 +260,17 @@ impl Setting {
                 .map_err(SettingError::InvalidContent),
             Setting::MultihopExit => crate::load_topology_from_str(MULTIHOP_EXIT_TOML)
                 .map_err(SettingError::InvalidContent),
-            Setting::Custom { path } => {
+            Setting::Custom { path, packet_size } => {
+                // Validate packet_size
+                if *packet_size == 0 || *packet_size > PACKET_SIZE_MAX {
+                    return Err(SettingError::InvalidPacketSize(*packet_size));
+                }
+
                 let content = std::fs::read_to_string(path)?;
-                crate::load_topology_from_str(&content).map_err(SettingError::InvalidContent)
+                let (topology, mut linkstate) = crate::load_topology_from_str(&content)
+                    .map_err(SettingError::InvalidContent)?;
+                linkstate.packet_size = *packet_size;
+                Ok((topology, linkstate))
             }
         }
     }

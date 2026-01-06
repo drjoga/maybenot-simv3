@@ -183,7 +183,8 @@ pub(crate) fn make_network_receive_from_sent(
     //debug!("\ts_event time: {:?}   Earliest event instant: {:?}", s_event.time, sq.earliest_event_instant);
 
     // Now we can safely do the mutable borrow for sampling
-    let transmission_delay = linkstate.links[link_id].sample(current_duration);
+    let transmission_delay =
+        linkstate.links[link_id].sample(current_duration, linkstate.packet_size);
 
     let recv_s_event = SimEvent {
         event: new_t_event,
@@ -237,7 +238,8 @@ pub(crate) fn forward_network_receive_from_receive(
     };
 
     // Now do the mutable borrow for sampling
-    let transmission_delay = linkstate.links[outgoing_link_id].sample(current_duration);
+    let transmission_delay =
+        linkstate.links[outgoing_link_id].sample(current_duration, linkstate.packet_size);
 
     debug!(
         "\tForwarding from node {} via link {} to node {}",

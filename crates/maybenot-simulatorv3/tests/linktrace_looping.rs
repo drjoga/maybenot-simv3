@@ -3,6 +3,8 @@
 #[cfg(feature = "trace-tests")]
 use maybenot_simulatorv3::links::{HiTraceTputLink, StdTraceTputLink, load_linktrace_from_file};
 #[cfg(feature = "trace-tests")]
+use maybenot_simulatorv3::settings::PACKET_SIZE_WG;
+#[cfg(feature = "trace-tests")]
 use rand::rng;
 #[cfg(feature = "trace-tests")]
 use std::time::Duration;
@@ -34,7 +36,7 @@ fn test_hitrace_wrap_around() {
 
     // Schedule packet near end of trace
     let near_end_time = Duration::from_micros((trace_len - 10) as u64);
-    let delay1 = link.sample(near_end_time);
+    let delay1 = link.sample(near_end_time, PACKET_SIZE_WG);
 
     // Verify packet was scheduled (didn't panic)
     assert!(
@@ -44,7 +46,7 @@ fn test_hitrace_wrap_around() {
 
     // Schedule another packet closer to the end
     let at_end_time = Duration::from_micros((trace_len - 5) as u64);
-    let delay2 = link.sample(at_end_time);
+    let delay2 = link.sample(at_end_time, PACKET_SIZE_WG);
     assert!(
         delay2 > Duration::ZERO,
         "Packet at trace end should be scheduled"
@@ -74,7 +76,7 @@ fn test_hitrace_multiple_wraps() {
 
     // Schedule packet well past trace end (2x trace length)
     let past_end_time = Duration::from_micros((trace_len * 2 + 100) as u64);
-    let delay1 = link.sample(past_end_time);
+    let delay1 = link.sample(past_end_time, PACKET_SIZE_WG);
     assert!(
         delay1 > Duration::ZERO,
         "Packet 2x past trace end should be scheduled"
@@ -82,7 +84,7 @@ fn test_hitrace_multiple_wraps() {
 
     // Schedule packet very far in the future (5x trace length)
     let far_future = Duration::from_micros((trace_len * 5 + 500) as u64);
-    let delay2 = link.sample(far_future);
+    let delay2 = link.sample(far_future, PACKET_SIZE_WG);
     assert!(
         delay2 > Duration::ZERO,
         "Packet 5x past trace end should be scheduled"
@@ -111,7 +113,7 @@ fn test_stdtrace_wrap_around() {
 
     // Schedule packet near end (StdTrace uses milliseconds)
     let near_end_time = Duration::from_millis((trace_len - 10) as u64);
-    let delay1 = link.sample(near_end_time);
+    let delay1 = link.sample(near_end_time, PACKET_SIZE_WG);
     assert!(
         delay1 > Duration::ZERO,
         "Packet near trace end should be scheduled"
@@ -119,7 +121,7 @@ fn test_stdtrace_wrap_around() {
 
     // Schedule packet past trace end
     let past_end_time = Duration::from_millis((trace_len + 100) as u64);
-    let delay2 = link.sample(past_end_time);
+    let delay2 = link.sample(past_end_time, PACKET_SIZE_WG);
     assert!(
         delay2 > Duration::ZERO,
         "Packet past trace end should be scheduled"
@@ -148,7 +150,7 @@ fn test_stdtrace_multiple_wraps() {
 
     // Verify multiple wraps work
     let far_future = Duration::from_millis((trace_len * 5 + 500) as u64);
-    let delay = link.sample(far_future);
+    let delay = link.sample(far_future, PACKET_SIZE_WG);
     assert!(
         delay > Duration::ZERO,
         "Packet 5x past trace end should be scheduled"
@@ -180,7 +182,7 @@ fn test_stdtrace_packet_spans_wrap() {
     // Position packet start very close to wrap boundary
     // so transmission spans from end of trace to beginning
     let wrap_boundary_time = Duration::from_millis((trace_len - 1) as u64);
-    let delay = link.sample(wrap_boundary_time);
+    let delay = link.sample(wrap_boundary_time, PACKET_SIZE_WG);
 
     // Verify it completed without panic
     assert!(
@@ -213,12 +215,12 @@ fn test_hitrace_queueing_across_wrap() {
 
     // Schedule first packet near end
     let time1 = Duration::from_micros((trace_len - 50) as u64);
-    let delay1 = link.sample(time1);
+    let delay1 = link.sample(time1, PACKET_SIZE_WG);
     assert!(delay1 > Duration::ZERO);
 
     // Schedule second packet immediately after - should queue
     let time2 = Duration::from_micros((trace_len - 49) as u64);
-    let delay2 = link.sample(time2);
+    let delay2 = link.sample(time2, PACKET_SIZE_WG);
 
     // Second packet should have queueing delay (larger than just transmission)
     assert!(
@@ -252,16 +254,16 @@ fn test_stdtrace_queueing_across_wrap() {
     let mut time = Duration::from_millis((trace_len - 10) as u64);
 
     // Schedule first packet
-    let delay1 = link.sample(time);
+    let delay1 = link.sample(time, PACKET_SIZE_WG);
     assert!(delay1 > Duration::ZERO);
 
     // Schedule second packet immediately - should queue behind first
     time += Duration::from_nanos(100); // Very small interval
-    let delay2 = link.sample(time);
+    let delay2 = link.sample(time, PACKET_SIZE_WG);
 
     // Schedule third packet immediately - should queue even more
     time += Duration::from_nanos(100);
-    let delay3 = link.sample(time);
+    let delay3 = link.sample(time, PACKET_SIZE_WG);
 
     // Second and third packets should experience queueing delay (should be larger than first)
     assert!(
@@ -296,7 +298,7 @@ fn test_hitrace_exact_boundary() {
 
     // Schedule packet exactly at trace length boundary
     let boundary_time = Duration::from_micros(trace_len as u64);
-    let delay = link.sample(boundary_time);
+    let delay = link.sample(boundary_time, PACKET_SIZE_WG);
 
     assert!(
         delay > Duration::ZERO,
@@ -347,8 +349,8 @@ fn test_hitrace_random_offsets() {
         link2.randomize(&mut rng, 0.2);
 
         // Sample at a fixed time and record the delay
-        let delay1 = link1.sample(test_time);
-        let delay2 = link2.sample(test_time);
+        let delay1 = link1.sample(test_time, PACKET_SIZE_WG);
+        let delay2 = link2.sample(test_time, PACKET_SIZE_WG);
         delays1.push(delay1);
         delays2.push(delay2);
 
@@ -399,7 +401,7 @@ fn test_stdtrace_random_offsets() {
         link.randomize(&mut rng, 0.2);
 
         // Sample at a fixed time and record the delay
-        let delay = link.sample(test_time);
+        let delay = link.sample(test_time, PACKET_SIZE_WG);
         delays.push(delay);
 
         // Reset link for next iteration
@@ -441,7 +443,7 @@ fn test_hitrace_sustained_traffic() {
 
     // Schedule 50 packets, which will definitely cross the wrap boundary
     for i in 0..50 {
-        let delay = link.sample(current_time);
+        let delay = link.sample(current_time, PACKET_SIZE_WG);
         assert!(
             delay > Duration::ZERO,
             "Packet {} should be scheduled successfully",
@@ -483,7 +485,7 @@ fn test_stdtrace_sustained_traffic() {
 
     // Schedule 30 packets across the wrap boundary
     for i in 0..30 {
-        let delay = link.sample(current_time);
+        let delay = link.sample(current_time, PACKET_SIZE_WG);
         assert!(
             delay > Duration::ZERO,
             "Packet {} should be scheduled successfully",
