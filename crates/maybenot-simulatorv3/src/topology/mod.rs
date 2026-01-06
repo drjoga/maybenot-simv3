@@ -3,13 +3,13 @@ pub mod maybenot_nodes;
 pub mod nodes;
 pub mod parse;
 
-// Re-exports
-pub use maybenot_nodes::{ClientMaybenot, MaybenotNode, RelayMaybenot, RelayMaybenotEndpoint};
+// Re-exports - public API items
+pub use parse::{load_topology_from_file, load_topology_from_str};
+
+// Internal types exposed for testing, tooling, and benchmarking
+pub use maybenot_nodes::MaybenotNode;
 pub use nodes::NodeType;
-pub use parse::{
-    build_network_topology_from_config, build_topology_from_config, load_topology_from_file,
-    load_topology_from_str, modify_toml, set_toml_propagation_us,
-};
+pub use parse::build_network_topology_from_config;
 
 use crate::links::LinkType;
 use crate::settings::PACKET_SIZE_WG;

@@ -3,9 +3,98 @@ use maybenot_simulatorv3::{load_topology_from_file, parse_trace, sim};
 use std::{str::FromStr, time::Duration};
 
 #[cfg(feature = "trace-tests")]
-use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_str, modify_toml, sim_advanced};
+use maybenot_simulatorv3::{SimulatorArgs, load_topology_from_str, sim_advanced};
 #[cfg(feature = "trace-tests")]
 use std::fs;
+#[cfg(feature = "trace-tests")]
+use toml::Value;
+
+/// Modifies TOML string by applying parameter changes to specific sections.
+/// Format: "SectionType:ID::param1:value1::param2:value2\n..."
+#[cfg(feature = "trace-tests")]
+fn modify_toml(toml_in: &str, modifier_string: &str) -> Result<String, String> {
+    let mut toml_value: toml::Value =
+        toml::from_str(toml_in).map_err(|e| format!("Failed to parse input TOML: {}", e))?;
+
+    let root_table = toml_value
+        .as_table_mut()
+        .ok_or("TOML root is not a table")?;
+
+    for line in modifier_string.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split("::").collect();
+        if parts.is_empty() {
+            return Err("Empty modification line".to_string());
+        }
+
+        let section_parts: Vec<&str> = parts[0].split(':').collect();
+        if section_parts.len() != 2 {
+            return Err(format!("Invalid section format in line: {}", line));
+        }
+
+        let section_type = section_parts[0];
+        let section_id: usize = section_parts[1]
+            .parse()
+            .map_err(|_| format!("Invalid section ID in line: {}", line))?;
+
+        let section_array = match section_type {
+            "Node" => root_table.get_mut("Node"),
+            "Link" => root_table.get_mut("Link"),
+            _ => return Err(format!("Unsupported section type: {}", section_type)),
+        };
+
+        let section_array = section_array
+            .and_then(|v| v.as_array_mut())
+            .ok_or(format!("Section {} is not an array", section_type))?;
+
+        let target_section = section_array
+            .iter_mut()
+            .find(|entry| {
+                entry
+                    .as_table()
+                    .and_then(|table| table.get("id"))
+                    .and_then(Value::as_integer)
+                    .map(|id| id == section_id as i64)
+                    .unwrap_or(false)
+            })
+            .ok_or(format!(
+                "Section {} with ID {} not found",
+                section_type, section_id
+            ))?;
+
+        let target_table = target_section
+            .as_table_mut()
+            .ok_or("Section entry is not a table".to_string())?;
+
+        for param_part in &parts[1..] {
+            let param_kv: Vec<&str> = param_part.split(':').collect();
+            if param_kv.len() != 2 {
+                return Err(format!("Invalid parameter format in: {}", param_part));
+            }
+
+            let param_name = param_kv[0];
+            let param_value_str = param_kv[1];
+
+            let param_value = if let Ok(int_val) = param_value_str.parse::<i64>() {
+                toml::Value::Integer(int_val)
+            } else if let Ok(float_val) = param_value_str.parse::<f64>() {
+                toml::Value::Float(float_val)
+            } else if let Ok(bool_val) = param_value_str.parse::<bool>() {
+                toml::Value::Boolean(bool_val)
+            } else {
+                toml::Value::String(param_value_str.to_string())
+            };
+
+            target_table.insert(param_name.to_string(), param_value);
+        }
+    }
+
+    toml::to_string_pretty(&toml_value).map_err(|e| format!("Failed to serialize TOML: {}", e))
+}
 
 #[cfg(feature = "trace-tests")]
 #[allow(dead_code)]

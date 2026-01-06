@@ -31,10 +31,22 @@ pub struct LinkTrace {
 }
 
 impl LinkTrace {
+    /// Creates a high-resolution link trace from raw trace input.
+    ///
+    /// # Internal API
+    ///
+    /// This function is primarily for developer tooling (xtask). Most users
+    /// should use [`load_linktrace_from_file`] to load pre-computed traces.
     pub fn new_hi_res(traceinput: &str, sizebin_lookuptable: SizebinLookupTable) -> Self {
         Self::new(traceinput, sizebin_lookuptable, true)
     }
 
+    /// Creates a standard-resolution link trace from raw trace input.
+    ///
+    /// # Internal API
+    ///
+    /// This function is primarily for developer tooling (xtask). Most users
+    /// should use [`load_linktrace_from_file`] to load pre-computed traces.
     pub fn new_std_res(traceinput: &str) -> Self {
         let dummy_sizebin = SizebinLookupTable::new(&[0, 1501], &[1500]);
         Self::new(traceinput, dummy_sizebin, false)
@@ -237,6 +249,12 @@ impl fmt::Display for LinkTrace {
     }
 }
 
+/// Lookup table for mapping packet sizes to bins for high-resolution trace processing.
+///
+/// # Internal API
+///
+/// This struct is primarily for developer tooling (xtask) when creating link traces.
+/// Most users should use [`load_linktrace_from_file`] to load pre-computed traces.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SizebinLookupTable {
     boundaries: Vec<i32>,
@@ -246,6 +264,11 @@ pub struct SizebinLookupTable {
 }
 
 impl SizebinLookupTable {
+    /// Creates a new lookup table for mapping packet sizes to bins.
+    ///
+    /// # Arguments
+    /// * `boundaries` - Bin boundary values (must start with 0 and be sorted)
+    /// * `bin_pktsize_values` - Representative packet size for each bin (one less than boundaries)
     pub fn new(boundaries: &[i32], bin_pktsize_values: &[i32]) -> Self {
         assert!(!boundaries.is_empty(), "Boundaries array cannot be empty.");
         assert!(
@@ -317,6 +340,12 @@ impl SizebinLookupTable {
     }
 }
 
+/// Creates a default sizebin lookup table for high-resolution trace processing.
+///
+/// # Internal API
+///
+/// This function is primarily for developer tooling (xtask) when creating link traces.
+/// Most users should use [`load_linktrace_from_file`] to load pre-computed traces.
 pub fn mk_sizebin_lookuptable() -> SizebinLookupTable {
     // Boundary values created to minimize binning errors. Minimum change is 16
     // bytes due to assumed Wireguard tunneling which pads to multiples of 16.

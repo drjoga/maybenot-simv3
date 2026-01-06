@@ -6,7 +6,6 @@ use maybenot_simulatorv3::links::{
 use std::sync::Arc;
 
 #[cfg(feature = "trace-tests")]
-#[allow(dead_code)]
 mod common;
 
 // Helper function to create sizebin lookup table for tests

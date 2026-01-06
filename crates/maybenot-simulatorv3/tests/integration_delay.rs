@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-//use bincode::de;
+use enum_map::enum_map;
 use maybenot::{
     Machine,
     action::Action,
@@ -11,11 +11,46 @@ use maybenot::{
 use maybenot_simulatorv3::{
     SimEvent, SimulatorArgs,
     integration::{BinDist, Integration},
-    load_topology_from_str, set_toml_propagation_us, sim_advanced,
+    load_topology_from_str, sim_advanced,
     traffic_parse::parse_trace,
 };
 
-use enum_map::enum_map;
+// Modifies the prop_us parameter for Link instances that use fixed propagation
+// in a TOML string. Links with prop_us_file (time-dependent propagation) are
+// left unchanged.
+fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
+    // Parse input TOML into a mutable value
+    let mut toml_value: toml::Value =
+        toml::from_str(toml_in).unwrap_or_else(|e| panic!("Failed to parse input TOML: {}", e));
+
+    // Get the root table
+    let root_table = toml_value
+        .as_table_mut()
+        .unwrap_or_else(|| panic!("TOML root is not a table"));
+
+    // Find the Link section array
+    let link_array = root_table
+        .get_mut("Link")
+        .and_then(|v| v.as_array_mut())
+        .unwrap_or_else(|| panic!("Link section is not an array or doesn't exist"));
+
+    // Update prop_us for Link instances that use fixed propagation
+    for link_entry in link_array.iter_mut() {
+        let link_table = link_entry
+            .as_table_mut()
+            .unwrap_or_else(|| panic!("Link entry is not a table"));
+
+        // Only modify links that have prop_us (fixed propagation) Skip links
+        // that have prop_us_file (time-dependent propagation)
+        if link_table.contains_key("prop_us") && !link_table.contains_key("prop_us_file") {
+            link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
+        }
+    }
+
+    // Serialize back to TOML string
+    toml::to_string_pretty(&toml_value)
+        .unwrap_or_else(|e| panic!("Failed to serialize TOML: {}", e))
+}
 
 fn get_test_machine() -> Machine {
     // a simple machine that pads once after 5ms

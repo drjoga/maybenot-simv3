@@ -9,7 +9,7 @@ use maybenot_simulatorv3::{
 };
 use once_cell::sync::Lazy;
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, dead_code)]
 pub fn run_test_sim(
     input: &str,
     output: &str,
@@ -111,7 +111,7 @@ pub fn run_test_sim_toml(
     assert_eq!(output, fmt);
 }
 
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, dead_code)]
 pub enum TraceSpec {
     ether100M,
     ether100M_10M_assym,
@@ -213,6 +213,7 @@ pub fn make_si_sq(
     (si, sq)
 }
 
+#[allow(dead_code)]
 pub fn set_bypass(s: &mut State, value: bool) {
     if let Some(ref mut a) = s.action {
         match a {
@@ -227,6 +228,7 @@ pub fn set_bypass(s: &mut State, value: bool) {
     }
 }
 
+#[allow(dead_code)]
 pub fn set_replace(s: &mut State, value: bool) {
     if let Some(ref mut a) = s.action {
         match a {

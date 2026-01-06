@@ -6,7 +6,12 @@ use log::debug;
 use maybenot::TriggerEvent;
 use std::time::Duration;
 
-// High-performance enum-based node dispatch
+/// Internal node type dispatch enum.
+///
+/// # Internal API
+///
+/// This enum is exposed for testing and tooling. The structure may change between versions.
+/// Most users should not need to interact with this directly.
 #[derive(Debug, Clone)]
 pub enum NodeType {
     ClientBasic(ClientBasic),
@@ -361,7 +366,7 @@ impl RouterBasic {
         }
     }
 
-    pub fn handle_event(
+    pub(crate) fn handle_event(
         &self,
         s_event: &SimEvent,
         topology: &NetworkTopology,

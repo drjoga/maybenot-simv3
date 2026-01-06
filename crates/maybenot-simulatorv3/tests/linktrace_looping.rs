@@ -10,7 +10,6 @@ use rand::rng;
 use std::time::Duration;
 
 #[cfg(feature = "trace-tests")]
-#[allow(dead_code)]
 mod common;
 
 /// Test that HiTraceTputLink handles wrap-around correctly when scheduling

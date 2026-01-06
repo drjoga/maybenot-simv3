@@ -193,6 +193,13 @@ pub struct TrafficTraceData {
 
 /// Performs traffic dependency analysis for client-server communication.
 ///
+/// # Advanced API
+///
+/// This is an advanced function for users who need fine-grained control over
+/// trace parsing. Most users should use [`parse_trace`] instead, which handles
+/// the complete parsing pipeline including calling this function and
+/// [`fill_simq`].
+///
 /// This function implements the core algorithm that transforms a raw traffic
 /// trace into a dependency graph modeling realistic client-server
 /// request-response patterns.
@@ -343,8 +350,21 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     }
 }
 
-/// Print the reconstructed traffic trace based on the TrafficTraceData struct.
-/// Also prints the SimQ prefill vectors and the dependency hashmap.
+/// Prints a debug visualization of the traffic trace dependency structure.
+///
+/// # Advanced API
+///
+/// This is a debugging utility for inspecting the output of
+/// [`traffic_trace_prepare`]. It prints the reconstructed traffic trace, SimQ
+/// prefill vectors, and the dependency hashmap to stdout.
+///
+/// Most users should use [`parse_trace`] for standard trace parsing workflows.
+///
+/// # Arguments
+///
+/// * `traffic` - The parsed traffic trace data from [`traffic_trace_prepare`]
+/// * `ttrace_ts_to_c_delay_ns` - One-way network delay in nanoseconds (same
+///   value used when calling [`traffic_trace_prepare`])
 pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns: i64) {
     let mut pkt_events: Vec<PacketEvent> = traffic.client_simq_push.clone();
     pkt_events.extend(
@@ -510,6 +530,29 @@ fn get_event_instant(
     }
 }
 
+/// Populates the simulation queue with initial events from parsed traffic data.
+///
+/// # Advanced API
+///
+/// This is an advanced function for users who need fine-grained control over
+/// trace parsing and simulation initialization. Most users should use
+/// [`parse_trace`] instead, which handles the complete parsing pipeline.
+///
+/// This function takes the output of [`traffic_trace_prepare`] and converts the
+/// initial (non-dependent) events into simulation events, populating the
+/// `SimQueue`. Dependent events are stored in `SimInfo` for dynamic scheduling
+/// during simulation.
+///
+/// # Arguments
+///
+/// * `traffic_events` - Parsed traffic data from [`traffic_trace_prepare`]
+/// * `topology` - Network topology defining node structure
+/// * `si` - Simulation info to populate with dependency data
+/// * `sq` - Simulation queue to populate with initial events
+///
+/// # Errors
+///
+/// Returns [`TraceParseError`] if event timing calculations fail.
 pub fn fill_simq(
     traffic_events: &TrafficTraceData,
     topology: &NetworkTopology,

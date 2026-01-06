@@ -80,7 +80,7 @@ impl<M> MaybenotState<M, RngSource>
 where
     M: AsRef<[Machine]>,
 {
-    pub fn new(
+    pub(crate) fn new(
         machines: M,
         current_time: Instant,
         max_padding_frac: f64,
@@ -116,21 +116,21 @@ where
         }
     }
 
-    pub fn reporting_delay(&self) -> Duration {
+    pub(crate) fn reporting_delay(&self) -> Duration {
         self.integration
             .as_ref()
             .map(Integration::reporting_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
-    pub fn action_delay(&self) -> Duration {
+    pub(crate) fn action_delay(&self) -> Duration {
         self.integration
             .as_ref()
             .map(Integration::action_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
-    pub fn trigger_delay(&self) -> Duration {
+    pub(crate) fn trigger_delay(&self) -> Duration {
         self.integration
             .as_ref()
             .map(Integration::trigger_delay)
@@ -145,7 +145,7 @@ where
 // 2. Queued for later (blocked, non-bypassable)
 // 3. Bypassed through blocking (blocked but bypassable)
 // 4. Replaced with queued normal traffic (padding with replace=true)
-pub fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
+pub(crate) fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
     node: &T,
     s_event: SimEvent,
     sq: &mut SimQueue,
@@ -219,7 +219,7 @@ pub fn maybenot_handle_tunnel_sent_creation<T: MaybenotNode>(
 // Two drainage strategies are supported:
 // 1. Time-ordered: Events drain in chronological order by original timestamp
 // 2. Type-ordered: All normal packets first, then all padding packets
-pub fn maybenot_release_blocked_events<T: MaybenotNode>(
+pub(crate) fn maybenot_release_blocked_events<T: MaybenotNode>(
     node: &T,
     sq: &mut SimQueue,
     current_time: Instant,
@@ -293,9 +293,16 @@ pub fn maybenot_release_blocked_events<T: MaybenotNode>(
     }
 }
 
-// Trait for Maybenot nodes to enable generic implementations
+/// Trait for Maybenot nodes to enable generic implementations.
+///
+/// # Internal API
+///
+/// This trait is exposed for testing. The `node_id()` method is the primary
+/// public interface for identifying nodes in simulation output.
+#[allow(private_interfaces)]
 pub trait MaybenotNode {
     fn get_sim_state(&self) -> &RefCell<MaybenotState<Vec<Machine>, RngSource>>;
+    /// Returns the node ID for this Maybenot node.
     fn node_id(&self) -> usize;
     fn get_action_link_id(&self) -> usize; // Link used for actions (coreside for client, edgeside for relay)
     fn get_queue_padding(&self) -> &RefCell<VecDeque<SimEvent>>;

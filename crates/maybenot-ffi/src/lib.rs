@@ -53,7 +53,6 @@ pub struct MaybenotDuration {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub enum MaybenotEventType {
     NormalRecv = 0,
     PaddingRecv = 1,
@@ -122,7 +121,6 @@ pub enum MaybenotAction {
 /// The different types of timers used by a [Machine].
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub enum MaybenotTimer {
     /// The scheduled timer for actions with a timeout.
     Action = 0,

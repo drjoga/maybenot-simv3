@@ -1,29 +1,21 @@
 pub mod integration;
 pub mod links;
-pub mod maybenot_helpers;
+pub(crate) mod maybenot_helpers;
 pub mod settings;
 pub mod topology;
 pub mod traffic_parse;
 
 // Re-export topology types and functions
 pub use topology::{
-    NetworkLinkState,
-    NetworkTopology,
-    NodeType,
-    // From topology::parse
-    build_network_topology_from_config,
-    build_topology_from_config,
-    load_topology_from_file,
-    load_topology_from_str,
-    modify_toml,
-    set_toml_propagation_us,
+    MaybenotNode, NetworkLinkState, NetworkTopology, NodeType, build_network_topology_from_config,
+    load_topology_from_file, load_topology_from_str,
 };
 
 // Re-export links types and functions
 pub use links::{
     FixedTputLink, HiTraceTputLink, LinkBundle, LinkTrace, LinkType, SizebinLookupTable,
-    StdTraceTputLink, load_linkbundle_from_file, load_linktrace_from_file, save_linkbundle_to_file,
-    save_linktrace_to_file,
+    StdTraceTputLink, load_linkbundle_from_file, load_linktrace_from_file, mk_sizebin_lookuptable,
+    save_linkbundle_to_file, save_linktrace_to_file,
 };
 
 // Re-export traffic parsing functions

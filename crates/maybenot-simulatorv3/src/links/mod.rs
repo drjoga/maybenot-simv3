@@ -4,7 +4,10 @@ pub mod trace;
 
 // Re-exports
 pub use bundle::{LinkBundle, load_linkbundle_from_file, save_linkbundle_to_file};
-pub use trace::{LinkTrace, SizebinLookupTable, load_linktrace_from_file, save_linktrace_to_file};
+pub use trace::{
+    LinkTrace, SizebinLookupTable, load_linktrace_from_file, mk_sizebin_lookuptable,
+    save_linktrace_to_file,
+};
 
 use rand::Rng;
 use std::{cmp::max, sync::Arc, time::Duration};
