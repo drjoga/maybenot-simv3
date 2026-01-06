@@ -40,7 +40,7 @@ impl std::error::Error for TraceParseError {}
 ///
 /// This function converts raw network traces into [`SimInfo`] and [`SimQueue`]
 /// objects ready for simulation. It performs dependency analysis to model
-/// client-server request-response patterns.
+/// client-server (endpoint) request-response patterns.
 ///
 /// # Traffic Trace Format
 ///
@@ -54,9 +54,13 @@ impl std::error::Error for TraceParseError {}
 ///
 /// * `trace` - Raw trace string in the format described above
 /// * `topology` - Network topology for node/link mapping  
-/// * `ttrace_ts_to_c_delay` - Network delay between client and server when the
-///   traces was captured, used to determine which packets are dependent on
-///   others.
+/// * `one_way_delay` - Estimated (or measured) network one-way delay between
+///   client and server endpoint(s) when the original traffic trace was
+///   captured, used to approximate packet dependencies. See
+///   [`PARSE_ONE_WAY_DELAY_HTTPS`], [`PARSE_ONE_WAY_DELAY_VPN`],
+///  [`PARSE_ONE_WAY_DELAY_MULTIHOP`], and [`PARSE_ONE_WAY_DELAY_TOR`] for
+///  reasonable defaults. Depending on use-case, randomizing this value per
+///  simulation run may improve realism.
 ///
 /// # Returns
 ///
@@ -83,7 +87,7 @@ impl std::error::Error for TraceParseError {}
 pub fn parse_trace(
     trace: &str,
     topology: &NetworkTopology,
-    ttrace_ts_to_c_delay: Duration,
+    one_way_delay: Duration,
 ) -> Result<(SimInfo, SimQueue), TraceParseError> {
     let mut si = SimInfo::new();
     let mut sq = SimQueue::new();
@@ -115,14 +119,29 @@ pub fn parse_trace(
             }
         }
     }
-    let traffic_events = traffic_trace_prepare(&oneline, ttrace_ts_to_c_delay.as_nanos() as i64);
+    let traffic_events = traffic_trace_prepare(&oneline, one_way_delay.as_nanos() as i64);
 
     fill_simq(&traffic_events, topology, &mut si, &mut sq)?;
 
     Ok((si, sq))
 }
 
-/// Code for reading in traffic trace, create depndent_tx, and prefill SimQueue
+// We go for constants since virtually no datasets come with delay information
+// and/or contain traffic mixed from multiple endpoints.
+
+/// Reasonable constant for one-way delay between a fiber connected computer and
+/// popular destinations common in network traces.
+pub const PARSE_ONE_WAY_DELAY_HTTPS: Duration = Duration::from_millis(15);
+/// Reasonable constant for one-way delay for a VPN (assumes a user that picks a
+/// performant relay in the same country/region).
+pub const PARSE_ONE_WAY_DELAY_VPN: Duration = Duration::from_millis(30);
+/// Reasonable constant for one-way delay for a performant-focused use of a
+/// multihop VPN.
+pub const PARSE_ONE_WAY_DELAY_MULTIHOP: Duration = Duration::from_millis(45);
+/// Reasonable constant for one-way delay of Tor circuits.
+pub const PARSE_ONE_WAY_DELAY_TOR: Duration = Duration::from_millis(125);
+
+// Code for reading in traffic trace, create dependent_tx, and prefill SimQueue
 
 #[derive(Debug, Clone, Copy)]
 pub struct PacketEvent {
@@ -133,8 +152,8 @@ pub struct PacketEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EventKind {
-    CliSend,
-    CliReceive,
+    ClientSend,
+    ClientRecv,
 }
 
 /// Result of traffic trace dependency analysis.
@@ -227,8 +246,8 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
             }
         };
         let kind = match parts[1] {
-            "s" | "sn" => EventKind::CliSend,
-            "r" | "rn" => EventKind::CliReceive,
+            "s" | "sn" => EventKind::ClientSend,
+            "r" | "rn" => EventKind::ClientRecv,
             _ => {
                 warn!("Unknown kind '{}'", parts[1]);
                 continue;
@@ -247,9 +266,9 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     let mut dependent_tx = vec![Vec::new(); s.split_whitespace().count()];
     let mut last_recv: Option<&PacketEvent> = None;
     for pkt_event in &pkt_events {
-        if pkt_event.kind == EventKind::CliReceive {
+        if pkt_event.kind == EventKind::ClientRecv {
             last_recv = Some(pkt_event);
-        } else if pkt_event.kind == EventKind::CliSend {
+        } else if pkt_event.kind == EventKind::ClientSend {
             if let Some(prev_recv) = last_recv {
                 let delta = pkt_event.time_ns - prev_recv.time_ns;
                 dependent_tx[prev_recv.packet_id].push((
@@ -269,11 +288,11 @@ pub fn traffic_trace_prepare(s: &str, ttrace_ts_to_c_delay_ns: i64) -> TrafficTr
     // otherwise, mark the receive as a simQ push for endpoint.
     let client_sends: Vec<&PacketEvent> = pkt_events
         .iter()
-        .filter(|e| e.kind == EventKind::CliSend)
+        .filter(|e| e.kind == EventKind::ClientSend)
         .collect();
     let mut endpoint_simq_push = Vec::new();
     for pkt_event in &pkt_events {
-        if pkt_event.kind == EventKind::CliReceive {
+        if pkt_event.kind == EventKind::ClientRecv {
             let boundary = pkt_event.time_ns - (2 * ttrace_ts_to_c_delay_ns);
             let candidate = client_sends
                 .iter()
@@ -346,8 +365,8 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     );
     for pkt_event in &pkt_events {
         let kind_str = match pkt_event.kind {
-            EventKind::CliSend => "cli_send",
-            EventKind::CliReceive => "cli_recv",
+            EventKind::ClientSend => "cli_send",
+            EventKind::ClientRecv => "cli_recv",
         };
         let dep_txt = format!(
             "#{:5},  {:7}, {}  :  simQ_push",
@@ -377,7 +396,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
                 for (dep_id, delta, event_kind) in deps {
                     let send_time;
                     let dep_txt;
-                    if event_kind == EventKind::CliSend {
+                    if event_kind == EventKind::ClientSend {
                         send_time = recv_event.time_ns + delta;
                         dep_txt = format!(
                             "#{:5},  {:7}, cli_send  :  depends_on cli_recv                [#{:5} @{:7}]         [Δt = {:6}]",
@@ -439,7 +458,7 @@ pub fn event_schedule_print(traffic: &TrafficTraceData, ttrace_ts_to_c_delay_ns:
     println!("\nTX dependency mapping (recv_id -> [dependent_id, Δt]):");
     for (recv_id, deps) in traffic.dependent_tx.iter().enumerate() {
         for (dep_id, delta, event_kind) in deps {
-            let dep_txt = if *event_kind == EventKind::CliSend {
+            let dep_txt = if *event_kind == EventKind::ClientSend {
                 format!(
                     "cli_recv [#{:5}] triggers cli_send [#{:5}] with Δt = {:5}",
                     recv_id, dep_id, delta
