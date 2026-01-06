@@ -58,9 +58,9 @@ impl std::error::Error for TraceParseError {}
 ///   client and server endpoint(s) when the original traffic trace was
 ///   captured, used to approximate packet dependencies. See
 ///   [`PARSE_ONE_WAY_DELAY_HTTPS`], [`PARSE_ONE_WAY_DELAY_VPN`],
-///  [`PARSE_ONE_WAY_DELAY_MULTIHOP`], and [`PARSE_ONE_WAY_DELAY_TOR`] for
-///  reasonable defaults. Depending on use-case, randomizing this value per
-///  simulation run may improve realism.
+///   [`PARSE_ONE_WAY_DELAY_MULTIHOP`], and [`PARSE_ONE_WAY_DELAY_TOR`] for
+///   reasonable defaults. Depending on use-case, randomizing this value per
+///   simulation run may improve realism.
 ///
 /// # Returns
 ///

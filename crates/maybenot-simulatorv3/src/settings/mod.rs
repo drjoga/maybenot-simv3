@@ -11,7 +11,7 @@
 //! use rand::thread_rng;
 //!
 //! // Create topology and linkstate from template
-//! let (topology, linkstate) = Setting::Vpn.create();
+//! let (topology, linkstate) = Setting::Vpn.create().unwrap();
 //!
 //! // Clone and randomize for parallel simulation runs (±20% variation)
 //! let mut rng = thread_rng();
@@ -20,7 +20,50 @@
 
 use crate::links::LinkType;
 use crate::topology::{NetworkLinkState, NetworkTopology};
+use std::fmt;
+use std::io;
+use std::path::PathBuf;
 use std::time::Duration;
+
+/// Error type for setting creation failures.
+#[derive(Debug)]
+pub enum SettingError {
+    /// The topology file was not found.
+    FileNotFound(io::Error),
+    /// Failed to read the topology file (permissions, I/O error, etc.)
+    FileReadError(io::Error),
+    /// The topology file content is invalid (parse error, invalid config, etc.)
+    InvalidContent(String),
+}
+
+impl fmt::Display for SettingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SettingError::FileNotFound(e) => write!(f, "topology file not found: {}", e),
+            SettingError::FileReadError(e) => write!(f, "failed to read topology file: {}", e),
+            SettingError::InvalidContent(msg) => write!(f, "invalid topology content: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for SettingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SettingError::FileNotFound(e) | SettingError::FileReadError(e) => Some(e),
+            SettingError::InvalidContent(_) => None,
+        }
+    }
+}
+
+impl From<io::Error> for SettingError {
+    fn from(err: io::Error) -> Self {
+        if err.kind() == io::ErrorKind::NotFound {
+            SettingError::FileNotFound(err)
+        } else {
+            SettingError::FileReadError(err)
+        }
+    }
+}
 
 // Embed TOML files at compile time from templates subfolder
 const VPN_TOML: &str = include_str!("templates/vpn.toml");
@@ -39,7 +82,7 @@ const MULTIHOP_EXIT_TOML: &str = include_str!("templates/multihop_exit.toml");
 /// use rand::thread_rng;
 ///
 /// // Create topology and linkstate
-/// let (topology, linkstate) = Setting::Vpn.create();
+/// let (topology, linkstate) = Setting::Vpn.create().unwrap();
 ///
 /// // Clone and randomize for parallel runs (±20% variation)
 /// let mut rng = thread_rng();
@@ -112,31 +155,60 @@ pub enum Setting {
     /// - Links 2-3: Guard ↔ Exit (1 Gbps, 5ms propagation)
     /// - Links 4-5: Exit ↔ Endpoint (1 Gbps, 5ms propagation)
     MultihopExit,
+
+    /// Custom topology loaded from a TOML file.
+    ///
+    /// This allows loading any custom network topology from a file path.
+    /// The file must contain valid TOML configuration with Node and Link
+    /// definitions.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use maybenot_simulatorv3::settings::Setting;
+    /// use std::path::PathBuf;
+    ///
+    /// let setting = Setting::Custom { path: PathBuf::from("my_topology.toml") };
+    /// let (topology, linkstate) = setting.create().unwrap();
+    /// ```
+    Custom {
+        /// Path to the TOML topology file
+        path: PathBuf,
+    },
 }
 
 impl Setting {
     /// Create a network topology and linkstate with default parameters.
     ///
-    /// Returns a tuple of (NetworkTopology, NetworkLinkState) that can be used
-    /// directly with the simulator. The linkstate can be cloned and randomized
-    /// for parallel simulation runs.
+    /// Returns a Result containing a tuple of (NetworkTopology, NetworkLinkState)
+    /// that can be used directly with the simulator. The linkstate can be cloned
+    /// and randomized for parallel simulation runs.
+    ///
+    /// # Errors
+    ///
+    /// - [`SettingError::FileNotFound`] - If the topology file does not exist
+    ///   (`Custom` variant only)
+    /// - [`SettingError::FileReadError`] - If the topology file cannot be read
+    ///   (`Custom` variant only)
+    /// - [`SettingError::InvalidContent`] - If the TOML configuration is invalid
+    ///   or contains errors
     ///
     /// # Example
     ///
     /// ```rust
     /// use maybenot_simulatorv3::settings::Setting;
     ///
-    /// let (topology, linkstate) = Setting::Vpn.create();
+    /// let (topology, linkstate) = Setting::Vpn.create().unwrap();
     /// assert_eq!(linkstate.link_count(), 4);
     ///
-    /// let (topology, linkstate) = Setting::MultihopGuard.create();
+    /// let (topology, linkstate) = Setting::MultihopGuard.create().unwrap();
     /// assert_eq!(linkstate.link_count(), 6);
     /// ```
-    pub fn create(&self) -> (NetworkTopology, NetworkLinkState) {
+    pub fn create(&self) -> Result<(NetworkTopology, NetworkLinkState), SettingError> {
         match self {
             Setting::Vpn | Setting::VpnCustom { .. } => {
                 let (topology, mut linkstate) = crate::load_topology_from_str(VPN_TOML)
-                    .expect("embedded TOML template is valid");
+                    .map_err(SettingError::InvalidContent)?;
 
                 // Apply custom parameters if VpnCustom
                 if let Setting::VpnCustom { mbps, rtt } = self {
@@ -152,12 +224,16 @@ impl Setting {
                         }
                     }
                 }
-                (topology, linkstate)
+                Ok((topology, linkstate))
             }
             Setting::MultihopGuard => crate::load_topology_from_str(MULTIHOP_GUARD_TOML)
-                .expect("embedded TOML template is valid"),
+                .map_err(SettingError::InvalidContent),
             Setting::MultihopExit => crate::load_topology_from_str(MULTIHOP_EXIT_TOML)
-                .expect("embedded TOML template is valid"),
+                .map_err(SettingError::InvalidContent),
+            Setting::Custom { path } => {
+                let content = std::fs::read_to_string(path)?;
+                crate::load_topology_from_str(&content).map_err(SettingError::InvalidContent)
+            }
         }
     }
 }

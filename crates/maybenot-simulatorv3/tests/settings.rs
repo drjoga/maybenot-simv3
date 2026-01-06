@@ -7,14 +7,14 @@ use rand::{SeedableRng, rngs::StdRng};
 #[test]
 fn test_vpn_create() {
     // Test that we can create a VPN topology and linkstate
-    let (_topology, linkstate) = Setting::Vpn.create();
+    let (_topology, linkstate) = Setting::Vpn.create().unwrap();
     assert_eq!(linkstate.link_count(), 4, "VPN should have 4 links");
 }
 
 #[test]
 fn test_vpn_linkstate_randomize() {
     // Test that we can randomize link parameters
-    let (_topology, linkstate) = Setting::Vpn.create();
+    let (_topology, linkstate) = Setting::Vpn.create().unwrap();
     let mut rng = StdRng::seed_from_u64(42);
 
     // Get initial throughput (link 0 = client upstream)
@@ -54,7 +54,7 @@ fn test_vpn_linkstate_randomize() {
 #[test]
 fn test_vpn_linkstate_randomize_all_links() {
     // Test randomizing all links via clone_randomized
-    let (_topology, linkstate) = Setting::Vpn.create();
+    let (_topology, linkstate) = Setting::Vpn.create().unwrap();
     let mut rng = StdRng::seed_from_u64(123);
 
     // Clone and randomize all links at once (±20% variation)
@@ -67,7 +67,7 @@ fn test_vpn_linkstate_randomize_all_links() {
 #[test]
 fn test_vpn_linkstate_independent_randomization() {
     // Test that independent randomizations produce different results
-    let (_topology, linkstate) = Setting::Vpn.create();
+    let (_topology, linkstate) = Setting::Vpn.create().unwrap();
 
     let mut rng1 = StdRng::seed_from_u64(42);
     let mut rng2 = StdRng::seed_from_u64(99);
@@ -97,13 +97,13 @@ fn test_vpn_linkstate_independent_randomization() {
 
 #[test]
 fn test_multihop_guard_create() {
-    let (_topology, linkstate) = Setting::MultihopGuard.create();
+    let (_topology, linkstate) = Setting::MultihopGuard.create().unwrap();
     assert_eq!(linkstate.link_count(), 6, "Multi-hop should have 6 links");
 }
 
 #[test]
 fn test_multihop_guard_randomize() {
-    let (_topology, linkstate) = Setting::MultihopGuard.create();
+    let (_topology, linkstate) = Setting::MultihopGuard.create().unwrap();
     let mut rng = StdRng::seed_from_u64(42);
 
     // Clone and randomize all 6 links (±20% variation)
@@ -117,13 +117,13 @@ fn test_multihop_guard_randomize() {
 
 #[test]
 fn test_multihop_exit_create() {
-    let (_topology, linkstate) = Setting::MultihopExit.create();
+    let (_topology, linkstate) = Setting::MultihopExit.create().unwrap();
     assert_eq!(linkstate.link_count(), 6, "Multi-hop should have 6 links");
 }
 
 #[test]
 fn test_multihop_exit_randomize() {
-    let (_topology, linkstate) = Setting::MultihopExit.create();
+    let (_topology, linkstate) = Setting::MultihopExit.create().unwrap();
     let mut rng = StdRng::seed_from_u64(42);
 
     // Clone and randomize all 6 links (±20% variation)
